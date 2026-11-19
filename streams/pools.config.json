@@ -4,7 +4,7 @@
     {
       "id": "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2",
       "venue": "raydium",
-      "label": "Raydium AMM v4 SOL-USDC (mainnet) — VERIFY vaults on an explorer before use",
+      "label": "Raydium AMM v4 SOL-USDC (mainnet) — vaults verified via getAccountInfo 2026-11-19 (wSOL / USDC token accounts owned by Raydium authority 5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1)",
       "baseVault": "DQyrAcCrDXQ7NeoqGgDCZwBvWDcYmFCjSb9JtteuvPpz",
       "quoteVault": "HLmqeL62xR1QoZ1HKKbXRrdN1p3phKpxRMb2VVopvBBz",
       "feeBps": 25,

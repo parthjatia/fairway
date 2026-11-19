@@ -48,7 +48,7 @@ pnpm --filter @fairway/streams build:filter
 2. **Streams → Create Stream.** Follow `streams/STREAM_CONFIG.md` exactly:
    - Stream A: Solana **mainnet**, dataset **Block**, start 3–7 days back (backfill), filter = contents of `streams/filter.js`.
    - Stream B: Solana **devnet**, dataset **Block**, start at the latest block.
-3. Verify real vault addresses first. The Raydium entry in `pools.config.json` is marked VERIFY (see "Filling in real pool addresses" in STREAM_CONFIG.md). Fill the Orca entry if you want it.
+3. The Raydium vaults in `pools.config.json` were checked on mainnet on 2026-11-19 (see "Filling in real pool addresses" in STREAM_CONFIG.md). Fill the Orca entry if you want it.
 4. Use the dashboard's **Run test** on a slot that contains a SOL-USDC swap.
 
 ## 6. Expose ingest and set the webhook

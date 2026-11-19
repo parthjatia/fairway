@@ -4,7 +4,7 @@
 
 Fairway is a constant-product AMM whose swap fee depends on the trader's **toxicity tier**. The tier is read from an onchain `TraderScore` account, and a score oracle writes that account from the wallet's public trading history. The history comes from **QuickNode Streams**.
 
-> **Hackathon status, read this first.** Everything runs offline on **synthetic data** (a deterministic simulator and fixtures). The Anchor program is unaudited and has not been deployed to devnet yet. Raydium vault addresses in the Stream config are marked VERIFY. See [What is simulated vs. live](#what-is-simulated-vs-live).
+> **Hackathon status, read this first.** Everything runs offline on **synthetic data** (a deterministic simulator and fixtures). The Anchor program is unaudited and has not been deployed to devnet yet. The Raydium SOL-USDC vault addresses in the Stream config were checked against mainnet, but no live Stream has run yet. See [What is simulated vs. live](#what-is-simulated-vs-live).
 
 ![LP and retail outcomes by fee regime](docs/charts/regimes.png)
 
@@ -165,7 +165,7 @@ The program's tests use LiteSVM: `anchor build && cargo test -p fairway`. The wr
 | Ingest, scoring, keeper | Real code. Run on fixtures in `DATA_MODE=fixture`. The keeper defaults to `dry-run`. |
 | QuickNode Stream | **Config and filter are real and tested against getBlock-shaped fixtures.** No live Stream has been created yet. |
 | Mid prices | Fixture mode uses the simulated CEX path. Live mode uses the pool-implied mid. `PythMidPrice` is a stub. |
-| Raydium vault addresses | Entered from memory and marked VERIFY. Orca and Fairway entries are placeholders. |
+| Raydium vault addresses | **Real.** Checked on mainnet with `getAccountInfo` (2026-11-19): a wSOL and a USDC token account owned by the Raydium AMM v4 authority. The Orca and Fairway entries are placeholders. |
 
 ## Repo map
 
