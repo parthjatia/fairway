@@ -3,7 +3,7 @@ STATUS: DONE
 # PROGRESS.md
 
 ## Current state / next step
-All milestones M0–M12 complete. Fresh-clone install/build/test verified (TS 8 packages + Rust 12 math + 9 LiteSVM tests); every page returns 200 in mock mode. Remaining human steps: docs/SETUP_REMAINING.md.
+All milestones M0–M12 complete. Fresh-clone install/build/test verified (TS 8 packages + Rust 12 math + 9 LiteSVM tests); every page returns 200 in mock mode. Remaining human steps: docs/SETUP_REMAINING.md. Judge audit (AUDIT.md) low-risk items #1–#7 done 2026-11-19; #8–#10 are human/out of scope.
 
 ## Audit fixes (2026-11-19, see AUDIT.md)
 - [x] #1 README: added "Built with" (sponsor tools) and "What's next" sections

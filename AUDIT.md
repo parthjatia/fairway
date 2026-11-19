@@ -55,4 +55,16 @@ Also noted, not ranked: Retail Rita's score is 2.9 bps against a 3 bps RETAIL th
 
 ## What was implemented (items under 1 h with low risk)
 
-See PROGRESS.md "Audit fixes" for the commit per item.
+Items #1–#7 are done, one commit each. After every item `pnpm test`, `pnpm build` and `pnpm lint` all passed.
+
+| # | Commit | Change |
+|---|---|---|
+| 1 | `4221976` | README: "Built with" (sponsor tools) and "What's next" |
+| 2 | `1d52777` | Raydium vaults verified on mainnet, VERIFY markers replaced (filter.js output unchanged, since labels are stripped) |
+| 3 | `821ab7c` | Landing page and README no longer claim Orca/Meteora coverage |
+| 4 | `a927b72` | DEMO_SCRIPT: Streams shot (live dashboard + offline fallback), rotation-toggle step fixed |
+| 5 | `180a7c0` | SETUP_REMAINING: don't regenerate or sync the program keypair on the build machine |
+| 6 | `c759c4f` | `run.sh` untracked and gitignored (still on disk) |
+| 7 | `6c3fc51` | `.env.example` webhook-auth comment matches the code |
+
+Not done (human or out of scope): #8 devnet deploy + live Stream, #9 UI screenshots, #10 web tests / LP-economics recalibration.
