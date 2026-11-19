@@ -25,6 +25,10 @@ export const REGIME_COLOR: Record<string, string> = {
   rotation: 'var(--s-rotation)',
   flat5: 'var(--s-flat5)',
   flat80: 'var(--s-flat80)',
+  bots: 'var(--toxic)',
+  rebate: 'var(--retail)',
+  protocol: 'var(--standard)',
+  lps: 'var(--s-fairway)',
 };
 export const REGIME_NAME: Record<string, string> = {
   fairway: 'Fairway tiers',
@@ -32,6 +36,10 @@ export const REGIME_NAME: Record<string, string> = {
   rotation: 'Fairway, bots rotate wallets',
   flat5: 'Flat 5 bps',
   flat80: 'Flat 80 bps',
+  bots: 'Extra fees paid by bots',
+  rebate: 'Rebate to retail',
+  protocol: 'Protocol',
+  lps: 'LPs',
 };
 export const TIER_COLOR = { RETAIL: 'var(--retail)', STANDARD: 'var(--standard)', TOXIC: 'var(--toxic)' } as const;
 

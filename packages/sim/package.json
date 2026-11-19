@@ -11,6 +11,7 @@
   },
   "scripts": {
     "backtest": "tsx scripts/run-backtest.ts",
+    "lpfirst": "tsx scripts/run-backtest.ts --lpfirst-only",
     "replay": "tsx scripts/run-replay.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",

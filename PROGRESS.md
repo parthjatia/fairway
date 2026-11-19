@@ -4,7 +4,7 @@ STATUS: DONE
 # PROGRESS.md
 
 ## Current state / next step
-All milestones M0–M14 complete (M13 = trustless onchain markout scoring, 2026-11-19; devnet Pyth account still to verify, SETUP_REMAINING §4b). Fresh-clone install/build/test verified (TS 8 packages + Rust 18 math + 30 LiteSVM tests); every page returns 200 in mock mode. Remaining human steps: docs/SETUP_REMAINING.md. Judge audit (AUDIT.md) low-risk items #1–#7 done 2026-11-19; #8–#10 are human/out of scope.
+All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = trustless onchain markout scoring, 2026-11-19; devnet Pyth account still to verify, SETUP_REMAINING §4b). Fresh-clone install/build/test verified (TS 8 packages + Rust 22 math + 37 LiteSVM tests after M15); every page returns 200 in mock mode. Remaining human steps: docs/SETUP_REMAINING.md. Judge audit (AUDIT.md) low-risk items #1–#7 done 2026-11-19; #8–#10 are human/out of scope.
 
 ## Audit fixes (2026-11-19, see AUDIT.md)
 - [x] #1 README: added "Built with" (sponsor tools) and "What's next" sections
@@ -30,6 +30,7 @@ All milestones M0–M14 complete (M13 = trustless onchain markout scoring, 2026-
 - [x] **M11 Docs:** README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts embedded
 - [x] **M12 Hardening pass:** full test, build and lint; fresh-clone check; fix everything; final UI review; README accuracy check
 - [x] **M14 Polish + business model:** economics verdict and sensitivity (LPs vs flat 30 is NOT unconditional; stated honestly), 15% protocol fee share + treasury PDA, treasury-sponsored score rent (fallback trader pays), per-pool oracle + 1e12 price scale fixes, BONK-test second pool (fixtures, seed, UI picker), same-trade-two-wallets panel, /pool bot-extra-fees headline, Verified fair flow badge, SDK getFeeTier, README For judges + business model, PITCH/DEMO_SCRIPT updated
+- [x] **M15 LP-first fee model:** sim `rebate` regime (epoch-funded, budget-capped, floored) + `runLpFirst` (paired seeds, noise bands, protocol-share options) → `packages/sim/out/lpfirst.json`; defaults toxic 80 / retail=standard 30 / rebate 10% of premium / protocol 15% of the premium only; HONEST RESULT: no setting beats flat 30 for LPs beyond noise (default LP +$15±33 before, −$56±31 after protocol share; LVR −73%, retail −1.0±0.7 bps); onchain `update_retail_fee` + per-tier volume and epoch counters + RebateParams + premium-only protocol share; 7 new LiteSVM tests (cap, floor, epoch roll, zero-toxic epoch, skipped epochs, tier isolation, validation); SDK/IDL/web/README/ECONOMICS/PITCH/RISKS updated; elasticity kept as a labelled extra
 - [x] **M13 Onchain markout scoring:** TraderScore sums + 4-entry pending buffer; swap queues trades (creates PDA); permissionless `settle_markout` with validated Pyth; same shrinkage/tiers as packages/scoring; blend with keeper bootstrap (onchain wins ≥ 1,000 USDC); LiteSVM tests (signs, shrinkage, tier transitions, stale/invalid oracle, early settle no-op, wrong-trader, full buffer, expiry, close guard); shared TS/Rust vectors; SDK/keeper/web/docs updated
 
 ## Definition of Done (Section 12)

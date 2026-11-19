@@ -86,18 +86,18 @@ export default function HowItWorks() {
             </ul>
           </Card>
         </div>
-        <Card title="Who earns what" subtitle="Retail pays less, LPs earn from flow that used to be free, the protocol takes a share.">
+        <Card title="Who earns what" subtitle="Bots pay a premium. Part of it goes back to retail, a small part to the protocol, the rest stays with LPs.">
           <ul className="list-disc space-y-2 pl-5 text-[13px] leading-relaxed text-ink-2">
-            <li><strong className="text-ink">Protocol share: 15% of every swap fee</strong> (admin-set, max 50%). It stays in the vault, is excluded from LP reserves, and is claimed into the treasury PDA.</li>
+            <li><strong className="text-ink">Protocol share: 15% of the toxic premium only</strong> (the toxic fee above what STANDARD would pay; admin-set, max 50%). LPs keep every other fee. It stays in the vault, is excluded from LP reserves, and is claimed into the treasury PDA. A further share of the premium (10% by default) is recycled to RETAIL wallets as the <strong className="text-ink">bot-tax rebate</strong>: permissionless <code>update_retail_fee</code> sets it each epoch from the previous epoch&apos;s premium, hard-capped so the rebate can never exceed the premium collected.</li>
             <li><strong className="text-ink">Sponsored score accounts.</strong> The treasury pays the rent (about 0.0023 SOL) of a wallet&apos;s first score account while it holds SOL. If it is empty, the trader pays.</li>
             <li><strong className="text-ink">Good bots pay less.</strong> The fee follows measured markout, not who signs. Flow with no informed edge earns RETAIL pricing and a &quot;Verified fair flow&quot; badge, human or bot.</li>
             <li><strong className="text-ink">Any DEX can read the scores</strong> with one call (<code>getFeeTier</code> in the SDK). Licensing that is the next revenue line.</li>
-            <li>The sweep&apos;s LP result versus a flat 30 bps pool is within noise before the protocol share and negative after it. See the backtest.</li>
+            <li>In the simulation the LP result versus a flat 30 bps pool is within noise before the protocol share and slightly negative after it: the benefit is a large cut in what bots extract (LVR) and retail never paying more, not a proven LP gain. See the backtest.</li>
           </ul>
         </Card>
         <Card title="Tiers">
           <div className="grid gap-3 sm:grid-cols-3 text-[13px] text-ink-2">
-            <div className="rounded-xl border border-line p-3"><b className="text-ink">RETAIL · 5 bps</b><br />score ≤ 3 bps, ≥5 trades, ≥3 days</div>
+            <div className="rounded-xl border border-line p-3"><b className="text-ink">RETAIL · 30 bps − rebate</b><br />score ≤ 3 bps, ≥5 trades, ≥3 days</div>
             <div className="rounded-xl border border-line p-3"><b className="text-ink">STANDARD · 30 bps</b><br />unknown, new, or in-between</div>
             <div className="rounded-xl border border-line p-3"><b className="text-ink">TOXIC · 80 bps</b><br />score ≥ 10 bps, ≥5 trades</div>
           </div>

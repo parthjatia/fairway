@@ -2,7 +2,10 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, TransferChecked};
 use fairway_math::{
     markout::{exec_price_scaled, SIDE_BUY, SIDE_SELL},
-    protocol_share, resolve_blended, swap_quote, OnchainView, ScoreView, TierSource, TIER_RETAIL, TIER_STANDARD,
+    fee_on_input,
+    protocol_share,
+    rebate::{quote_equivalent, swap_rebate_bps, toxic_premium},
+    resolve_blended, swap_quote, OnchainView, ScoreView, TierSource, TIER_RETAIL, TIER_STANDARD, TIER_TOXIC,
 };
 
 use crate::{
@@ -85,10 +88,17 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
     if scored && sr.pending_full && tier == TIER_RETAIL {
         tier = TIER_STANDARD;
     }
-    let fee_bps = a.config.fee_bps[tier as usize];
-
     // pricing uses LP reserves only: unclaimed protocol fees sit in the vaults but do not move the curve
     let (rb, rq) = a.pool.lp_reserves(a.base_vault.amount, a.quote_vault.amount).ok_or(FairwayError::Overflow)?;
+    let notional_q = quote_equivalent(amount_in, a_to_b, rb, rq).m()?;
+    // bot-tax rebate: only the RETAIL tier, never below the floor, never beyond what is left of the epoch's budget
+    let base_fee_bps = a.config.fee_bps[tier as usize];
+    let rebate_bps = if tier == TIER_RETAIL {
+        swap_rebate_bps(a.pool.rebate_bps, a.pool.rebate_budget_q, notional_q, base_fee_bps, a.config.rebate.floor_bps)
+    } else {
+        0
+    };
+    let fee_bps = base_fee_bps - rebate_bps;
     let (reserve_in, reserve_out) = if a_to_b { (rb, rq) } else { (rq, rb) };
     let q = swap_quote(amount_in, reserve_in, reserve_out, fee_bps).m()?;
     require!(q.amount_out >= min_amount_out, FairwayError::SlippageExceeded);
@@ -120,9 +130,25 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
     )?;
 
     let pool_key = a.pool.key();
-    let cut = protocol_share(q.fee, a.config.protocol_fee_bps).m()?;
+    // protocol revenue = a share of the toxic PREMIUM only (the fee above what STANDARD would have paid): LPs keep all other fees
+    let premium_in = if tier == TIER_TOXIC { toxic_premium(q.fee, amount_in, a.config.fee_bps[TIER_STANDARD as usize]).m()? } else { 0 };
+    let cut = protocol_share(premium_in, a.config.protocol_fee_bps).m()?;
+    let premium_q = quote_equivalent(premium_in, a_to_b, rb, rq).m()?;
+    let rebate_q = if rebate_bps > 0 {
+        quote_equivalent(fee_on_input(amount_in, base_fee_bps).m()?.saturating_sub(q.fee), a_to_b, rb, rq).m()?
+    } else {
+        0
+    };
     let p = &mut ctx.accounts.pool;
     let t = tier as usize;
+    p.volume_q[t] = p.volume_q[t].saturating_add(notional_q);
+    if tier == TIER_RETAIL {
+        p.epoch_retail_vol_q = p.epoch_retail_vol_q.saturating_add(notional_q);
+        p.rebate_budget_q = p.rebate_budget_q.saturating_sub(rebate_q);
+        p.rebate_total_q = p.rebate_total_q.saturating_add(rebate_q);
+    }
+    p.epoch_premium_q = p.epoch_premium_q.saturating_add(premium_q);
+    p.premium_total_q = p.premium_total_q.saturating_add(premium_q);
     if a_to_b {
         p.fees_base[t] = p.fees_base[t].saturating_add(q.fee);
         p.protocol_owed_base = p.protocol_owed_base.checked_add(cut).ok_or(FairwayError::Overflow)?;

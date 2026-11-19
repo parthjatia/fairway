@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 
 pub mod markout;
+pub mod rebate;
 pub mod tier;
 pub use tier::*;
 

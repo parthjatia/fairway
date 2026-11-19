@@ -58,6 +58,14 @@ pub fn handle_create_pool(ctx: Context<CreatePool>) -> Result<()> {
     p.sponsored_lamports = 0;
     p.oracle_price_account = Pubkey::default();
     p.oracle_feed_id = [0u8; 32];
+    p.epoch_start_slot = Clock::get()?.slot;
+    p.epoch_premium_q = 0;
+    p.epoch_retail_vol_q = 0;
+    p.rebate_bps = 0;
+    p.rebate_budget_q = 0;
+    p.volume_q = [0; 3];
+    p.premium_total_q = 0;
+    p.rebate_total_q = 0;
     Ok(())
 }
 

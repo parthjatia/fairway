@@ -23,6 +23,8 @@ export const FAIRWAY_ERRORS = [
   ['InvalidMarkoutParams', 'Invalid markout parameters'],
   ['InvalidProtocolFee', 'Protocol fee must be at most 50% (5000 bps)'],
   ['TreasuryBelowFloor', 'Withdrawal would take the treasury below its rent-exempt minimum'],
+  ['InvalidRebateParams', 'Rebate params: epoch_slots > 0, share <= 10000 bps, floor <= 1000 bps'],
+  ['EpochNotElapsed', 'The rebate epoch has not elapsed yet'],
 ] as const;
 
 export type FairwayErrorName = (typeof FAIRWAY_ERRORS)[number][0];

@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use fairway_math::{valid_fee_schedule, TIER_STANDARD, TIER_TOXIC};
 
-use crate::{constants::*, error::FairwayError, state::{Config, MarkoutParams}};
+use crate::{constants::*, error::FairwayError, state::{Config, MarkoutParams, RebateParams}};
 
 #[derive(Accounts)]
 pub struct InitializeConfig<'info> {
@@ -29,6 +29,7 @@ pub fn handle_initialize_config(ctx: Context<InitializeConfig>, score_authority:
     c.bump = ctx.bumps.config;
     c.markout = MarkoutParams::default();
     c.protocol_fee_bps = DEFAULT_PROTOCOL_FEE_BPS;
+    c.rebate = RebateParams::default();
     Ok(())
 }
 
@@ -48,6 +49,7 @@ pub struct ConfigUpdate {
     pub score_ttl_slots: Option<u64>,
     pub markout: Option<MarkoutParams>,
     pub protocol_fee_bps: Option<u16>,
+    pub rebate: Option<RebateParams>,
 }
 
 pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) -> Result<()> {
@@ -66,6 +68,10 @@ pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) ->
     if let Some(p) = update.protocol_fee_bps {
         require!(p <= MAX_PROTOCOL_FEE_BPS, FairwayError::InvalidProtocolFee);
         c.protocol_fee_bps = p;
+    }
+    if let Some(r) = update.rebate {
+        require!(r.epoch_slots > 0 && r.share_bps <= 10_000 && r.floor_bps <= fairway_math::MAX_FEE_BPS, FairwayError::InvalidRebateParams);
+        c.rebate = r;
     }
     if let Some(m) = update.markout {
         validate_markout(&m)?;

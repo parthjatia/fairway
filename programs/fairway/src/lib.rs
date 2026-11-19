@@ -74,6 +74,12 @@ pub mod fairway {
         instructions::treasury::handle_treasury_withdraw_sol(ctx, lamports)
     }
 
+    /// Permissionless: roll the rebate epoch. Sets the RETAIL-tier rebate for the next epoch from the toxic premium and
+    /// RETAIL volume counters of the epoch that just ended.
+    pub fn update_retail_fee(ctx: Context<UpdateRetailFee>) -> Result<()> {
+        instructions::rebate::handle_update_retail_fee(ctx)
+    }
+
     pub fn close_score(ctx: Context<CloseScore>) -> Result<()> {
         instructions::score::handle_close_score(ctx)
     }

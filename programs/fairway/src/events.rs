@@ -14,6 +14,21 @@ pub struct SwapExecuted {
     pub tier: u8,
 }
 
+/// Emitted when the retail rebate is rolled to a new epoch.
+#[event]
+pub struct RetailFeeUpdated {
+    pub pool: Pubkey,
+    pub epoch_start_slot: u64,
+    pub slot: u64,
+    /// toxic premium and RETAIL-tier volume of the epoch that just ended (quote equivalents)
+    pub premium_q: u64,
+    pub retail_volume_q: u64,
+    pub rebate_bps: u16,
+    pub budget_q: u64,
+    /// resulting RETAIL fee, bps
+    pub retail_fee_bps: u16,
+}
+
 #[event]
 pub struct ScoreUpdated {
     pub trader: Pubkey,

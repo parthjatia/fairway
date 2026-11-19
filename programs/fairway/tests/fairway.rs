@@ -1044,7 +1044,7 @@ fn score_rent(env: &Env, t: &Pubkey) -> u64 {
 #[test]
 fn protocol_fee_defaults_and_bounds() {
     let (mut env, _lp) = seeded();
-    assert_eq!(config_state(&env).protocol_fee_bps, 1_500); // 15% of swap fees
+    assert_eq!(config_state(&env).protocol_fee_bps, 1_500); // 15% of the toxic premium
     assert!(update_config(&mut env, ConfigUpdate { protocol_fee_bps: Some(5_001), ..Default::default() }).unwrap_err().contains("Custom(6021)"));
     update_config(&mut env, ConfigUpdate { protocol_fee_bps: Some(5_000), ..Default::default() }).unwrap();
     assert_eq!(config_state(&env).protocol_fee_bps, 5_000);
@@ -1054,20 +1054,23 @@ fn protocol_fee_defaults_and_bounds() {
 fn protocol_share_accrues_excluded_from_reserves_and_is_claimable() {
     let (mut env, lp) = seeded();
     let t = new_trader(&mut env);
-    // a buy (quote in) and a sell (base in), STANDARD tier
+    set_score(&mut env, t.kp.pubkey(), TOXIC);
+    // a buy (quote in) and a sell (base in), TOXIC tier: the protocol keeps 15% of the PREMIUM (fee above the STANDARD fee)
     let (_, fee_q, _) = buy_and_measure(&mut env, &t, 10_000 * USDC);
     swap(&mut env, &t, 5 * SOL, 1, true).unwrap();
-    let fee_b = fee_on_input(5 * SOL, 30).unwrap();
+    let fee_b = fee_on_input(5 * SOL, 80).unwrap();
+    let prem_q = fee_q - fee_on_input(10_000 * USDC, 30).unwrap();
+    let prem_b = fee_b - fee_on_input(5 * SOL, 30).unwrap();
     let p = pool_state(&env);
-    let cut_q = fairway_math::protocol_share(fee_q, 1_500).unwrap();
-    let cut_b = fairway_math::protocol_share(fee_b, 1_500).unwrap();
+    let cut_q = fairway_math::protocol_share(prem_q, 1_500).unwrap();
+    let cut_b = fairway_math::protocol_share(prem_b, 1_500).unwrap();
     assert_eq!((p.protocol_owed_quote, p.protocol_owed_base), (cut_q, cut_b));
     assert_eq!((p.protocol_earned_quote, p.protocol_earned_base), (cut_q, cut_b));
-    assert_eq!(cut_q, fee_q * 15 / 100);
+    assert_eq!(cut_q, prem_q * 15 / 100);
 
-    // the LP's fee share is the other 85%: reserves used for pricing exclude the unclaimed protocol fees
+    // LPs keep the other 85% of the premium and every non-premium fee: reserves used for pricing exclude the unclaimed protocol fees
     let (rb, rq) = (token_balance(&env.svm, &env.base_vault) - p.protocol_owed_base, token_balance(&env.svm, &env.quote_vault) - p.protocol_owed_quote);
-    let q = swap_quote(1_000 * USDC, rq, rb, 30).unwrap();
+    let q = swap_quote(1_000 * USDC, rq, rb, 80).unwrap();
     let before = token_balance(&env.svm, &t.base);
     swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
     assert_eq!(token_balance(&env.svm, &t.base) - before, q.amount_out, "swap must price off LP reserves, not the raw vault balance");
@@ -1139,6 +1142,7 @@ fn zero_protocol_fee_keeps_everything_with_lps() {
     let (mut env, _lp) = seeded();
     update_config(&mut env, ConfigUpdate { protocol_fee_bps: Some(0), ..Default::default() }).unwrap();
     let t = new_trader(&mut env);
+    set_score(&mut env, t.kp.pubkey(), TOXIC);
     buy_and_measure(&mut env, &t, 1_000 * USDC);
     let p = pool_state(&env);
     assert_eq!((p.protocol_owed_quote, p.protocol_earned_quote), (0, 0));
@@ -1228,4 +1232,200 @@ fn treasury_sol_withdraw_is_admin_only_and_keeps_rent_floor() {
     send(&mut env.svm, &[wd(admin.pubkey(), 500_000_000 - floor)], &admin, &[]).unwrap();
     assert_eq!(env.svm.get_balance(&dest).unwrap(), 500_000_000 - floor);
     assert_eq!(treasury_balance(&env), floor);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// M15: bot-tax rebate (update_retail_fee)
+// ---------------------------------------------------------------------------------------------------------------------
+
+const ERR_INVALID_REBATE_PARAMS: &str = "Custom(6023)";
+const ERR_EPOCH_NOT_ELAPSED: &str = "Custom(6024)";
+const EPOCH: u64 = 100;
+
+fn update_retail_fee(env: &mut Env, cranker: &Keypair) -> Result<(), String> {
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::UpdateRetailFee {}.data(),
+        fairway::accounts::UpdateRetailFee { cranker: cranker.pubkey(), config: config_pda(), pool: env.pool }.to_account_metas(None),
+    );
+    send(&mut env.svm, &[ix], cranker, &[])
+}
+
+fn set_rebate_cfg(env: &mut Env, share_bps: u16, floor_bps: u16) {
+    update_config(
+        env,
+        ConfigUpdate { fee_bps: Some([30, 30, 80]), rebate: Some(RebateParams { epoch_slots: EPOCH, share_bps, floor_bps }), ..Default::default() },
+    )
+    .unwrap();
+}
+
+/// retail = standard = 30 bps, toxic 80, rebate epoch of 100 slots
+fn rebate_env(share_bps: u16, floor_bps: u16) -> (Env, Trader, Trader, Trader) {
+    let (mut env, _lp) = seeded();
+    set_rebate_cfg(&mut env, share_bps, floor_bps);
+    let retail = new_trader(&mut env);
+    let toxic = new_trader(&mut env);
+    let fresh = new_trader(&mut env);
+    set_score(&mut env, retail.kp.pubkey(), RETAIL);
+    set_score(&mut env, toxic.kp.pubkey(), TOXIC);
+    (env, retail, toxic, fresh)
+}
+
+/// fee (quote units) charged by a quote-in swap of `usdc`, read from the per-tier counter
+fn buy_fee(env: &mut Env, t: &Trader, tier: usize, usdc: u64) -> u64 {
+    let before = pool_state(env).fees_quote[tier];
+    swap(env, t, usdc, 1, false).unwrap();
+    pool_state(env).fees_quote[tier] - before
+}
+
+#[test]
+fn rebate_defaults_and_validation() {
+    let (mut env, _lp) = seeded();
+    let c = config_state(&env);
+    assert_eq!((c.rebate.epoch_slots, c.rebate.share_bps, c.rebate.floor_bps), (9_000, 1_000, 5));
+    for bad in [RebateParams { epoch_slots: 0, share_bps: 1_000, floor_bps: 5 }, RebateParams { epoch_slots: 10, share_bps: 10_001, floor_bps: 5 }, RebateParams { epoch_slots: 10, share_bps: 10, floor_bps: 1_001 }] {
+        let e = update_config(&mut env, ConfigUpdate { rebate: Some(bad), ..Default::default() }).unwrap_err();
+        assert!(e.contains(ERR_INVALID_REBATE_PARAMS), "{e}");
+    }
+}
+
+#[test]
+fn epoch_roll_sets_rebate_from_previous_epoch_and_is_permissionless() {
+    let (mut env, retail, toxic, fresh) = rebate_env(5_000, 5);
+    // epoch 1: no rebate yet, everyone pays their tier fee
+    assert_eq!(buy_fee(&mut env, &retail, 0, 100_000 * USDC), fee_on_input(100_000 * USDC, 30).unwrap());
+    assert_eq!(buy_fee(&mut env, &fresh, 1, 10_000 * USDC), fee_on_input(10_000 * USDC, 30).unwrap());
+    let tox_fee = buy_fee(&mut env, &toxic, 2, 10_000 * USDC);
+    assert_eq!(tox_fee, fee_on_input(10_000 * USDC, 80).unwrap());
+    let p = pool_state(&env);
+    let premium = tox_fee - fee_on_input(10_000 * USDC, 30).unwrap(); // 50 USDC
+    assert_eq!((p.epoch_premium_q, p.epoch_retail_vol_q), (premium, 100_000 * USDC));
+    assert_eq!(p.volume_q, [100_000 * USDC, 10_000 * USDC, 10_000 * USDC]);
+
+    // too early (anyone, including a stranger): the epoch has not elapsed
+    let stranger = new_user(&mut env.svm);
+    assert!(update_retail_fee(&mut env, &stranger).unwrap_err().contains(ERR_EPOCH_NOT_ELAPSED));
+    warp(&mut env, EPOCH - 1);
+    assert!(update_retail_fee(&mut env, &stranger).unwrap_err().contains(ERR_EPOCH_NOT_ELAPSED));
+    warp(&mut env, 1);
+    update_retail_fee(&mut env, &stranger).unwrap(); // permissionless
+
+    // rate = 50% × 50 USDC premium ÷ 100,000 USDC retail volume = 2.5 bps → floors to 2
+    let p = pool_state(&env);
+    let expect = fairway_math::rebate::epoch_rebate(premium, 100_000 * USDC, 5_000, 30, 5).unwrap();
+    assert_eq!((p.rebate_bps, p.rebate_budget_q), (2, premium / 2));
+    assert_eq!((p.rebate_bps, p.rebate_budget_q), (expect.rate_bps, expect.budget_q));
+    // counters rolled
+    assert_eq!((p.epoch_premium_q, p.epoch_retail_vol_q), (0, 0));
+    assert_eq!(p.epoch_start_slot, clock(&env).slot);
+    // and the next roll needs a full new epoch
+    assert!(update_retail_fee(&mut env, &stranger).unwrap_err().contains(ERR_EPOCH_NOT_ELAPSED));
+
+    // epoch 2: RETAIL pays 28 bps; STANDARD and TOXIC are untouched (a rotating bot gets no discount)
+    assert_eq!(buy_fee(&mut env, &retail, 0, 10_000 * USDC), fee_on_input(10_000 * USDC, 28).unwrap());
+    assert_eq!(buy_fee(&mut env, &fresh, 1, 10_000 * USDC), fee_on_input(10_000 * USDC, 30).unwrap());
+    assert_eq!(buy_fee(&mut env, &toxic, 2, 10_000 * USDC), fee_on_input(10_000 * USDC, 80).unwrap());
+    let p = pool_state(&env);
+    let given = fee_on_input(10_000 * USDC, 30).unwrap() - fee_on_input(10_000 * USDC, 28).unwrap();
+    assert_eq!(p.rebate_total_q, given);
+    assert_eq!(p.rebate_budget_q, premium / 2 - given);
+}
+
+#[test]
+fn rebate_never_exceeds_share_of_premium_and_budget_runs_out() {
+    let (mut env, retail, toxic, _fresh) = rebate_env(5_000, 5);
+    // epoch 1: tiny retail volume, a big toxic trade → the naive rate would be huge
+    buy_fee(&mut env, &retail, 0, 1_000 * USDC);
+    let tox_fee = buy_fee(&mut env, &toxic, 2, 100_000 * USDC);
+    let premium = tox_fee - fee_on_input(100_000 * USDC, 30).unwrap(); // 500 USDC
+    warp(&mut env, EPOCH);
+    let stranger = new_user(&mut env.svm);
+    update_retail_fee(&mut env, &stranger).unwrap();
+    let p = pool_state(&env);
+    let budget = premium / 2; // 250 USDC
+    assert_eq!((p.rebate_bps, p.rebate_budget_q), (25, budget), "rate is clamped by the floor: 30 - 5");
+
+    // epoch 2: retail trades 100k USDC three times. The first trade drains the budget, later ones pay the full 30 bps
+    let f1 = buy_fee(&mut env, &retail, 0, 100_000 * USDC);
+    let f2 = buy_fee(&mut env, &retail, 0, 100_000 * USDC);
+    let f3 = buy_fee(&mut env, &retail, 0, 100_000 * USDC);
+    let full = fee_on_input(100_000 * USDC, 30).unwrap();
+    assert!(f1 < full, "first trade is rebated");
+    assert!(f2 >= full - 1 && f3 == full, "budget is exhausted: {f1} {f2} {f3}");
+    let p = pool_state(&env);
+    // cap: rebate handed out <= share × premium collected (+ at most one token unit of rounding per swap)
+    assert!(p.rebate_total_q <= budget + 3, "rebate {} exceeds budget {}", p.rebate_total_q, budget);
+    assert!(p.rebate_total_q <= p.premium_total_q * 5_000 / 10_000 + 3);
+    assert_eq!(p.rebate_total_q, (full - f1) + (full - f2) + (full - f3));
+    assert!(p.rebate_budget_q <= 3);
+}
+
+#[test]
+fn rebate_floor_holds() {
+    // floor 25 on a 30 bps retail fee: at most 5 bps of rebate, even with a 100% share and a huge premium
+    let (mut env, retail, toxic, _fresh) = rebate_env(10_000, 25);
+    buy_fee(&mut env, &retail, 0, 1_000 * USDC);
+    buy_fee(&mut env, &toxic, 2, 100_000 * USDC);
+    warp(&mut env, EPOCH);
+    let stranger = new_user(&mut env.svm);
+    update_retail_fee(&mut env, &stranger).unwrap();
+    assert_eq!(pool_state(&env).rebate_bps, 5);
+    assert_eq!(buy_fee(&mut env, &retail, 0, 10_000 * USDC), fee_on_input(10_000 * USDC, 25).unwrap());
+
+    // floor at (or above) the retail fee: no rebate at all
+    let (mut env, retail, toxic, _fresh) = rebate_env(10_000, 30);
+    buy_fee(&mut env, &retail, 0, 1_000 * USDC);
+    buy_fee(&mut env, &toxic, 2, 100_000 * USDC);
+    warp(&mut env, EPOCH);
+    let stranger = new_user(&mut env.svm);
+    update_retail_fee(&mut env, &stranger).unwrap();
+    assert_eq!((pool_state(&env).rebate_bps, pool_state(&env).rebate_budget_q), (0, 0));
+    assert_eq!(buy_fee(&mut env, &retail, 0, 10_000 * USDC), fee_on_input(10_000 * USDC, 30).unwrap());
+}
+
+#[test]
+fn zero_toxic_volume_epoch_clears_the_rebate() {
+    let (mut env, retail, toxic, _fresh) = rebate_env(5_000, 5);
+    let stranger = new_user(&mut env.svm);
+    // epoch 1 creates a rebate
+    buy_fee(&mut env, &retail, 0, 10_000 * USDC);
+    buy_fee(&mut env, &toxic, 2, 10_000 * USDC);
+    warp(&mut env, EPOCH);
+    update_retail_fee(&mut env, &stranger).unwrap();
+    assert!(pool_state(&env).rebate_bps > 0);
+    // epoch 2: only retail trades, no toxic flow at all → no premium → the next epoch has no rebate
+    buy_fee(&mut env, &retail, 0, 10_000 * USDC);
+    warp(&mut env, EPOCH);
+    update_retail_fee(&mut env, &stranger).unwrap();
+    let p = pool_state(&env);
+    assert_eq!((p.rebate_bps, p.rebate_budget_q, p.epoch_premium_q), (0, 0, 0));
+    assert_eq!(buy_fee(&mut env, &retail, 0, 10_000 * USDC), fee_on_input(10_000 * USDC, 30).unwrap());
+    // a completely empty epoch (no swaps) rolls fine too
+    warp(&mut env, EPOCH);
+    update_retail_fee(&mut env, &stranger).unwrap();
+    assert_eq!(pool_state(&env).rebate_bps, 0);
+}
+
+#[test]
+fn skipped_epochs_roll_once_over_the_whole_window() {
+    let (mut env, retail, toxic, _fresh) = rebate_env(5_000, 5);
+    let stranger = new_user(&mut env.svm);
+    buy_fee(&mut env, &retail, 0, 100_000 * USDC);
+    buy_fee(&mut env, &toxic, 2, 10_000 * USDC);
+    warp(&mut env, EPOCH * 5); // nobody cranked for five epochs
+    update_retail_fee(&mut env, &stranger).unwrap();
+    assert_eq!(pool_state(&env).epoch_start_slot, clock(&env).slot);
+    assert!(pool_state(&env).rebate_bps > 0);
+}
+
+#[test]
+fn protocol_takes_a_share_of_the_premium_only() {
+    let (mut env, retail, toxic, fresh) = rebate_env(5_000, 5);
+    // retail and standard fees: LPs keep 100%, the protocol earns nothing
+    buy_fee(&mut env, &retail, 0, 10_000 * USDC);
+    buy_fee(&mut env, &fresh, 1, 10_000 * USDC);
+    assert_eq!(pool_state(&env).protocol_owed_quote, 0);
+    let fee = buy_fee(&mut env, &toxic, 2, 10_000 * USDC);
+    let premium = fee - fee_on_input(10_000 * USDC, 30).unwrap();
+    assert_eq!(pool_state(&env).protocol_owed_quote, premium * 15 / 100);
 }

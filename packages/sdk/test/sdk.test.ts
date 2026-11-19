@@ -29,6 +29,7 @@ import {
   setScoreIx,
   setScoresBatchIx,
   settleMarkoutIx,
+  updateRetailFeeIx,
   setPoolOracleIx,
   claimProtocolFeesIx,
   treasuryTransferTokensIx,
@@ -67,6 +68,7 @@ describe('IDL parity', () => {
       close_score: closeScoreIx({ closer: t, trader: t }),
       settle_markout: settleMarkoutIx({ cranker: t, trader: t, baseMint: base, quoteMint: quote, pythPriceAccount: k() }),
       set_pool_oracle: setPoolOracleIx({ admin: t, baseMint: base, quoteMint: quote, priceAccount: k(), feedId: new Uint8Array(32) }),
+      update_retail_fee: updateRetailFeeIx({ cranker: t, baseMint: base, quoteMint: quote }),
       claim_protocol_fees: claimProtocolFeesIx({ cranker: t, baseMint: base, quoteMint: quote }),
       treasury_transfer_tokens: treasuryTransferTokensIx({ admin: t, mint: base, to: k(), amount: 1n }),
       treasury_withdraw_sol: treasuryWithdrawSolIx({ admin: t, destination: k(), lamports: 1n }),
@@ -116,9 +118,10 @@ describe('account decoders', () => {
     const auth = k();
     const cw = new Writer().bytes(discriminator('account', 'Config')).pubkey(admin).pubkey(auth).u16(5).u16(30).u16(80).u8(1).u64(1000n).u8(254);
     writeMarkoutParams(cw, defaultMarkoutParams({ pythMaxConfBps: 77 }));
-    cw.u16(1500);
+    cw.u16(1500).u64(9000n).u16(1000).u16(5);
     const cfg = cw.toBytes();
     expect(decodeConfig(cfg).protocolFeeBps).toBe(1500);
+    expect(decodeConfig(cfg).rebate).toEqual({ epochSlots: 9000n, shareBps: 1000, floorBps: 5 });
     expect(decodeConfig(cfg)).toMatchObject({ feeBps: [5, 30, 80], defaultTier: 1, scoreTtlSlots: 1000n, bump: 254 });
     expect(decodeConfig(cfg).markout).toMatchObject({ markoutSlots: 75n, priorNotional: 2_000_000_000n, toxicBps: 10, pythMaxConfBps: 77 });
     expect(decodeConfig(cfg).admin.equals(admin)).toBe(true);
@@ -131,10 +134,12 @@ describe('account decoders', () => {
     w.u64(11n).u64(12n).u64(13n).u64(14n).u32(2).u64(5_000_000n);
     const oracleKey = k();
     w.pubkey(oracleKey).bytes(new Uint8Array(32).fill(7));
+    w.u64(900n).u64(50n).u64(60n).u16(7).u64(40n).u64(1n).u64(2n).u64(3n).u64(70n).u64(80n);
     const pool = decodePool(w.toBytes());
     expect(pool.oracleCfg.priceAccount.equals(oracleKey)).toBe(true);
     expect(Array.from(pool.oracleCfg.feedId)).toEqual(new Array(32).fill(7));
     expect(pool).toMatchObject({ protocolOwedBase: 11n, protocolOwedQuote: 12n, protocolEarnedBase: 13n, protocolEarnedQuote: 14n, sponsoredAccounts: 2, sponsoredLamports: 5_000_000n });
+    expect(pool.rebate).toMatchObject({ epochStartSlot: 900n, epochPremiumQ: 50n, epochRetailVolQ: 60n, rebateBps: 7, budgetQ: 40n, volumeQ: [1n, 2n, 3n], premiumTotalQ: 70n, rebateTotalQ: 80n });
     expect(pool.lpSupply).toBe(777n);
     expect(pool.feesQuote).toEqual([3n, 4n, 5n]);
     expect(pool.swaps).toEqual([6n, 7n, 8n]);
@@ -181,7 +186,7 @@ describe('getFeeTier (composable read)', () => {
   const cfgBytes = () => {
     const cw = new Writer().bytes(discriminator('account', 'Config')).pubkey(k()).pubkey(k()).u16(5).u16(30).u16(80).u8(1).u64(1000n).u8(254);
     writeMarkoutParams(cw, defaultMarkoutParams());
-    return decodeConfig(cw.u16(1500).toBytes());
+    return decodeConfig(cw.u16(1500).u64(9000n).u16(1000).u16(5).toBytes());
   };
   const scoreBytes = (o: { tier: number; onchainTier: number; sumNotional: bigint; trades: number; pending?: number }) => {
     const w = new Writer().bytes(discriminator('account', 'TraderScore')).pubkey(wallet).u8(o.tier).i32(0).u32(9).u64(90n).u8(250);
@@ -192,6 +197,19 @@ describe('getFeeTier (composable read)', () => {
     }
     return decodeTraderScore(w.bool(false).toBytes());
   };
+  it('applies the bot-tax rebate to RETAIL only, within floor and budget', () => {
+    const cfg = { ...cfgBytes(), feeBps: [30, 30, 80] as [number, number, number] };
+    const retail = scoreBytes({ tier: 0, onchainTier: 0, sumNotional: 0n, trades: 0 });
+    const pool = (rebateBps: number, budgetQ: bigint) => ({ rebate: { rebateBps, budgetQ } }) as unknown as import('../src').PoolAccount;
+    expect(feeTierFromAccounts(wallet, cfg, retail, 100n, pool(10, 1_000_000_000n), 1_000_000n)).toMatchObject({ tier: 0, feeBps: 20, rebateBps: 10 });
+    expect(feeTierFromAccounts(wallet, cfg, retail, 100n, pool(40, 1_000_000_000n), 1_000_000n)).toMatchObject({ feeBps: 5, rebateBps: 25 }); // never below the 5 bps floor
+    expect(feeTierFromAccounts(wallet, cfg, retail, 100n, pool(10, 500n), 1_000_000n).rebateBps).toBe(5); // budget for 5 bps of this trade
+    expect(feeTierFromAccounts(wallet, cfg, retail, 100n, pool(10, 0n), 1_000_000n).feeBps).toBe(30);
+    // STANDARD (unknown wallet) and TOXIC never get it
+    expect(feeTierFromAccounts(wallet, cfg, null, 100n, pool(10, 1_000_000_000n), 1_000_000n).feeBps).toBe(30);
+    const toxic = scoreBytes({ tier: 2, onchainTier: 2, sumNotional: 0n, trades: 0 });
+    expect(feeTierFromAccounts(wallet, cfg, toxic, 100n, pool(10, 1_000_000_000n), 1_000_000n).feeBps).toBe(80);
+  });
   it('unknown wallet pays STANDARD', () => {
     const r = feeTierFromAccounts(wallet, cfgBytes(), null, 100n);
     expect(r).toMatchObject({ tier: 1, tierName: 'STANDARD', feeBps: 30, isNew: true, verified: false, onchain: null });

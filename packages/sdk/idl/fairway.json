@@ -1331,6 +1331,78 @@
           }
         }
       ]
+    },
+    {
+      "name": "update_retail_fee",
+      "docs": [
+        "Permissionless: roll the rebate epoch. Sets the RETAIL-tier rebate for the next epoch from the toxic premium and",
+        "RETAIL volume counters of the epoch that just ended."
+      ],
+      "discriminator": [
+        86,
+        60,
+        116,
+        8,
+        83,
+        139,
+        101,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "anyone can crank; pays only the transaction fee"
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.base_mint",
+                "account": "Pool"
+              },
+              {
+                "kind": "account",
+                "path": "pool.quote_mint",
+                "account": "Pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -1386,6 +1458,19 @@
         60,
         174,
         41
+      ]
+    },
+    {
+      "name": "RetailFeeUpdated",
+      "discriminator": [
+        223,
+        198,
+        84,
+        103,
+        10,
+        75,
+        30,
+        133
       ]
     },
     {
@@ -1530,6 +1615,16 @@
       "code": 6022,
       "name": "TreasuryBelowFloor",
       "msg": "Withdrawal would take the treasury below its rent-exempt minimum"
+    },
+    {
+      "code": 6023,
+      "name": "InvalidRebateParams",
+      "msg": "Rebate params: epoch_slots > 0, share <= 10000 bps, floor <= 1000 bps"
+    },
+    {
+      "code": 6024,
+      "name": "EpochNotElapsed",
+      "msg": "The rebate epoch has not elapsed yet"
     }
   ],
   "types": [
@@ -1599,6 +1694,17 @@
               "share of every swap fee that goes to the protocol treasury, in bps of the fee (1500 = 15%)"
             ],
             "type": "u16"
+          },
+          {
+            "name": "rebate",
+            "docs": [
+              "bot-tax rebate parameters (M15)"
+            ],
+            "type": {
+              "defined": {
+                "name": "RebateParams"
+              }
+            }
           }
         ]
       }
@@ -1657,6 +1763,16 @@
             "name": "protocol_fee_bps",
             "type": {
               "option": "u16"
+            }
+          },
+          {
+            "name": "rebate",
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "RebateParams"
+                }
+              }
             }
           }
         ]
@@ -1960,6 +2076,146 @@
                 32
               ]
             }
+          },
+          {
+            "name": "epoch_start_slot",
+            "docs": [
+              "slot the current epoch started (set at pool creation, then by `update_retail_fee`)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "epoch_premium_q",
+            "docs": [
+              "toxic premium collected this epoch: fee charged above the STANDARD fee, TOXIC tier"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "epoch_retail_vol_q",
+            "docs": [
+              "RETAIL-tier swap volume this epoch (the volume the rebate is spread over)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "rebate_bps",
+            "docs": [
+              "rebate applied to RETAIL-tier fees right now, bps (from the last epoch roll)"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "rebate_budget_q",
+            "docs": [
+              "what is left of the previous epoch's rebate budget: a swap never gets rebate beyond this"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "volume_q",
+            "docs": [
+              "cumulative swap volume per tier"
+            ],
+            "type": {
+              "array": [
+                "u64",
+                3
+              ]
+            }
+          },
+          {
+            "name": "premium_total_q",
+            "docs": [
+              "lifetime toxic premium and lifetime rebate handed out"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "rebate_total_q",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RebateParams",
+      "docs": [
+        "Bot-tax rebate: RETAIL-tier wallets pay `fee_bps[RETAIL] − rebate`, funded by a share of the PREVIOUS epoch's toxic premium",
+        "(toxic fee above the STANDARD fee). `update_retail_fee` (permissionless) rolls the epoch."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epoch_slots",
+            "docs": [
+              "an epoch lasts this many slots (9_000 ≈ 1 hour at 400 ms)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "share_bps",
+            "docs": [
+              "share of the toxic premium recycled to retail, bps of the premium (1000 = 10%); 0 turns the rebate off"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "floor_bps",
+            "docs": [
+              "the rebated retail fee never goes below this"
+            ],
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RetailFeeUpdated",
+      "docs": [
+        "Emitted when the retail rebate is rolled to a new epoch."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch_start_slot",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "premium_q",
+            "docs": [
+              "toxic premium and RETAIL-tier volume of the epoch that just ended (quote equivalents)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "retail_volume_q",
+            "type": "u64"
+          },
+          {
+            "name": "rebate_bps",
+            "type": "u16"
+          },
+          {
+            "name": "budget_q",
+            "type": "u64"
+          },
+          {
+            "name": "retail_fee_bps",
+            "docs": [
+              "resulting RETAIL fee, bps"
+            ],
+            "type": "u16"
           }
         ]
       }

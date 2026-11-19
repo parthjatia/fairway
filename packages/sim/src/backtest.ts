@@ -116,7 +116,7 @@ export type Headline = {
 /** Run the full backtest for one fee schedule across seeds. */
 export function runBacktest(cfg: SimConfig = DEFAULT_SIM_CONFIG, seeds = [1, 2, 3, 4], wu: WarmupResult = warmup(cfg)): BacktestOutput {
   const regimes: Regime[] = ['flat30', 'fairway', 'rotation', 'flat5', 'flat80'];
-  const per: Record<Regime, RunMetrics[]> = { flat30: [], fairway: [], rotation: [], flat5: [], flat80: [], flat: [] };
+  const per: Record<Regime, RunMetrics[]> = { flat30: [], fairway: [], rotation: [], flat5: [], flat80: [], flat: [], rebate: [] };
   const series = {} as Record<Regime, TimeSeries>;
   const tierOf = tierOfFn(wu.tiers);
   seeds.forEach((seed, si) => {

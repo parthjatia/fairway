@@ -1,4 +1,5 @@
 import 'server-only';
+import { BASE_FEE_BPS, MOCK_RETAIL_REBATE_BPS, PROTOCOL_PREMIUM_SHARE_BPS, TIER_FEE } from '../fees';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -246,8 +247,8 @@ export function exampleWallets(): Array<{ address: string; tier: Tier; trades: n
     .map((s) => ({ address: s.trader, tier: s.tier, trades: s.trades, label: labelOf(s.trader), scoreBps: s.scoreBps }));
 }
 
-/** Protocol's share of swap fees (Config.protocol_fee_bps default) and the rent of one score account (≈ 0.0023 SOL). */
-export const PROTOCOL_FEE_BPS = 1_500;
+/** Protocol's share of the TOXIC PREMIUM (Config.protocol_fee_bps default; it takes nothing from other fees) and the rent of one score account (≈ 0.0023 SOL). */
+export const PROTOCOL_FEE_BPS = PROTOCOL_PREMIUM_SHARE_BPS;
 const SCORE_ACCOUNT_RENT_SOL = 0.0023;
 
 /** Fairway fixture pool: reserves (replayed from swaps), volume/fees by tier, M14 economics, recent swaps. */
@@ -273,13 +274,15 @@ export function poolView(key: PoolKey = 'sol'): PoolView {
     base += s.side === 'buy' ? -s.baseAmount : s.baseAmount;
     quote += s.side === 'buy' ? s.quoteAmount : -s.quoteAmount;
     const t = s.tier ?? 'STANDARD';
-    const fee = (s.quoteAmount * (s.feeBps ?? 30)) / 10_000;
+    // fixtures were generated under the old 5/30/80 schedule: re-price every swap under the current default (static counterfactual, volume held fixed)
+    const feeBps = TIER_FEE[t];
+    const fee = (s.quoteAmount * feeBps) / 10_000;
     volumeByTier[t] += s.quoteAmount;
     feesByTier[t] += fee;
     tradesByTier[t] += 1;
     traders.add(s.trader);
     // vs a flat STANDARD (30 bps) pool on the same volume: bots pay extra, retail saves
-    const vsFlat = (s.quoteAmount * ((s.feeBps ?? 30) - 30)) / 10_000;
+    const vsFlat = (s.quoteAmount * (feeBps - BASE_FEE_BPS.STANDARD)) / 10_000;
     if (t === 'TOXIC') botExtra += vsFlat;
     if (t === 'RETAIL') retailSaved -= vsFlat;
     const day = new Date(s.ts * 1000).toISOString().slice(5, 10);
@@ -309,14 +312,15 @@ export function poolView(key: PoolKey = 'sol'): PoolView {
       botExtraFeesUsd: botExtra,
       retailSavedUsd: retailSaved,
       protocolFeeBps: PROTOCOL_FEE_BPS,
-      protocolRevenueUsd: (lpFees * PROTOCOL_FEE_BPS) / 10_000,
-      lpFeesUsd: lpFees - (lpFees * PROTOCOL_FEE_BPS) / 10_000,
+      protocolRevenueUsd: (botExtra * PROTOCOL_FEE_BPS) / 10_000,
+      lpFeesUsd: lpFees - (botExtra * PROTOCOL_FEE_BPS) / 10_000,
+      rebateBps: MOCK_RETAIL_REBATE_BPS,
       sponsoredRentSol: traders.size * SCORE_ACCOUNT_RENT_SOL,
     },
     recent: mine
       .slice(-14)
       .reverse()
-      .map((s) => ({ sig: s.sig, ts: s.ts, trader: s.trader, side: s.side, quoteAmount: s.quoteAmount, execPrice: s.execPrice, feeBps: s.feeBps, tier: s.tier, label: labelOf(s.trader) })),
+      .map((s) => ({ sig: s.sig, ts: s.ts, trader: s.trader, side: s.side, quoteAmount: s.quoteAmount, execPrice: s.execPrice, feeBps: TIER_FEE[s.tier ?? 'STANDARD'], tier: s.tier, label: labelOf(s.trader) })),
     source: 'in-process',
   };
 }
@@ -329,5 +333,6 @@ export function simOutputs() {
     recommended: read<{ headline: import('@fairway/sim').Headline; config: import('@fairway/sim').SimConfig }>('backtest-recommended.json'),
     sensitivity: read<{ rows: import('@fairway/sim').SensitivityRow[] }>('sensitivity.json'),
     replay: read<import('@fairway/sim').ReplayOutput>('replay.json'),
+    lpfirst: read<import('@fairway/sim').LpFirstOutput>('lpfirst.json'),
   };
 }

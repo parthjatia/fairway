@@ -1,7 +1,7 @@
 import { pairs, poolView, simOutputs, sniperTimeToToxic } from '@/lib/server/data';
 import { Card, PageHeader, Stat, TierBadge, TIER_FEE_DEFAULT } from '@/components/ui';
 import { TierStackClient, UsdBars } from '@/components/pool-client';
-import { bps, num, short, time, usd, usdCompact } from '@/lib/format';
+import { bps, num, short, signed, time, usd, usdCompact } from '@/lib/format';
 import Link from 'next/link';
 
 export const metadata = { title: 'Pool — Fairway' };
@@ -11,7 +11,11 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
   const p = poolView(key);
   const e = p.economics;
   const sniperRows = key === 'bonk' ? sniperTimeToToxic() : [];
-  const { backtest } = simOutputs();
+  const { backtest, lpfirst } = simOutputs();
+  const rec = lpfirst.cells.find((c) => c.id === lpfirst.recommended.id)!;
+  const after = rec.lpAfterProtocol[lpfirst.recommended.protocolOption]!;
+  const lfDays = lpfirst.config.hours / 24;
+  const usdSigned = (v: number) => `${v >= 0 ? '+' : '−'}${usd(Math.abs(v))}`;
   const days = backtest.config.hours / 24;
   const m = Object.fromEntries(backtest.regimes.map((r) => [r.regime, r.mean]));
   const tiers = ['RETAIL', 'STANDARD', 'TOXIC'] as const;
@@ -20,7 +24,7 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
   return (
     <>
       <PageHeader eyebrow="Liquidity" title={p.label}>
-        Reserves and flow replayed from the fixture swap history. Fees by tier show who actually pays LPs: toxic flow pays the most per dollar, retail the least.
+        Reserves and flow replayed from the fixture swap history. Fees are re-priced under the current default schedule (retail 30 bps minus the bot-tax rebate, standard 30, toxic 80). Fees by tier show who actually pays LPs.
       </PageHeader>
       <div className="space-y-6">
         <nav aria-label="Pool" className="flex flex-wrap gap-2 text-[13px]">
@@ -37,12 +41,12 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
               <div className="mt-1 text-4xl font-semibold tracking-tight text-ink tnum">{usd(e.botExtraFeesUsd)}</div>
               <p className="mt-1 text-[12px] leading-relaxed text-ink-2">What TOXIC-tier flow paid above a flat 30 bps fee on the same volume ({p.tradesByTier.TOXIC} swaps). A flat-fee pool would have left this on the table.</p>
             </div>
-            <Stat label="Retail saved" value={usd(e.retailSavedUsd)} hint="vs the flat 30 bps fee" tone="good" />
-            <Stat label="Protocol revenue" value={usd(e.protocolRevenueUsd)} hint={`${e.protocolFeeBps / 100}% of swap fees → treasury`} />
-            <Stat label="LPs keep" value={usd(e.lpFeesUsd)} hint={`${100 - e.protocolFeeBps / 100}% of swap fees`} />
+            <Stat label="Bot-tax rebate to retail" value={usd(e.retailSavedUsd)} hint={`about ${e.rebateBps} bps off the 30 bps retail fee`} tone="good" />
+            <Stat label="Protocol revenue" value={usd(e.protocolRevenueUsd)} hint={`${e.protocolFeeBps / 100}% of the toxic premium → treasury (nothing from other fees)`} />
+            <Stat label="LPs keep" value={usd(e.lpFeesUsd)} hint="all fees except the protocol's premium share" />
           </div>
           <p className="mt-3 text-[12px] text-muted">
-            Fixture replay on synthetic data, volume held fixed (no behaviour change). The treasury also pays the rent of each new wallet&apos;s score account (about 0.0023 SOL, {num(e.sponsoredRentSol, 2)} SOL for {p.uniqueTraders} wallets here) while it holds SOL;
+            Fixture replay on synthetic data, volume held fixed (no behaviour change). The rebate is capped onchain at a share of the previous epoch's toxic premium, so it can never exceed what bots paid. The treasury also pays the rent of each new wallet&apos;s score account (about 0.0023 SOL, {num(e.sponsoredRentSol, 2)} SOL for {p.uniqueTraders} wallets here) while it holds SOL;
             otherwise the trader pays.
           </p>
         </div>
@@ -94,7 +98,13 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
             <p className="mt-3 text-[12px] text-muted">A pump or dump moves a memecoin far more than 30 s of normal SOL drift, so an informed trade here earns a bigger markout per trade and the score crosses the threshold sooner.</p>
           </Card>
         )}
-        <Card title="LP economics (simulator)" subtitle={`Per day on a $${(backtest.headline.tvlUsd / 1e6).toFixed(0)}M pool; mean of ${backtest.seeds.length} seeds. LVR proxy = profit arbitrageurs and snipers extract at the CEX mid.`}>
+        <Card title="LP economics (simulator, LP-first default)" subtitle={`Per day on a $${(backtest.headline.tvlUsd / 1e6).toFixed(0)}M pool; ${lpfirst.seeds.length} paired seeds. LVR proxy = profit arbitrageurs and snipers extract at the CEX mid.`}>
+          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat label="LVR cut vs flat 30" value={`−${rec.lvrReductionPct.mean.toFixed(0)}%`} hint={`${usd(lpfirst.baseline.flat30.arbProfitUsd / lfDays)} → ${usd((lpfirst.baseline.flat30.arbProfitUsd / lfDays) * (1 - rec.lvrReductionPct.mean / 100))}/d`} tone="good" />
+            <Stat label="LP vs flat 30, before protocol" value={`${usdSigned(rec.lpBeforeProtocol.mean)} ± ${usd(rec.lpBeforeProtocol.stderr)}`} hint="per day · within noise" />
+            <Stat label="LP vs flat 30, after protocol" value={`${usdSigned(after.mean)} ± ${usd(after.stderr)}`} hint="per day · 15% of the toxic premium" />
+            <Stat label="Retail cost vs flat 30" value={`${signed(rec.retailCostBps.vsFlat30Bps.mean, 1)} bps`} hint="never higher" tone="good" />
+          </div>
           <div className="grid gap-6 lg:grid-cols-2">
             <div>
               <div className="mb-1 text-[13px] font-medium text-ink">LP PnL vs HODL ($/day)</div>
@@ -105,7 +115,7 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
               <UsdBars rows={backtest.regimes.map((r) => ({ regime: r.regime, value: r.mean.arbProfitUsd / days }))} />
             </div>
           </div>
-          <p className="mt-3 text-[12px] text-muted">Fairway cuts arbitrage profit from {usd(m.flat30!.arbProfitUsd / days)} to {usd(m.fairway!.arbProfitUsd / days)} per day. <Link href="/backtest" className="text-accent">Explore parameters →</Link></p>
+          <p className="mt-3 text-[12px] text-muted">Bars below show the previous 5 / 30 / 80 design (&quot;max retail discount&quot;), which cuts arbitrage profit from {usd(m.flat30!.arbProfitUsd / days)} to {usd(m.fairway!.arbProfitUsd / days)} per day but costs LPs about {usd(-(m.fairway!.lpPnlVsHodlUsd - m.flat30!.lpPnlVsHodlUsd) / days)}/day versus flat 30. <Link href="/backtest" className="text-accent">Explore parameters →</Link></p>
         </Card>
         <Card title="Recent swaps">
           <div className="overflow-x-auto">

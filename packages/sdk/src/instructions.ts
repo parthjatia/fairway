@@ -3,7 +3,7 @@ import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-tok
 import { discriminator, Writer } from './borsh';
 import { MAX_BATCH, PROGRAM_ID, type TierIndex } from './constants';
 import { configPda, poolAddresses, scorePda, treasuryPda } from './pda';
-import { writeMarkoutParams, type MarkoutParams } from './accounts';
+import { writeMarkoutParams, writeRebateParams, type MarkoutParams, type RebateParams } from './accounts';
 
 const w = (k: PublicKey, isWritable = false, isSigner = false): AccountMeta => ({ pubkey: k, isWritable, isSigner });
 const ix = (programId: PublicKey, keys: AccountMeta[], name: string, args: (w: Writer) => void = () => {}) => {
@@ -29,6 +29,7 @@ export type ConfigUpdate = {
   scoreTtlSlots?: bigint | number;
   markout?: MarkoutParams;
   protocolFeeBps?: number;
+  rebate?: RebateParams;
 };
 
 export function updateConfigIx(p: { admin: PublicKey; update: ConfigUpdate; programId?: PublicKey }) {
@@ -42,6 +43,7 @@ export function updateConfigIx(p: { admin: PublicKey; update: ConfigUpdate; prog
     wr.option(u.scoreTtlSlots, (x, v) => x.u64(v));
     wr.option(u.markout, (x, v) => writeMarkoutParams(x, v));
     wr.option(u.protocolFeeBps, (x, v) => x.u16(v));
+    wr.option(u.rebate, (x, v) => writeRebateParams(x, v));
   });
 }
 
@@ -196,6 +198,12 @@ export function settleMarkoutIx(p: { cranker: PublicKey; trader: PublicKey; base
     'settle_markout',
     (wr) => wr.pubkey(p.trader),
   );
+}
+
+/** Permissionless: roll the rebate epoch (sets the RETAIL-tier rebate from the previous epoch's toxic premium; fails until the epoch has elapsed). */
+export function updateRetailFeeIx(p: { cranker: PublicKey; baseMint: PublicKey; quoteMint: PublicKey; programId?: PublicKey }) {
+  const programId = p.programId ?? PROGRAM_ID;
+  return ix(programId, [w(p.cranker, false, true), w(configPda(programId)[0]), w(poolAddresses(p.baseMint, p.quoteMint, programId).pool, true)], 'update_retail_fee');
 }
 
 /** Permissionless: move the protocol's accrued fee share from the pool vaults into the treasury's token accounts. */

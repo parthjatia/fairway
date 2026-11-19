@@ -39,8 +39,8 @@ flowchart LR
 4. If `current_slot − updated_slot > score_ttl_slots`, use STANDARD.
 5. Otherwise read the bootstrap `tier`. An invalid tier maps to STANDARD.
 6. If the 4-entry pending buffer is full, RETAIL is raised to STANDARD.
-7. `fee = config.fee_bps[tier]`. Pricing uses LP reserves: `vault balance − Pool.protocol_owed_*`. The fee is taken from the input, and `out = in_after_fee × reserve_out / (reserve_in + in_after_fee)`.
-8. Slippage check against `min_amount_out`. The protocol's share `floor(fee × protocol_fee_bps / 10_000)` is booked to `Pool.protocol_owed_*` / `protocol_earned_*` (LPs keep the rest). Then emit `SwapExecuted`.
+7. `fee = config.fee_bps[tier]`, minus the bot-tax rebate for RETAIL only (`min(pool.rebate_bps, budget left, fee − floor)`; see `update_retail_fee`). Pricing uses LP reserves: `vault balance − Pool.protocol_owed_*`. The fee is taken from the input, and `out = in_after_fee × reserve_out / (reserve_in + in_after_fee)`.
+8. Slippage check against `min_amount_out`. The protocol's share `floor(premium × protocol_fee_bps / 10_000)`, where `premium` is the TOXIC fee above the STANDARD fee on the same input, is booked to `Pool.protocol_owed_*` / `protocol_earned_*` (LPs keep the rest), and the epoch counters (toxic premium, RETAIL volume, rebate given) are updated. Then emit `SwapExecuted`.
 9. If the pool has an oracle: create the score PDA if missing (rent paid by the treasury PDA when it holds more than its rent-exempt minimum plus the rent, else by the trader; flagged `sponsored`) and queue `{pool, exec_price (pre-fee, 1e12 fixed point), slot, side, notional}`.
 
 ## Onchain markout settlement

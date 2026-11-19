@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Swap, WalletScore } from '@fairway/scoring';
-import { DEFAULT_SIM_CONFIG, feeFunction, makeScenario, mergeConfig, replay, runBacktest, runRegime, runSweep, warmup, type SimConfig } from '../src';
+import { DEFAULT_SIM_CONFIG, feeFunction, makeScenario, mergeConfig, replay, runBacktest, runLpFirst, runRegime, runSweep, warmup, type SimConfig } from '../src';
 
 const cfg: SimConfig = mergeConfig({ hours: 3, warmupHours: 72 });
 const sc = makeScenario(cfg, 1);
@@ -109,4 +109,60 @@ it('default config matches the spec', () => {
   expect(DEFAULT_SIM_CONFIG.hours).toBe(24);
   expect(DEFAULT_SIM_CONFIG.poolBase * DEFAULT_SIM_CONFIG.s0).toBe(1_500_000);
   expect(DEFAULT_SIM_CONFIG.fees).toEqual({ RETAIL: 5, STANDARD: 30, TOXIC: 80 });
+});
+
+describe('bot-tax rebate regime (M15)', () => {
+  const fees = { RETAIL: 30, STANDARD: 30, TOXIC: 80 };
+  const tiers = { retail: Array.from({ length: cfg.retail.nWallets }, () => 'RETAIL' as const), arb: Array.from({ length: cfg.arb.nWallets }, () => 'TOXIC' as const), sniper: Array.from({ length: cfg.sniper.nWallets }, () => 'TOXIC' as const) };
+  const tierOf = (t: 'retail' | 'arb' | 'sniper', w: number) => tiers[t][w]!;
+  const reb = (share: number, floorBps = 5, f = fees) => runRegime({ ...cfg, fees: f }, sc, { regime: 'rebate', fee: feeFunction('rebate', f, tiers), tierOf, rebate: { share, epochSec: 3_600, floorBps } }).metrics;
+
+  it('rebate handed out never exceeds the budget funded by the toxic premium', () => {
+    for (const share of [0.1, 0.5, 1]) {
+      const m = reb(share);
+      expect(m.rebateUsd).toBeGreaterThan(0);
+      expect(m.rebateUsd).toBeLessThanOrEqual(m.rebateBudgetUsd + 1e-9);
+      expect(m.rebateUsd).toBeLessThanOrEqual(share * m.botExtraFeesUsd + 1e-9);
+    }
+  });
+  it('no toxic premium → no rebate, identical to flat 30', () => {
+    const m = reb(1, 5, { RETAIL: 30, STANDARD: 30, TOXIC: 30 });
+    const f30 = run('flat30');
+    expect(m.rebateUsd).toBe(0);
+    expect(m.lpPnlVsHodlUsd).toBeCloseTo(f30.lpPnlVsHodlUsd, 6);
+    expect(m.retailCostBps).toBeCloseTo(f30.retailCostBps, 6);
+  });
+  it('retail fee floor holds: a 100% share cannot push the fee below the floor', () => {
+    const m = reb(1, 25);
+    expect(m.retailFeeBps).toBeGreaterThanOrEqual(25 - 1e-9);
+    expect(m.retailFeeBps).toBeLessThanOrEqual(30 + 1e-9);
+  });
+  it('the first epoch has no rebate (it is funded by the previous one)', () => {
+    const short = mergeConfig({ hours: 0.9 });
+    const m = runRegime({ ...short, fees }, makeScenario(short, 1), { regime: 'rebate', fee: feeFunction('rebate', fees, tiers), tierOf, rebate: { share: 1, epochSec: 3_600, floorBps: 5 } }).metrics;
+    expect(m.rebateUsd).toBe(0);
+  });
+  it('rebate lowers the retail fee below 30 and costs LPs exactly what it hands out', () => {
+    const m = reb(0.5);
+    const noReb = runRegime({ ...cfg, fees }, sc, { regime: 'rebate', fee: feeFunction('rebate', fees, tiers), tierOf }).metrics;
+    expect(m.retailFeeBps).toBeLessThan(30);
+    expect(m.retailCostBps).toBeLessThan(noReb.retailCostBps);
+    expect(noReb.lpFeesUsd - m.lpFeesUsd).toBeGreaterThan(0);
+  });
+});
+
+describe('LP-first analysis output', () => {
+  it('is deterministic and reports the honest verdict', () => {
+    const small = mergeConfig({ hours: 2, warmupHours: 24 });
+    const wu = warmup(small);
+    const a = runLpFirst(small, [1, 2], wu);
+    const b = runLpFirst(small, [1, 2], wu);
+    expect(a).toEqual(b);
+    expect(a.cells.some((c) => c.kind === 'max-discount')).toBe(true);
+    expect(a.cells.filter((c) => c.extended).every((c) => c.fees.TOXIC > 100)).toBe(true);
+    expect(a.recommended.beatsNoise).toBe(a.cells.find((c) => c.id === a.recommended.id)!.lpAfterProtocol[a.recommended.protocolOption]!.beatsNoise);
+    // protocol options: premium-only shares are strictly cheaper for LPs than 15% of all fees
+    const c = a.cells.find((x) => x.id === a.recommended.id)!;
+    expect(c.protocolUsdPerDay.premium15).toBeLessThan(c.protocolUsdPerDay.all15);
+  });
 });

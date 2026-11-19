@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { loadDataset } from '@fairway/fixtures/node';
 import { fixtureMids } from '@fairway/fixtures';
 import { makeConfig, scoreWallets } from '@fairway/scoring';
-import { DEFAULT_SIM_CONFIG, replay, runBacktest, runSensitivity, runSweep, warmup } from '../src';
+import { DEFAULT_SIM_CONFIG, replay, runBacktest, runLpFirst, runSensitivity, runSweep, warmup } from '../src';
 
 const args = process.argv.slice(2);
 const quick = args.includes('--quick');
@@ -29,6 +29,12 @@ const lap = (label: string) => {
 };
 console.log(`Fairway backtest — ${seeds.length} seeds × ${cfg.hours}h, ${cfg.annualVol * 100}% vol, pool ${cfg.poolBase} SOL`);
 const wu = warmup(cfg);
+if (args.includes('--lpfirst-only')) {
+  const only = runLpFirst(cfg, Array.from({ length: quick ? 4 : 16 }, (_, i) => i + 1), wu);
+  write('lpfirst.json', only);
+  console.log(`lpfirst.json written; recommended ${only.recommended.id} / ${only.recommended.protocolOption}`);
+  process.exit(0);
+}
 lap(`warm-up: ${wu.swaps} swaps scored; confusion ${JSON.stringify(wu.confusion)}`);
 const bt = runBacktest(cfg, seeds, wu);
 write('backtest.json', bt);
@@ -74,6 +80,9 @@ for (const e of [0.5, 1]) {
 }
 write('sweep-elastic.json', { synthetic: true, note: 'Elasticity is an ASSUMPTION: arrival rate ×(1 + e·(30 − fee)/30)/(1 + e). Per-day values are for the 24 h window.', byElasticity: elastic });
 lap('sweep-elastic.json');
+const lf = runLpFirst(cfg, Array.from({ length: quick ? 4 : 16 }, (_, i) => i + 1), wu);
+write('lpfirst.json', lf);
+lap(`lpfirst.json (recommended ${lf.recommended.id} / protocol ${lf.recommended.protocolOption}; beats noise: ${lf.recommended.beatsNoise})`);
 const ds = loadDataset();
 const scores = scoreWallets(ds.swaps, fixtureMids(ds.cex), makeConfig());
 const rec = sweep.recommended;

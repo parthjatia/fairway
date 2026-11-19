@@ -5,6 +5,15 @@ export class MathError extends Error {}
 
 const ceilDiv = (a: bigint, b: bigint) => (a + b - 1n) / b;
 
+/** Mirrors `fairway_math::rebate::swap_rebate_bps`: rebate (bps) one RETAIL-tier swap gets (rate, floor and what is left of the budget). */
+export function swapRebateBps(rateBps: number, budgetLeftQ: bigint, notionalQ: bigint, baseFeeBps: number, floorBps: number): number {
+  if (rateBps <= 0 || budgetLeftQ <= 0n || notionalQ <= 0n) return 0;
+  const byBudget = (budgetLeftQ * BPS_DENOM) / notionalQ;
+  const headroom = BigInt(Math.max(0, baseFeeBps - floorBps));
+  const r = BigInt(rateBps);
+  return Number([r, byBudget, headroom].reduce((a, b) => (b < a ? b : a)));
+}
+
 export function feeOnInput(amountIn: bigint, feeBps: number): bigint {
   if (feeBps > MAX_FEE_BPS || feeBps < 0) throw new MathError('InvalidFee');
   return ceilDiv(amountIn * BigInt(feeBps), BPS_DENOM);

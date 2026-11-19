@@ -108,6 +108,7 @@ export function feeFunction(regime: Regime, fees: FeeSchedule, tiers: TierBook |
     case 'flat':
       return () => fees.STANDARD;
     case 'fairway':
+    case 'rebate':
       return (type, w) => fees[(tiers?.[type][w] ?? 'STANDARD') as Tier];
     case 'rotation':
       // informed agents rotate to fresh wallets → always STANDARD; retail keeps its learned tier
@@ -139,6 +140,10 @@ export type RunMetrics = {
   lpPnlNetOfProtocolUsd: number;
   /** fees paid by bots (arb + sniper) above what the same volume would pay at the STANDARD fee, USD */
   botExtraFeesUsd: number;
+  /** bot-tax rebate handed to RETAIL-tier wallets (rebate regime), USD */
+  rebateUsd: number;
+  /** rebate budget made available over the run (share × previous-epoch toxic premium), USD */
+  rebateBudgetUsd: number;
   /** notional-weighted retail execution cost vs CEX mid (fee + impact + staleness), bps */
   retailCostBps: number;
   retailFeeBps: number;
@@ -161,6 +166,12 @@ export type RunOptions = {
   timeseries?: boolean;
   /** ts of step 0 for recorded swaps */
   startTs?: number;
+  /**
+   * Bot-tax rebate (mirrors the onchain `update_retail_fee`): every `epochSec` the rebate rate is set to
+   * share × (toxic premium of the epoch just ended) ÷ (RETAIL-tier retail volume of that epoch), clamped to keep the fee ≥ floorBps.
+   * The same amount is also a hard budget for the next epoch: a RETAIL-tier trade never gets more rebate than what is left.
+   */
+  rebate?: { share: number; epochSec: number; floorBps: number };
 };
 
 export type RunResult = { metrics: RunMetrics; swaps?: Swap[]; series?: TimeSeries };
@@ -191,6 +202,8 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
     protocolFeeUsd: 0,
     lpPnlNetOfProtocolUsd: 0,
     botExtraFeesUsd: 0,
+    rebateUsd: 0,
+    rebateBudgetUsd: 0,
     retailCostBps: 0,
     retailFeeBps: 0,
     retailCostUsd: 0,
@@ -211,6 +224,12 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
   let retailFeeWeighted = 0;
   const startTs = opt.startTs ?? 0;
   let swapN = 0;
+  const reb = opt.rebate;
+  const epochSteps = reb ? Math.max(1, Math.round(reb.epochSec / sc.stepSec)) : 0;
+  let epochPremium = 0;
+  let epochRetailVol = 0;
+  let rebateRateBps = 0;
+  let rebateBudget = 0;
 
   /** execute a trade; returns {out, gross} or null */
   const trade = (step: number, type: AgentType, wallet: number, buy: boolean, grossIn: number, feeBps: number) => {
@@ -246,6 +265,7 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
     m.volumeUsd[type] += notional;
     m.trades[type] += 1;
     if (type !== 'retail') m.botExtraFeesUsd += (notional * (feeBps - cfg.fees.STANDARD)) / 10_000;
+    if (reb && type !== 'retail' && tier === 'TOXIC' && feeBps > cfg.fees.STANDARD) epochPremium += (notional * (feeBps - cfg.fees.STANDARD)) / 10_000;
     if (swaps) {
       swaps.push({
         sig: `${sc.seed}-${opt.regime}-${swapN++}`,
@@ -273,6 +293,16 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
 
   for (let step = 1; step <= sc.steps; step++) {
     const cex = path[step]!;
+    if (reb && step % epochSteps === 0) {
+      // epoch roll: the rebate for the next epoch is funded by (a share of) the toxic premium just collected
+      const budget = reb.share * epochPremium;
+      const maxRebate = Math.max(0, cfg.fees.RETAIL - reb.floorBps);
+      rebateRateBps = epochRetailVol > 0 ? Math.min(maxRebate, Math.floor(((budget * 10_000) / epochRetailVol) * 100) / 100) : 0;
+      rebateBudget = rebateRateBps > 0 ? budget : 0;
+      m.rebateBudgetUsd += rebateBudget;
+      epochPremium = 0;
+      epochRetailVol = 0;
+    }
     // 1) arbitrage: one arb per step trades the pool to its no-arb boundary
     {
       const w = Math.min(nArb - 1, Math.floor(sc.arbPick[step]! * nArb));
@@ -307,7 +337,13 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
     // 3) retail: price-insensitive, random direction
     while (ri < R.step.length && R.step[ri]! === step) {
       const w = R.wallet[ri]!;
-      const feeBps = opt.fee('retail', w);
+      let feeBps = opt.fee('retail', w);
+      let rebateBps = 0;
+      const retailTier = reb && tierOf('retail', w) === 'RETAIL';
+      if (retailTier && rebateRateBps > 0 && rebateBudget > 0) {
+        rebateBps = Math.min(rebateRateBps, (rebateBudget * 10_000) / R.usd[ri]!, Math.max(0, feeBps - reb!.floorBps));
+        feeBps -= rebateBps;
+      }
       const e = cfg.retail.elasticity;
       const accept = e > 0 ? (1 + e * (cfg.fees.STANDARD - feeBps) / cfg.fees.STANDARD) / (1 + e) : 1;
       if (R.u[ri]! < accept) {
@@ -316,6 +352,12 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
         const poolPx = Q / B;
         const r = trade(step, 'retail', w, buy, buy ? usd : usd / poolPx, feeBps);
         if (r) {
+          if (reb && retailTier) {
+            epochRetailVol += r.notional;
+            const given = (r.notional * rebateBps) / 10_000;
+            rebateBudget = Math.max(0, rebateBudget - given);
+            m.rebateUsd += given;
+          }
           const eff = buy ? r.gross / r.out : r.out / r.gross;
           const costBps = buy ? (eff / cex - 1) * 10_000 : (1 - eff / cex) * 10_000;
           retailNotional += r.notional;

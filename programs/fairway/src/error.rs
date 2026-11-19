@@ -48,6 +48,10 @@ pub enum FairwayError {
     InvalidProtocolFee,
     #[msg("Withdrawal would take the treasury below its rent-exempt minimum")]
     TreasuryBelowFloor,
+    #[msg("Rebate params: epoch_slots > 0, share <= 10000 bps, floor <= 1000 bps")]
+    InvalidRebateParams,
+    #[msg("The rebate epoch has not elapsed yet")]
+    EpochNotElapsed,
 }
 
 impl From<fairway_math::MathError> for FairwayError {

@@ -6,9 +6,9 @@
  * already fetched. It mirrors the program's `resolve_blended` exactly (see README: "Any Solana DEX can read Fairway scores").
  */
 import { Connection, PublicKey, type Commitment } from '@solana/web3.js';
-import { decodeConfig, decodeTraderScore, PENDING_CAP, type ConfigAccount, type TraderScoreAccount } from './accounts';
+import { decodeConfig, decodeTraderScore, PENDING_CAP, type ConfigAccount, type PoolAccount, type TraderScoreAccount } from './accounts';
 import { PROGRAM_ID, TIER_NAMES, type TierName } from './constants';
-import { resolveBlendedTier, type TierSource } from './math';
+import { resolveBlendedTier, swapRebateBps, type TierSource } from './math';
 import { configPda, scorePda } from './pda';
 
 export type FeeTier = {
@@ -18,6 +18,8 @@ export type FeeTier = {
   tierName: TierName;
   /** the swap fee (bps) this wallet pays on Fairway with the current Config */
   feeBps: number;
+  /** bps of bot-tax rebate included in `feeBps` (RETAIL tier only; a swap may get less once the epoch budget runs low) */
+  rebateBps: number;
   /** why: 'onchain' = verified by the program from the wallet's own Fairway trades; 'score' = keeper bootstrap; else a STANDARD fallback */
   source: TierSource;
   /** true when the tier comes from the trustless onchain score (settle_markout), not from the keeper */
@@ -31,7 +33,7 @@ export type FeeTier = {
 };
 
 /** Pure: same result as the program for these two accounts at `currentSlot`. */
-export function feeTierFromAccounts(wallet: PublicKey, config: ConfigAccount, score: TraderScoreAccount | null, currentSlot: bigint): FeeTier {
+export function feeTierFromAccounts(wallet: PublicKey, config: ConfigAccount, score: TraderScoreAccount | null, currentSlot: bigint, pool?: PoolAccount | null, notionalQ?: bigint): FeeTier {
   const m = config.markout;
   const r = resolveBlendedTier(
     {
@@ -47,11 +49,16 @@ export function feeTierFromAccounts(wallet: PublicKey, config: ConfigAccount, sc
     config.defaultTier,
   );
   const tier = r.tier as 0 | 1 | 2;
+  // bot-tax rebate: RETAIL tier only. Without a notional the epoch rate is shown (an upper bound for this swap).
+  const baseFee = config.feeBps[tier];
+  const rebateBps =
+    tier === 0 && pool ? swapRebateBps(pool.rebate.rebateBps, pool.rebate.budgetQ, notionalQ ?? pool.rebate.budgetQ * 10_000n, baseFee, config.rebate.floorBps) : 0;
   return {
     wallet,
     tier,
     tierName: TIER_NAMES[tier],
-    feeBps: config.feeBps[tier],
+    feeBps: baseFee - rebateBps,
+    rebateBps,
     source: r.source,
     verified: r.source === 'onchain',
     onchain: score ? { scoreBps: score.onchainScoreBps, settledTrades: score.tradeCount, settledNotional: score.sumNotional } : null,

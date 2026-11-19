@@ -87,7 +87,7 @@ export type PoolView = {
   tradesByTier: Record<Tier, number>;
   daily: Array<{ day: string; RETAIL: number; STANDARD: number; TOXIC: number }>;
   /** M14 business model (fixture replay): what bots pay above a flat STANDARD fee, what retail saves, and the protocol's cut */
-  economics: { botExtraFeesUsd: number; retailSavedUsd: number; protocolFeeBps: number; protocolRevenueUsd: number; lpFeesUsd: number; sponsoredRentSol: number };
+  economics: { botExtraFeesUsd: number; retailSavedUsd: number; protocolFeeBps: number; protocolRevenueUsd: number; lpFeesUsd: number; sponsoredRentSol: number; rebateBps: number };
   recent: Array<{ sig: string; ts: number; trader: string; side: 'buy' | 'sell'; quoteAmount: number; execPrice: number; feeBps?: number; tier?: Tier; label?: string | null }>;
   source: 'ingest' | 'in-process';
 };

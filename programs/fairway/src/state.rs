@@ -18,6 +18,26 @@ pub struct Config {
     pub markout: MarkoutParams,
     /// share of every swap fee that goes to the protocol treasury, in bps of the fee (1500 = 15%)
     pub protocol_fee_bps: u16,
+    /// bot-tax rebate parameters (M15)
+    pub rebate: RebateParams,
+}
+
+/// Bot-tax rebate: RETAIL-tier wallets pay `fee_bps[RETAIL] − rebate`, funded by a share of the PREVIOUS epoch's toxic premium
+/// (toxic fee above the STANDARD fee). `update_retail_fee` (permissionless) rolls the epoch.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
+pub struct RebateParams {
+    /// an epoch lasts this many slots (9_000 ≈ 1 hour at 400 ms)
+    pub epoch_slots: u64,
+    /// share of the toxic premium recycled to retail, bps of the premium (1000 = 10%); 0 turns the rebate off
+    pub share_bps: u16,
+    /// the rebated retail fee never goes below this
+    pub floor_bps: u16,
+}
+
+impl Default for RebateParams {
+    fn default() -> Self {
+        Self { epoch_slots: 9_000, share_bps: 1_000, floor_bps: 5 }
+    }
 }
 
 
@@ -114,6 +134,22 @@ pub struct Pool {
     pub oracle_price_account: Pubkey,
     /// the feed id that account must carry
     pub oracle_feed_id: [u8; 32],
+    // ---- bot-tax rebate bookkeeping (M15). All amounts are quote-token equivalents (base valued at the pool's spot price).
+    /// slot the current epoch started (set at pool creation, then by `update_retail_fee`)
+    pub epoch_start_slot: u64,
+    /// toxic premium collected this epoch: fee charged above the STANDARD fee, TOXIC tier
+    pub epoch_premium_q: u64,
+    /// RETAIL-tier swap volume this epoch (the volume the rebate is spread over)
+    pub epoch_retail_vol_q: u64,
+    /// rebate applied to RETAIL-tier fees right now, bps (from the last epoch roll)
+    pub rebate_bps: u16,
+    /// what is left of the previous epoch's rebate budget: a swap never gets rebate beyond this
+    pub rebate_budget_q: u64,
+    /// cumulative swap volume per tier
+    pub volume_q: [u64; 3],
+    /// lifetime toxic premium and lifetime rebate handed out
+    pub premium_total_q: u64,
+    pub rebate_total_q: u64,
 }
 
 impl Pool {

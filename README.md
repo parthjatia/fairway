@@ -1,6 +1,8 @@
 # Fairway
 
-**A Solana DEX where bots pay more and humans pay less.**
+**A Solana DEX where bots pay more and humans never pay more than in a normal pool.**
+
+> **Headline (synthetic backtest, 16 paired seeds, $3M pool).** Fairway **cuts what bots extract from LPs (LVR) by 73%**. **Retail never pays more than a normal 30 bps pool** (−1.0 ± 0.7 bps), and part of the bot tax comes back to proven retail wallets as a **bot-tax rebate**. **LPs: +$15 ± 33/day vs a flat 30 bps pool before the protocol's share, −$56 ± 31/day after it** (the protocol keeps 15% of the toxic premium only). That is *not* a statistically proven LP gain: we looked for a setting that beats flat 30 beyond the noise band and there isn't one. Details: [Backtest results](#backtest-results-synthetic), [`docs/ECONOMICS.md`](docs/ECONOMICS.md).
 
 Fairway is a constant-product AMM whose swap fee depends on the trader's **toxicity tier**. The tier is read from an onchain `TraderScore` account. A keeper writes a **bootstrap** score from the wallet's public history on all venues (via **QuickNode Streams**). For trades on Fairway itself, the **program computes the score onchain** from the wallet's own swaps and a Pyth price, with no trusted oracle.
 
@@ -10,14 +12,14 @@ Fairway is a constant-product AMM whose swap fee depends on the trader's **toxic
 
 ## For judges
 
-**In three lines.** (1) A Solana AMM whose swap fee depends on the signer's measured toxicity tier (5 / 30 / 80 bps), so retail pays less and informed bots pay more. (2) Scores come from two sources: a keeper that backfills history through a QuickNode Stream, and the program itself, which marks every Fairway swap against Pyth and scores it onchain with no oracle operator. (3) A backtest on synthetic data shows who pays and who gains, including where it does not work (LPs vs a flat 30 bps pool; see [Backtest results](#backtest-results-synthetic)).
+**In three lines.** (1) A Solana AMM whose swap fee depends on the signer's measured toxicity tier: retail and standard pay 30 bps, proven-toxic bots pay 80, and 10% of that bot premium is rebated to proven-retail wallets (hard-capped by the premium collected). (2) Scores come from two sources: a keeper that backfills history through a QuickNode Stream, and the program itself, which marks every Fairway swap against Pyth and scores it onchain with no oracle operator. (3) A backtest on synthetic data shows who pays and who gains, including where it does not work: LPs are within noise of a flat 30 bps pool before the protocol share and slightly behind after it (see [Backtest results](#backtest-results-synthetic)).
 
 | Criterion | What to look at | Proof |
 |---|---|---|
-| Technical execution | Anchor program with PDAs, SPL vaults, checked integer math, a permissionless oracle-based settlement, a protocol treasury, rent sponsorship; 30 LiteSVM tests including the wrong-signer attack | [`programs/fairway/src/`](programs/fairway/src) ([`swap.rs`](programs/fairway/src/instructions/swap.rs), [`settle.rs`](programs/fairway/src/instructions/settle.rs), [`treasury.rs`](programs/fairway/src/instructions/treasury.rs)), [`tests/fairway.rs`](programs/fairway/tests/fairway.rs), [`crates/fairway-math/`](crates/fairway-math), shared Rust/TS test vectors [`vectors/onchain.json`](crates/fairway-math/vectors/onchain.json) |
+| Technical execution | Anchor program with PDAs, SPL vaults, checked integer math, a permissionless oracle-based settlement, a permissionless epoch-rolled bot-tax rebate with a hard budget cap, a protocol treasury, rent sponsorship; 37 LiteSVM tests including the wrong-signer attack and the rebate cap/floor/epoch roll | [`programs/fairway/src/`](programs/fairway/src) ([`swap.rs`](programs/fairway/src/instructions/swap.rs), [`settle.rs`](programs/fairway/src/instructions/settle.rs), [`treasury.rs`](programs/fairway/src/instructions/treasury.rs)), [`tests/fairway.rs`](programs/fairway/tests/fairway.rs), [`crates/fairway-math/`](crates/fairway-math), shared Rust/TS test vectors [`vectors/onchain.json`](crates/fairway-math/vectors/onchain.json) |
 | Product & UX | Swap page with a "same trade, two wallets" panel, wallet score explorer with "Onchain verified" and "Verified fair flow" badges, LP dashboard with protocol revenue and "extra fees from bots", interactive backtest, two pools (SOL/USDC, BONK-test/USDC), dark mode, mock mode needs no wallet | [`apps/web/app/`](apps/web/app), [`swap-panel.tsx`](apps/web/components/swap-panel.tsx), [`two-wallets.tsx`](apps/web/components/two-wallets.tsx), [`wallet-detail.tsx`](apps/web/components/wallet-detail.tsx) |
 | Innovation | Fee keyed on a wallet's own measured markout (information content), scored trustlessly onchain; STANDARD floor makes wallet rotation useless; any DEX can read the score | [Scoring and trust model](#scoring-and-trust-model), [`docs/ECONOMICS.md`](docs/ECONOMICS.md), [`getFeeTier`](packages/sdk/src/feetier.ts) |
-| Impact & potential | Retail execution cost down 18 bps in the backtest, LVR down 70–90%, a revenue model (15% protocol share, score licensing), honest limits | [Business model](#business-model), [Backtest](#backtest-results-synthetic), [`docs/RISKS.md`](docs/RISKS.md) |
+| Impact & potential | LVR down 73% in the backtest, retail never above a normal pool (−1.0 bps) plus a bot-tax rebate, a revenue model (15% of the toxic premium, score licensing), honest limits: LPs are not proven ahead of flat 30 | [Business model](#business-model), [Backtest](#backtest-results-synthetic), [`docs/RISKS.md`](docs/RISKS.md) |
 | Demo | `pnpm demo` runs everything offline in one command; a 2–3 minute shot list | [Quick start](#quick-start), [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`docs/PITCH.md`](docs/PITCH.md) (5-minute script, 15 Q&As) |
 
 **Per-prize requirements**
@@ -57,7 +59,7 @@ Fairway is a constant-product AMM whose swap fee depends on the trader's **toxic
    | Tier | Rule (defaults, one config object) | Fee |
    |---|---|---|
    | `TOXIC` | score ≥ 10 bps and ≥ 5 trades | 80 bps |
-   | `RETAIL` | score ≤ 3 bps, ≥ 5 trades and ≥ 3 days of history | 5 bps |
+   | `RETAIL` | score ≤ 3 bps, ≥ 5 trades and ≥ 3 days of history | 30 bps minus the bot-tax rebate (floor 5 bps) |
    | `STANDARD` | everyone else, **including every new wallet** | 30 bps |
 
 4. **Onchain lookup.** The `swap` instruction derives the `TraderScore` PDA from the **signer** (`["score", trader]`). If it is missing, stale (older than `score_ttl_slots`) or malformed, the swap pays STANDARD. A bot cannot pass someone else's RETAIL account, because the seeds check fails.
@@ -107,22 +109,24 @@ Details that keep it hard to game:
 
 ## Business model
 
-Retail pays less, LPs earn from flow that used to be free, the protocol takes a small cut, and the scores themselves can be licensed.
+Bots pay a premium; part of it goes back to retail, a small part to the protocol, the rest stays with LPs, and the scores themselves can be licensed.
 
 | Who | What they get | Where it shows |
 |---|---|---|
-| **Retail** | A lower fee (RETAIL tier, 5 bps vs a 30 bps flat fee) once their own trades show no informed edge | `/swap`, "Same trade, two wallets" |
+| **Retail** | Never more than a normal 30 bps pool, and a **bot-tax rebate** (RETAIL tier pays 30 bps minus a rebate funded by 10% of the previous epoch's toxic premium, floor 5 bps) once their own trades show no informed edge | `/swap`, "Same trade, two wallets" |
 | **Good bots** | The same fee as retail if their flow is uninformed (market makers, hedgers, rebalancers). "Verified fair flow" is earned from measured behaviour, not from being human | `/wallet/[address]` badge |
-| **Extractive flow** | Pays its fair share: TOXIC tier (80 bps) for arbitrage and sniping | `/pool` headline "Extra fees earned from bots" |
-| **LPs** | 85% of every swap fee, plus less LVR (arbitrage profit falls 73–90% in the sim). **Not** unconditionally more than a flat 30 bps pool: see the [verdict](#backtest-results-synthetic) | `/pool`, `/backtest` |
-| **Protocol** | `Config.protocol_fee_bps` = **15%** of every swap fee (max 50%), accrued per pool and claimed into the treasury PDA by anyone | `/pool` "Protocol revenue" |
+| **Extractive flow** | Pays its fair share: TOXIC tier (80 bps) for arbitrage and sniping. Wallet rotation gets STANDARD (30), never the rebate | `/pool` headline "Extra fees earned from bots" |
+| **LPs** | Every fee except the protocol's premium share, plus 73% less LVR in the sim. **Not** proven better than a flat 30 bps pool: +$15 ± 33/day before the protocol share, −$56 ± 31/day after it. See the [verdict](#backtest-results-synthetic) | `/pool`, `/backtest` |
+| **Protocol** | `Config.protocol_fee_bps` = **15% of the toxic premium only** (the toxic fee above the STANDARD fee; max 50%), about $72/day on the simulated $3M pool. Accrued per pool and claimed into the treasury PDA by anyone. It takes nothing from retail or standard fees | `/pool` "Protocol revenue" |
 | **Other DEXes** | Read a wallet's score with one call and price flow with it. Licensing the scores (an access API and SLA, or a revenue share when another DEX routes by Fairway tiers) is the next revenue line, not built yet | [Any Solana DEX can read Fairway scores](#any-solana-dex-can-read-fairway-scores) |
 
-**Protocol fee mechanics.** The protocol's share of each swap fee stays in the vault but is booked in `Pool.protocol_owed_*` and excluded from the reserves that price the curve and the LP shares. `claim_protocol_fees` (permissionless) moves it into token accounts owned by the treasury PDA `["treasury"]`. Only the admin can move treasury funds out (`treasury_transfer_tokens`, `treasury_withdraw_sol`).
+**Rebate mechanics.** `update_retail_fee` (permissionless, once per `rebate.epoch_slots`, default 9,000 slots ≈ 1 h) reads the pool's epoch counters (toxic premium, RETAIL-tier volume) and sets `rebate = min(share × premium ÷ retail_volume, retail_fee − floor)` and a budget of `share × premium` for the next epoch. `swap` never gives a RETAIL wallet more than the epoch rate, more than the budget left, or a fee below the floor, so the rebate can never exceed the premium collected. Zero toxic flow in an epoch means zero rebate.
+
+**Protocol fee mechanics.** The protocol's share of each toxic premium stays in the vault but is booked in `Pool.protocol_owed_*` and excluded from the reserves that price the curve and the LP shares. `claim_protocol_fees` (permissionless) moves it into token accounts owned by the treasury PDA `["treasury"]`. Only the admin can move treasury funds out (`treasury_transfer_tokens`, `treasury_withdraw_sol`).
 
 **Sponsored score accounts.** A trader's first swap on a scored pool creates their `TraderScore` PDA (about 0.0023 SOL of rent). The treasury pays that rent when it holds more SOL than its own rent-exempt minimum plus the rent; otherwise the trader pays (fallback). The account is flagged `sponsored`, and `close_score` refunds the treasury, not the trader. The treasury is funded by anyone sending SOL to its address (the seed script sends 0.05 SOL). Treasury SOL is a cost of onboarding, so a deployment should fund it from the protocol's fee revenue.
 
-**The cost side is real.** The protocol's 15% comes out of LP fees, so LPs net less than the pre-protocol figures; the backtest tables show both. The sweep's best setting still leaves LPs about $155/day below a flat 30 bps pool after the protocol share (±$214), and that setting needs a 200 bps toxic fee. See [`docs/ECONOMICS.md`](docs/ECONOMICS.md).
+**The cost side is real.** The protocol's 15% of the premium and the 10% rebate both come out of the bot premium that would otherwise go to LPs, so LPs net less than the pre-protocol figures; the backtest tables show both. The default leaves LPs $56 ± 31/day below a flat 30 bps pool after the protocol share. Charging the protocol 15% of *all* fees instead would cost LPs about $215/day, which is why the share is premium-only. See [`docs/ECONOMICS.md`](docs/ECONOMICS.md).
 
 ## Any Solana DEX can read Fairway scores
 
@@ -152,6 +156,28 @@ const t = await getFeeTier(new Connection(rpcUrl), new PublicKey(wallet));
 - **Trustless for Fairway's own flow.** The program computes markouts onchain against Pyth, so active wallets are scored with no oracle operator (the wallet page shows "Onchain verified" vs "Bootstrap score").
 
 ## Backtest results (synthetic)
+
+### LP-first default (retail = standard = 30, toxic 80, 10% rebate, protocol 15% of the premium)
+
+Agent-based simulation: 24 h, 60% annualized volatility with jumps, 400 ms steps, 10,000 SOL / $1.5M pool ($3M TVL), **16 paired seeds** (every setting is compared with a flat 30 bps pool in the same random world; "±" is one standard error, the noise band is 2). No retail elasticity. Per day:
+
+| Metric vs flat 30 bps pool | Default | Notes |
+|---|---:|---|
+| LVR (arbitrage profit) | **−73%** ($132 → $35/day) | the part that is clearly good |
+| Retail cost | **−1.0 ± 0.7 bps** | never higher; without the rebate it is +0.4 ± 0.6 |
+| LP PnL, before the protocol share | +$15 ± 33 | within noise |
+| LP PnL, after the protocol keeps 15% of the toxic premium | **−$56 ± 31** | a small, measurable cost (≈0.7% APR on $3M) |
+| p95 staleness | +48 bps (32 → 80) | the price of a higher toxic fee |
+| Bots' extra fees / to retail rebate / to protocol | $478 / $39 / $72 per day | the rest stays with LPs |
+| Worst case: every bot rotates wallets | LP +$1, retail ±0.0 bps | no premium exists, so it behaves as a plain 30 bps pool |
+
+**Honest verdict.** We tested toxic fee ∈ {40, 50, 60, 80, 100} × rebate share ∈ {0, 10%, 25%, 50%} × five protocol-share options, looking for a setting where LP PnL after the protocol share beats flat 30 beyond the noise band. **There is none.** Before any protocol share the best cells are +$54 ± 35 (toxic 80, no rebate) and +$87 ± 48 (toxic 100). Higher toxic fees cut LVR further (up to 90% at 200 bps) but the arbitrage fees LPs used to collect shrink with it, so LP PnL stays near flat 30 while the pool gets staler. The rebate is a transfer from LPs to retail (about $40/day per 10% of the premium). The defaults trade a small LP cost for the guarantee that retail never pays more than a normal pool. Full grid, protocol options, extension rows and elasticity: [`docs/ECONOMICS.md` §4](docs/ECONOMICS.md#4-lp-first-results-the-default). Files: `packages/sim/out/lpfirst.json`.
+
+*Extra, clearly an assumption:* if retail volume responds to fees (elasticity 0.5–1), the default's LP result stays within noise (+$18 ± 60 to +$48 ± 51 before the protocol share). It is not part of the headline.
+
+### Previous design: max retail discount (5 / 30 / 80), kept as an option
+
+The tables below are the earlier M3–M14 results (8 seeds, unpaired means). Their "after protocol share" columns use the old rule, 15% of **all** swap fees.
 
 Agent-based simulation: 24 h, 60% annualized volatility, 400 ms steps, 10,000 SOL / $1.5M pool ($3M TVL), 8 seeds averaged. Retail follows Poisson arrivals with lognormal sizes (median $150). There are 3 arbitrageur wallets and 3 momentum-sniper wallets. Tiers are learned in a 72 h warm-up and then applied.
 

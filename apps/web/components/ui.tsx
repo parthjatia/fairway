@@ -73,7 +73,9 @@ export function ScoreSourceBadge({ source }: { source: 'onchain' | 'bootstrap' |
   );
 }
 
-export const TIER_FEE_DEFAULT: Record<Tier, number> = { RETAIL: 5, STANDARD: 30, TOXIC: 80 };
+import { TIER_FEE } from '@/lib/fees';
+/** fee each tier pays in mock mode: RETAIL = 30 bps minus the (illustrative) bot-tax rebate */
+export const TIER_FEE_DEFAULT: Record<Tier, number> = TIER_FEE;
 
 export function SimBadge({ className = '' }: { className?: string }) {
   return (

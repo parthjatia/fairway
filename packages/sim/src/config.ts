@@ -67,7 +67,7 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
   sampleEverySec: 300,
 };
 
-export type Regime = 'flat30' | 'fairway' | 'rotation' | 'flat5' | 'flat80' | 'flat';
+export type Regime = 'flat30' | 'fairway' | 'rotation' | 'flat5' | 'flat80' | 'flat' | 'rebate';
 
 export const REGIME_LABELS: Record<Regime, string> = {
   flat30: 'Flat 30 bps (baseline)',
@@ -76,6 +76,7 @@ export const REGIME_LABELS: Record<Regime, string> = {
   flat5: 'Flat 5 bps',
   flat80: 'Flat 80 bps',
   flat: 'Flat fee (custom)',
+  rebate: 'Fairway LP-first (toxic premium + bot-tax rebate)',
 };
 
 export const mergeConfig = (o: DeepPartial<SimConfig> = {}): SimConfig => ({

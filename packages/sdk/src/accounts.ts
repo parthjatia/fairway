@@ -10,9 +10,16 @@ export type ConfigAccount = {
   scoreTtlSlots: bigint;
   bump: number;
   markout: MarkoutParams;
-  /** share of every swap fee kept by the protocol, bps of the fee (1500 = 15%) */
+  /** share of the TOXIC PREMIUM (toxic fee above the STANDARD fee) kept by the protocol, bps (1500 = 15%); LPs keep every other fee */
   protocolFeeBps: number;
+  rebate: RebateParams;
 };
+
+/** Bot-tax rebate parameters (programs/fairway/src/state.rs `RebateParams`). */
+export type RebateParams = { epochSlots: bigint; shareBps: number; floorBps: number };
+export const defaultRebateParams = (o: Partial<RebateParams> = {}): RebateParams => ({ epochSlots: 9_000n, shareBps: 1_000, floorBps: 5, ...o });
+export const readRebateParams = (r: Reader): RebateParams => ({ epochSlots: r.u64(), shareBps: r.u16(), floorBps: r.u16() });
+export const writeRebateParams = (w: Writer, p: RebateParams): Writer => w.u64(p.epochSlots).u16(p.shareBps).u16(p.floorBps);
 
 /** Onchain markout scoring parameters (programs/fairway/src/state.rs `MarkoutParams`). */
 export type MarkoutParams = {
@@ -98,6 +105,21 @@ export type PoolAccount = {
   sponsoredLamports: bigint;
   /** this pool's Pyth price account (default pubkey = no oracle: swaps are not scored onchain) and the feed id it must carry */
   oracleCfg: { priceAccount: PublicKey; feedId: Uint8Array };
+  /** bot-tax rebate bookkeeping, quote-token equivalents */
+  rebate: {
+    epochStartSlot: bigint;
+    /** toxic premium collected this epoch */
+    epochPremiumQ: bigint;
+    /** RETAIL-tier volume this epoch */
+    epochRetailVolQ: bigint;
+    /** bps currently taken off the RETAIL fee */
+    rebateBps: number;
+    /** what is left of the last epoch's rebate budget */
+    budgetQ: bigint;
+    volumeQ: [bigint, bigint, bigint];
+    premiumTotalQ: bigint;
+    rebateTotalQ: bigint;
+  };
 };
 
 export type PendingTrade = { pool: PublicKey; /** 1e12 fixed point */ execPrice: bigint; slot: bigint; side: 'buy' | 'sell'; notional: bigint };
@@ -146,6 +168,7 @@ export function decodeConfig(data: Uint8Array): ConfigAccount {
     bump: r.u8(),
     markout: readMarkoutParams(r),
     protocolFeeBps: r.u16(),
+    rebate: readRebateParams(r),
   };
 }
 
@@ -173,6 +196,16 @@ export function decodePool(data: Uint8Array): PoolAccount {
     sponsoredAccounts: r.u32(),
     sponsoredLamports: r.u64(),
     oracleCfg: { priceAccount: r.pubkey(), feedId: r.fixed(32) },
+    rebate: {
+      epochStartSlot: r.u64(),
+      epochPremiumQ: r.u64(),
+      epochRetailVolQ: r.u64(),
+      rebateBps: r.u16(),
+      budgetQ: r.u64(),
+      volumeQ: t3(),
+      premiumTotalQ: r.u64(),
+      rebateTotalQ: r.u64(),
+    },
   };
 }
 
