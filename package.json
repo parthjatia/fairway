@@ -1,0 +1,35 @@
+{
+  "name": "fairway",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fairway: a Solana AMM where bots pay more and humans pay less (toxicity-tiered fees from markout scores).",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "bash scripts/test-all.sh",
+    "test:ts": "pnpm -r --if-present --workspace-concurrency=1 test",
+    "test:rust": "bash scripts/test-rust.sh",
+    "build": "pnpm -r --if-present build",
+    "lint": "eslint . && pnpm -r --if-present typecheck",
+    "format": "prettier --write .",
+    "fixtures": "pnpm --filter @fairway/fixtures generate",
+    "sim": "pnpm --filter @fairway/sim backtest",
+    "charts": "pnpm --filter @fairway/scripts charts",
+    "demo": "bash scripts/demo.sh",
+    "demo:local": "bash scripts/demo-local.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.0"
+  }
+}

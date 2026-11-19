@@ -1,0 +1,7 @@
+node_modules
+.next
+target
+packages/fixtures/data
+packages/sim/out
+pnpm-lock.yaml
+CLAUDE.md
