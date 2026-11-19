@@ -5,6 +5,9 @@ STATUS: DONE
 ## Current state / next step
 All milestones M0–M12 complete. Fresh-clone install/build/test verified (TS 8 packages + Rust 12 math + 9 LiteSVM tests); every page returns 200 in mock mode. Remaining human steps: docs/SETUP_REMAINING.md.
 
+## Audit fixes (2026-11-19, see AUDIT.md)
+- [x] #1 README: added "Built with" (sponsor tools) and "What's next" sections
+
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
 - [x] **M1 Scoring package:** types, markout, shrinkage, tiers, MidPriceProviders, tests green

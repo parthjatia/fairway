@@ -181,3 +181,24 @@ docs/                 ARCHITECTURE, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_
 ```
 
 Storage is SQLite (`better-sqlite3`). The SQL uses `ON CONFLICT` upserts and standard types, so it ports to Postgres.
+
+## Built with
+
+| Layer | Tools |
+|---|---|
+| **Sponsor: QuickNode** | **Streams** (Solana, Block dataset, server-side JS filter `streams/filter.js`, webhook destination with HMAC verification). It is the only onchain data source, used for backfill, live scoring and replay. |
+| **Sponsor: Solana** | Anchor 1.2 program (PDAs, SPL Token vaults and LP mint, Anchor events, `remaining_accounts` batching), LiteSVM tests, `@solana/web3.js` 1.99, Solana wallet adapter (Wallet Standard) |
+| Onchain math | Pure Rust crate `fairway-math` (u128 checked math, property-style tests) |
+| Data and services | TypeScript (strict), Fastify 5, better-sqlite3, esbuild (inlines the parser into the Stream filter), vitest |
+| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, Recharts |
+| Research | Seeded agent-based simulator (GBM + jumps, retail / arb / sniper agents), parameter sweep, historical replay |
+
+## What's next
+
+1. **Go live on devnet:** deploy the program, run the mainnet backfill Stream on Raydium SOL-USDC, and let the keeper write real tiers (steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md)).
+2. **More venues:** add Orca Whirlpool and Meteora DLMM vaults to the Stream config. The filter matches vaults, so no code change is needed.
+3. **Better mids:** replace the pool-implied mid with Pyth (`PythMidPrice` is already behind the same interface) for cleaner markouts on real data.
+4. **Trust-minimized oracle:** multiple score authorities with a quorum, a bonded oracle, and eventually ZK proofs of the score computation over a committed swap history ([`docs/RISKS.md`](docs/RISKS.md)).
+5. **Sleeper defenses:** per-wallet notional caps on the RETAIL fee, and faster downgrades.
+6. **Close the LP gap vs. flat 30 bps:** explore a dynamic STANDARD fee and volatility-scaled toxic fees in the simulator, with fee-elastic retail calibrated on real data.
+7. **Audit and fuzzing** before any mainnet deployment.
