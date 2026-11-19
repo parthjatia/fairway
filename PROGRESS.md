@@ -9,6 +9,7 @@ All milestones M0–M12 complete. Fresh-clone install/build/test verified (TS 8 
 - [x] #1 README: added "Built with" (sponsor tools) and "What's next" sections
 - [x] #2 Raydium SOL-USDC vaults verified on mainnet; VERIFY markers replaced (README, STREAM_CONFIG, pools.config.json, SETUP_REMAINING, DECISIONS)
 - [x] #3 Venue overclaims fixed (landing page, README): only Raydium is configured; Orca/Meteora need vaults added
+- [x] #4 DEMO_SCRIPT: added a QuickNode Streams shot (live + offline fallback); fixed the nonexistent "rotation toggle" step
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
