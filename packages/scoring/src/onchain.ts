@@ -12,7 +12,8 @@ import type { ScoringConfig } from './config';
 import { DEFAULT_SCORING_CONFIG } from './config';
 import type { Tier } from './types';
 
-export const PRICE_SCALE = 1_000_000n;
+/** 1e12 fixed point (see crates/fairway-math/src/markout.rs): enough resolution for $0.00002 memecoins. */
+export const PRICE_SCALE = 1_000_000_000_000n;
 export const MARKOUT_CLAMP_BPS = 10_000n;
 export const SIDE_BUY = 0;
 export const SIDE_SELL = 1;
@@ -27,14 +28,14 @@ export function onchainMarkoutBps(side: 0 | 1 | 'buy' | 'sell', execPrice: bigin
   return clamp((s * (mid - execPrice) * 10_000n) / execPrice, -MARKOUT_CLAMP_BPS, MARKOUT_CLAMP_BPS);
 }
 
-export function execPriceE6(quoteRaw: bigint, quoteDecimals: number, baseRaw: bigint, baseDecimals: number): bigint {
+export function execPriceScaled(quoteRaw: bigint, quoteDecimals: number, baseRaw: bigint, baseDecimals: number): bigint {
   if (quoteRaw <= 0n || baseRaw <= 0n) throw new RangeError('amounts must be > 0');
   return (quoteRaw * 10n ** BigInt(baseDecimals) * PRICE_SCALE) / (baseRaw * 10n ** BigInt(quoteDecimals));
 }
 
-export function pythToPriceE6(price: bigint, expo: number): bigint {
+export function pythToPriceScaled(price: bigint, expo: number): bigint {
   if (price <= 0n) throw new RangeError('price must be > 0');
-  const shift = expo + 6;
+  const shift = expo + 12;
   const v = shift >= 0 ? price * 10n ** BigInt(shift) : price / 10n ** BigInt(-shift);
   if (v === 0n) throw new RangeError('price rounds to zero');
   return v;
@@ -121,8 +122,8 @@ export function onchainScoreFromSwaps(
   for (const sw of swaps) {
     const mid = midAt(sw.ts + h, sw.pool);
     if (mid === undefined || !(sw.execPrice > 0) || !(mid > 0)) continue;
-    const exec = BigInt(Math.round(sw.execPrice * 1e6));
-    const m = onchainMarkoutBps(sw.side, exec, BigInt(Math.round(mid * 1e6)));
+    const exec = BigInt(Math.round(sw.execPrice * 1e12));
+    const m = onchainMarkoutBps(sw.side, exec, BigInt(Math.round(mid * 1e12)));
     s = accumulateOnchain(s, BigInt(Math.round(Math.abs(sw.quoteAmount) * 10 ** qd)), m);
     first = Math.min(first, sw.ts);
     last = Math.max(last, sw.ts);

@@ -72,6 +72,14 @@ pub fn swap_quote(amount_in: u64, reserve_in: u64, reserve_out: u64, fee_bps: u1
     Ok(SwapQuote { amount_out, fee, in_after_fee })
 }
 
+/// Protocol's share of a swap fee: `floor(fee × protocol_fee_bps / 10_000)` (rounded down, so LPs keep the dust).
+pub fn protocol_share(fee: u64, protocol_fee_bps: u16) -> MathResult<u64> {
+    if protocol_fee_bps as u64 > BPS_DENOM {
+        return Err(MathError::InvalidFee);
+    }
+    u64::try_from((fee as u128) * (protocol_fee_bps as u128) / (BPS_DENOM as u128)).map_err(|_| MathError::Overflow)
+}
+
 /// Integer square root (floor) for u128.
 pub fn isqrt(n: u128) -> u128 {
     if n < 2 {

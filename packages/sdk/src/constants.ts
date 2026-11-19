@@ -7,6 +7,7 @@ const envId = typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_PROGRAM_
 export const PROGRAM_ID = new PublicKey(envId || DEFAULT_PROGRAM_ID);
 
 export const SEEDS = {
+  treasury: 'treasury',
   config: 'config',
   pool: 'pool',
   vault: 'vault',
@@ -23,6 +24,9 @@ export const BPS_DENOM = 10_000n;
 export const MIN_LIQUIDITY = 1_000n;
 export const MAX_FEE_BPS = 1_000;
 export const MAX_BATCH = 10;
+/** protocol's default share of swap fees (bps of the fee): 15% */
+export const DEFAULT_PROTOCOL_FEE_BPS = 1_500;
+export const MAX_PROTOCOL_FEE_BPS = 5_000;
 export const LP_DECIMALS = 6;
 
 /** Pyth Solana Receiver program (owner of PriceUpdateV2 accounts; same id on mainnet + devnet). */

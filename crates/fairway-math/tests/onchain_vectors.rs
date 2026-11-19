@@ -30,11 +30,11 @@ fn markout_vectors() {
 fn exec_price_and_pyth_vectors() {
     let v = load();
     for c in v["exec_price"].as_array().unwrap() {
-        let got = exec_price_e6(u(&c["quote_raw"]), u(&c["quote_decimals"]) as u8, u(&c["base_raw"]), u(&c["base_decimals"]) as u8).unwrap();
+        let got = exec_price_scaled(u(&c["quote_raw"]), u(&c["quote_decimals"]) as u8, u(&c["base_raw"]), u(&c["base_decimals"]) as u8).unwrap();
         assert_eq!(got, u(&c["expected"]), "{c}");
     }
     for c in v["pyth"].as_array().unwrap() {
-        assert_eq!(pyth_to_price_e6(c["price"].as_i64().unwrap(), c["expo"].as_i64().unwrap() as i32).unwrap(), u(&c["expected"]), "{c}");
+        assert_eq!(pyth_to_price_scaled(c["price"].as_i64().unwrap(), c["expo"].as_i64().unwrap() as i32).unwrap(), u(&c["expected"]), "{c}");
     }
 }
 
@@ -65,8 +65,9 @@ fn sign_conventions_and_guards() {
     assert!(markout_bps(SIDE_SELL, 100_000_000, 101_000_000).unwrap() < 0);
     assert_eq!(markout_bps(SIDE_BUY, 1_000_000, 900_000_000).unwrap(), MARKOUT_CLAMP_BPS);
     assert!(markout_bps(SIDE_BUY, 0, 1).is_err());
-    assert!(pyth_to_price_e6(-5, -8).is_err());
-    assert!(pyth_to_price_e6(1, -8).is_err()); // rounds to zero
+    assert!(pyth_to_price_scaled(-5, -8).is_err());
+    assert!(pyth_to_price_scaled(1, -20).is_err()); // rounds to zero
+    assert_eq!(pyth_to_price_scaled(2, -5).unwrap(), 20_000_000); // a $0.00002 token keeps 7 digits
     assert!(confidence_ok(15_000_000_000, 10_000_000, 10)); // 0.0667% ≤ 0.10%
     assert!(!confidence_ok(15_000_000_000, 30_000_000, 10)); // 0.2% > 0.10%
 }

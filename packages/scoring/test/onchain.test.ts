@@ -5,14 +5,14 @@ import {
   accumulateOnchain,
   assignTier,
   EMPTY_SUMS,
-  execPriceE6,
+  execPriceScaled,
   makeConfig,
   markoutBps,
   onchainMarkoutBps,
   onchainParamsFrom,
   onchainScoreBps,
   onchainTier,
-  pythToPriceE6,
+  pythToPriceScaled,
   shrunkScore,
   TIER_FROM_INDEX,
   type OnchainTierParams,
@@ -34,9 +34,10 @@ describe('shared onchain vectors (same file as crates/fairway-math/tests/onchain
     for (const c of V.markout) expect(onchainMarkoutBps(c.side, BigInt(c.exec), BigInt(c.mid)), JSON.stringify(c)).toBe(BigInt(c.expected));
   });
   it('exec price + pyth conversion', () => {
-    for (const c of V.exec_price) expect(execPriceE6(BigInt(c.quote_raw), c.quote_decimals, BigInt(c.base_raw), c.base_decimals)).toBe(BigInt(c.expected));
-    for (const c of V.pyth) expect(pythToPriceE6(BigInt(c.price), c.expo)).toBe(BigInt(c.expected));
-    expect(() => pythToPriceE6(1n, -8)).toThrow();
+    for (const c of V.exec_price) expect(execPriceScaled(BigInt(c.quote_raw), c.quote_decimals, BigInt(c.base_raw), c.base_decimals)).toBe(BigInt(c.expected));
+    for (const c of V.pyth) expect(pythToPriceScaled(BigInt(c.price), c.expo)).toBe(BigInt(c.expected));
+    expect(() => pythToPriceScaled(1n, -20)).toThrow();
+    expect(pythToPriceScaled(2n, -5)).toBe(20_000_000n); // a $0.00002 token keeps 7 digits
   });
   it('scenarios: sums, shrunk score and tier', () => {
     for (const sc of V.scenarios) {
@@ -63,7 +64,7 @@ describe('onchain integer math agrees with the float scorer', () => {
       let nm = 0;
       let n = 0;
       for (const t of trades) {
-        const m = markoutBps(t.side === 0 ? 'buy' : 'sell', t.exec / 1e6, t.mid / 1e6);
+        const m = markoutBps(t.side === 0 ? 'buy' : 'sell', t.exec / 1e12, t.mid / 1e12);
         nm += (t.notional / 1e6) * m;
         n += t.notional / 1e6;
       }

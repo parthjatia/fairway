@@ -133,6 +133,12 @@ export type RunMetrics = {
   /** LP value (reserves + accrued fees at final CEX) − HODL value (initial reserves at final CEX) */
   lpPnlVsHodlUsd: number;
   lpPnlVsHodlBps: number;
+  /** protocol treasury revenue: `protocolFeeShare` × swap fees, USD */
+  protocolFeeUsd: number;
+  /** LP PnL vs HODL after the protocol takes its share of fees (what LPs actually keep) */
+  lpPnlNetOfProtocolUsd: number;
+  /** fees paid by bots (arb + sniper) above what the same volume would pay at the STANDARD fee, USD */
+  botExtraFeesUsd: number;
   /** notional-weighted retail execution cost vs CEX mid (fee + impact + staleness), bps */
   retailCostBps: number;
   retailFeeBps: number;
@@ -182,6 +188,9 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
     feesMinusLvrUsd: 0,
     lpPnlVsHodlUsd: 0,
     lpPnlVsHodlBps: 0,
+    protocolFeeUsd: 0,
+    lpPnlNetOfProtocolUsd: 0,
+    botExtraFeesUsd: 0,
     retailCostBps: 0,
     retailFeeBps: 0,
     retailCostUsd: 0,
@@ -236,6 +245,7 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
     m.lpFeesByAgent[type] += feeUsd;
     m.volumeUsd[type] += notional;
     m.trades[type] += 1;
+    if (type !== 'retail') m.botExtraFeesUsd += (notional * (feeBps - cfg.fees.STANDARD)) / 10_000;
     if (swaps) {
       swaps.push({
         sig: `${sc.seed}-${opt.regime}-${swapN++}`,
@@ -335,6 +345,8 @@ export function runRegime(cfg: SimConfig, sc: Scenario, opt: RunOptions): RunRes
   m.lpPnlVsHodlUsd = (B + feeBase) * PT + Q + feeQuote - (B0 * PT + Q0);
   m.lpPnlVsHodlBps = (m.lpPnlVsHodlUsd / (B0 * PT + Q0)) * 10_000;
   m.feesMinusLvrUsd = m.lpFeesUsd - m.arbProfitUsd;
+  m.protocolFeeUsd = m.lpFeesUsd * cfg.protocolFeeShare;
+  m.lpPnlNetOfProtocolUsd = m.lpPnlVsHodlUsd - m.protocolFeeUsd;
   m.retailCostBps = retailNotional > 0 ? retailCostWeighted / retailNotional : 0;
   m.retailFeeBps = retailNotional > 0 ? retailFeeWeighted / retailNotional : 0;
   m.retailCostUsd = retailCostWeighted / 10_000;

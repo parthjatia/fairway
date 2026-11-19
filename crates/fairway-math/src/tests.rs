@@ -196,3 +196,17 @@ fn fee_schedule_validation() {
     assert!(!valid_fee_schedule(&[5, 90, 80]));
     assert!(!valid_fee_schedule(&[5, 30, 1_001]));
 }
+
+#[test]
+fn protocol_share_rounds_down_and_is_bounded() {
+    assert_eq!(protocol_share(10_000, 1_500).unwrap(), 1_500);
+    assert_eq!(protocol_share(7, 1_500).unwrap(), 1); // 1.05 → 1
+    assert_eq!(protocol_share(6, 1_500).unwrap(), 0); // 0.9 → 0 (LPs keep the dust)
+    assert_eq!(protocol_share(u64::MAX, 10_000).unwrap(), u64::MAX);
+    assert_eq!(protocol_share(100, 0).unwrap(), 0);
+    assert_eq!(protocol_share(100, 10_001), Err(MathError::InvalidFee));
+    for fee in [0u64, 1, 99, 12_345, u64::MAX / 2] {
+        let p = protocol_share(fee, 1_500).unwrap();
+        assert!(p <= fee);
+    }
+}

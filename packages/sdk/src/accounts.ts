@@ -10,6 +10,8 @@ export type ConfigAccount = {
   scoreTtlSlots: bigint;
   bump: number;
   markout: MarkoutParams;
+  /** share of every swap fee kept by the protocol, bps of the fee (1500 = 15%) */
+  protocolFeeBps: number;
 };
 
 /** Onchain markout scoring parameters (programs/fairway/src/state.rs `MarkoutParams`). */
@@ -23,13 +25,11 @@ export type MarkoutParams = {
   retailBps: number;
   retailMinTrades: number;
   retailMinHistorySlots: bigint;
-  pythPriceAccount: PublicKey;
-  pythFeedId: Uint8Array;
   pythMaxStalenessSecs: bigint;
   pythMaxConfBps: number;
 };
 
-/** Program defaults (`MarkoutParams::default()`), with an optional Pyth price account + feed id. */
+/** Program defaults (`MarkoutParams::default()`). The oracle lives on each pool (`Pool.oracle*`, `setPoolOracleIx`). */
 export const defaultMarkoutParams = (o: Partial<MarkoutParams> = {}): MarkoutParams => ({
   markoutSlots: 75n,
   maxSettleSlots: 450n,
@@ -40,8 +40,6 @@ export const defaultMarkoutParams = (o: Partial<MarkoutParams> = {}): MarkoutPar
   retailBps: 3,
   retailMinTrades: 5,
   retailMinHistorySlots: 648_000n,
-  pythPriceAccount: PublicKey.default,
-  pythFeedId: new Uint8Array(32),
   pythMaxStalenessSecs: 60n,
   pythMaxConfBps: 50,
   ...o,
@@ -57,8 +55,6 @@ export const readMarkoutParams = (r: Reader): MarkoutParams => ({
   retailBps: r.i32(),
   retailMinTrades: r.u32(),
   retailMinHistorySlots: r.u64(),
-  pythPriceAccount: r.pubkey(),
-  pythFeedId: r.fixed(32),
   pythMaxStalenessSecs: r.u64(),
   pythMaxConfBps: r.u16(),
 });
@@ -74,8 +70,6 @@ export const writeMarkoutParams = (w: Writer, m: MarkoutParams): Writer =>
     .i32(m.retailBps)
     .u32(m.retailMinTrades)
     .u64(m.retailMinHistorySlots)
-    .pubkey(m.pythPriceAccount)
-    .bytes(m.pythFeedId)
     .u64(m.pythMaxStalenessSecs)
     .u16(m.pythMaxConfBps);
 
@@ -93,9 +87,20 @@ export type PoolAccount = {
   baseVaultBump: number;
   quoteVaultBump: number;
   lpMintBump: number;
+  /** protocol fees accrued in the vaults, not yet claimed (excluded from LP reserves) */
+  protocolOwedBase: bigint;
+  protocolOwedQuote: bigint;
+  /** cumulative protocol fees */
+  protocolEarnedBase: bigint;
+  protocolEarnedQuote: bigint;
+  /** score accounts whose rent the treasury paid, and the lamports spent */
+  sponsoredAccounts: number;
+  sponsoredLamports: bigint;
+  /** this pool's Pyth price account (default pubkey = no oracle: swaps are not scored onchain) and the feed id it must carry */
+  oracleCfg: { priceAccount: PublicKey; feedId: Uint8Array };
 };
 
-export type PendingTrade = { execPrice: bigint; slot: bigint; side: 'buy' | 'sell'; notional: bigint };
+export type PendingTrade = { pool: PublicKey; /** 1e12 fixed point */ execPrice: bigint; slot: bigint; side: 'buy' | 'sell'; notional: bigint };
 
 export type TraderScoreAccount = {
   trader: PublicKey;
@@ -117,6 +122,8 @@ export type TraderScoreAccount = {
   droppedTrades: number;
   /** non-empty pending trades awaiting settle_markout */
   pending: PendingTrade[];
+  /** the protocol treasury paid this account's rent */
+  sponsored: boolean;
 };
 
 export const PENDING_CAP = 4;
@@ -138,6 +145,7 @@ export function decodeConfig(data: Uint8Array): ConfigAccount {
     scoreTtlSlots: r.u64(),
     bump: r.u8(),
     markout: readMarkoutParams(r),
+    protocolFeeBps: r.u16(),
   };
 }
 
@@ -158,6 +166,13 @@ export function decodePool(data: Uint8Array): PoolAccount {
     baseVaultBump: r.u8(),
     quoteVaultBump: r.u8(),
     lpMintBump: r.u8(),
+    protocolOwedBase: r.u64(),
+    protocolOwedQuote: r.u64(),
+    protocolEarnedBase: r.u64(),
+    protocolEarnedQuote: r.u64(),
+    sponsoredAccounts: r.u32(),
+    sponsoredLamports: r.u64(),
+    oracleCfg: { priceAccount: r.pubkey(), feedId: r.fixed(32) },
   };
 }
 
@@ -175,9 +190,10 @@ export function decodeTraderScore(data: Uint8Array): TraderScoreAccount {
   const droppedTrades = r.u32();
   const pending: PendingTrade[] = [];
   for (let i = 0; i < PENDING_CAP; i++) {
-    const p = { execPrice: r.u64(), slot: r.u64(), side: r.u8() === 0 ? ('buy' as const) : ('sell' as const), notional: r.u64() };
+    const p = { pool: r.pubkey(), execPrice: r.u64(), slot: r.u64(), side: r.u8() === 0 ? ('buy' as const) : ('sell' as const), notional: r.u64() };
     if (p.notional !== 0n) pending.push(p);
   }
+  const sponsored = r.bool();
   return {
     ...head,
     sumNotional,
@@ -189,5 +205,6 @@ export function decodeTraderScore(data: Uint8Array): TraderScoreAccount {
     onchainScoreBps,
     droppedTrades,
     pending,
+    sponsored,
   };
 }

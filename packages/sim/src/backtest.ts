@@ -97,6 +97,11 @@ export type Headline = {
   retailCostSavedBps: number;
   retailCostSavedUsdPerDay: number;
   lpPnlVsFlat30UsdPerDay: number;
+  /** LP PnL vs flat 30 after the protocol keeps its share of fees (flat-30 pool: LPs keep 100%) */
+  lpNetOfProtocolVsFlat30UsdPerDay: number;
+  protocolRevenueUsdPerDay: number;
+  /** fees bots pay above the STANDARD fee on the same volume, per day */
+  botExtraFeesUsdPerDay: number;
   lpPnlVsFlat30StderrUsd: number;
   lpPnlVsFlat5UsdPerDay: number;
   lpPnlVsFlat5StderrUsd: number;
@@ -142,6 +147,9 @@ export function runBacktest(cfg: SimConfig = DEFAULT_SIM_CONFIG, seeds = [1, 2, 
       retailCostSavedBps: base.retailCostBps - fw.retailCostBps,
       retailCostSavedUsdPerDay: (base.retailCostUsd - fw.retailCostUsd) / days,
       lpPnlVsFlat30UsdPerDay: (fw.lpPnlVsHodlUsd - base.lpPnlVsHodlUsd) / days,
+      lpNetOfProtocolVsFlat30UsdPerDay: (fw.lpPnlNetOfProtocolUsd - base.lpPnlVsHodlUsd) / days,
+      protocolRevenueUsdPerDay: fw.protocolFeeUsd / days,
+      botExtraFeesUsdPerDay: fw.botExtraFeesUsd / days,
       lpPnlVsFlat30StderrUsd: pairedStderr('fairway', 'flat30'),
       lpPnlVsFlat5UsdPerDay: (fw.lpPnlVsHodlUsd - f5.lpPnlVsHodlUsd) / days,
       lpPnlVsFlat5StderrUsd: pairedStderr('fairway', 'flat5'),
@@ -155,8 +163,12 @@ export function runBacktest(cfg: SimConfig = DEFAULT_SIM_CONFIG, seeds = [1, 2, 
   };
 }
 
-export const SWEEP_TOXIC = [30, 50, 80, 100, 150];
-export const SWEEP_RETAIL = [5, 10, 20];
+export const SWEEP_TOXIC = [30, 50, 80, 100, 150, 200];
+export const SWEEP_RETAIL = [5, 10, 15, 20, 25];
+/** a recommended setting must save retail at least this much vs flat 30 (otherwise "retail pays less" is noise) */
+export const MIN_RETAIL_SAVING_BPS = 5;
+/** p95 pool-vs-CEX deviation bound. Staleness reaches retail through its execution cost, which is measured. */
+export const DEFAULT_STALENESS_BOUND_BPS = 200;
 
 export type SweepCell = {
   toxicBps: number;
@@ -184,13 +196,13 @@ export type SweepOutput = {
 };
 
 /**
- * Parameter sweep: toxic × retail fee (STANDARD fixed). Recommended = max LP net PnL (fairway regime)
- * subject to retail cost ≤ baseline and p95 staleness ≤ bound.
+ * Parameter sweep: toxic × retail fee (STANDARD fixed). Recommended = max LP PnL AFTER the protocol's fee share
+ * (fairway regime) subject to retail cost saved ≥ MIN_RETAIL_SAVING_BPS and p95 staleness ≤ bound.
  */
 export function runSweep(
   cfg: SimConfig = DEFAULT_SIM_CONFIG,
   seeds = [1, 2, 3, 4],
-  opts: { stalenessBoundBps?: number; toxic?: number[]; retail?: number[]; wu?: WarmupResult } = {},
+  opts: { stalenessBoundBps?: number; minRetailSavingBps?: number; toxic?: number[]; retail?: number[]; wu?: WarmupResult } = {},
 ): SweepOutput {
   const toxic = opts.toxic ?? SWEEP_TOXIC;
   const retail = opts.retail ?? SWEEP_RETAIL;
@@ -201,7 +213,8 @@ export function runSweep(
     averageMetrics(scenarios.map((sc) => runRegime(cfg, sc, { regime, fee: feeFunction(regime, fees, wu.tiers), tierOf }).metrics));
   const baseline = runAll('flat30', cfg.fees);
   const context = { flat5: runAll('flat5', cfg.fees), flat80: runAll('flat80', cfg.fees) };
-  const bound = opts.stalenessBoundBps ?? Math.max(60, baseline.stalenessP95Bps * 3);
+  const bound = opts.stalenessBoundBps ?? DEFAULT_STALENESS_BOUND_BPS;
+  const minSaving = opts.minRetailSavingBps ?? MIN_RETAIL_SAVING_BPS;
   const cells: SweepCell[] = [];
   for (const t of toxic) {
     for (const r of retail) {
@@ -213,7 +226,7 @@ export function runSweep(
         retailBps: r,
         fairway,
         rotation,
-        meetsRetailCost: fairway.retailCostBps <= baseline.retailCostBps,
+        meetsRetailCost: baseline.retailCostBps - fairway.retailCostBps >= minSaving,
         meetsStaleness: fairway.stalenessP95Bps <= bound,
       });
     }
@@ -221,14 +234,14 @@ export function runSweep(
   const flatCurve = [5, 10, 15, 20, 30, 50, 80].map((f) => ({ feeBps: f, metrics: runAll('flat', { RETAIL: f, STANDARD: f, TOXIC: f }) }));
   const feasible = cells.filter((c) => c.meetsRetailCost && c.meetsStaleness);
   const pool = feasible.length ? feasible : cells;
-  const best = pool.reduce((a, b) => (b.fairway.lpPnlVsHodlUsd > a.fairway.lpPnlVsHodlUsd ? b : a));
+  const best = pool.reduce((a, b) => (b.fairway.lpPnlNetOfProtocolUsd > a.fairway.lpPnlNetOfProtocolUsd ? b : a));
   const reason = feasible.length
-    ? `Highest LP net PnL among ${feasible.length}/${cells.length} settings with retail cost ≤ baseline (${baseline.retailCostBps.toFixed(1)} bps) and p95 staleness ≤ ${bound.toFixed(0)} bps.`
+    ? `Highest LP PnL after the ${(cfg.protocolFeeShare * 100).toFixed(0)}% protocol fee share among ${feasible.length}/${cells.length} settings that save retail ≥ ${minSaving} bps vs flat 30 and keep p95 staleness ≤ ${bound.toFixed(0)} bps (retail elasticity ${cfg.retail.elasticity}).`
     : 'No setting met every constraint; picked the highest LP net PnL overall.';
   return { synthetic: true, config: cfg, seeds, stalenessBoundBps: bound, toxic, retail, baseline, context, cells, flatCurve, recommended: { toxicBps: best.toxicBps, retailBps: best.retailBps, reason } };
 }
 
-export type SensitivityRow = { label: string; param: string; value: number; regime: Regime; lpPnlVsFlat30UsdPerDay: number; retailCostBps: number; retailCostSavedBps: number; stalenessP95Bps: number };
+export type SensitivityRow = { label: string; param: string; value: number; regime: Regime; lpPnlVsFlat30UsdPerDay: number; lpNetOfProtocolVsFlat30UsdPerDay: number; retailCostBps: number; retailCostSavedBps: number; stalenessP95Bps: number };
 
 /**
  * Sensitivities: (1) retail fee elasticity (aggregators route more retail flow to a cheaper pool),
@@ -240,12 +253,12 @@ export function runSensitivity(cfg: SimConfig = DEFAULT_SIM_CONFIG, seeds = [1, 
   const days = cfg.hours / 24;
   const run = (c: SimConfig, regime: Regime) =>
     averageMetrics(seeds.map((sd) => runRegime(c, makeScenario(c, sd), { regime, fee: feeFunction(regime, c.fees, wu.tiers), tierOf }).metrics));
-  for (const e of [0, 0.5, 1]) {
+  for (const e of [0, 0.25, 0.5, 1]) {
     const c = { ...cfg, retail: { ...cfg.retail, elasticity: e } };
     const base = run(c, 'flat30');
     for (const regime of ['fairway', 'rotation'] as Regime[]) {
       const m = run(c, regime);
-      rows.push({ label: `elasticity ${e}`, param: 'retail.elasticity', value: e, regime, lpPnlVsFlat30UsdPerDay: (m.lpPnlVsHodlUsd - base.lpPnlVsHodlUsd) / days, retailCostBps: m.retailCostBps, retailCostSavedBps: base.retailCostBps - m.retailCostBps, stalenessP95Bps: m.stalenessP95Bps });
+      rows.push({ label: `elasticity ${e}`, param: 'retail.elasticity', value: e, regime, lpPnlVsFlat30UsdPerDay: (m.lpPnlVsHodlUsd - base.lpPnlVsHodlUsd) / days, lpNetOfProtocolVsFlat30UsdPerDay: (m.lpPnlNetOfProtocolUsd - base.lpPnlVsHodlUsd) / days, retailCostBps: m.retailCostBps, retailCostSavedBps: base.retailCostBps - m.retailCostBps, stalenessP95Bps: m.stalenessP95Bps });
     }
   }
   // informed-flow intensity: how much toxic flow is needed before tiering pays for the retail discount
@@ -254,14 +267,14 @@ export function runSensitivity(cfg: SimConfig = DEFAULT_SIM_CONFIG, seeds = [1, 
     const b = run(c, 'flat30');
     for (const regime of ['fairway', 'rotation'] as Regime[]) {
       const m = run(c, regime);
-      rows.push({ label: `informed flow ×${mult}`, param: 'sniper.probPerStep×', value: mult, regime, lpPnlVsFlat30UsdPerDay: (m.lpPnlVsHodlUsd - b.lpPnlVsHodlUsd) / days, retailCostBps: m.retailCostBps, retailCostSavedBps: b.retailCostBps - m.retailCostBps, stalenessP95Bps: m.stalenessP95Bps });
+      rows.push({ label: `informed flow ×${mult}`, param: 'sniper.probPerStep×', value: mult, regime, lpPnlVsFlat30UsdPerDay: (m.lpPnlVsHodlUsd - b.lpPnlVsHodlUsd) / days, lpNetOfProtocolVsFlat30UsdPerDay: (m.lpPnlNetOfProtocolUsd - b.lpPnlVsHodlUsd) / days, retailCostBps: m.retailCostBps, retailCostSavedBps: b.retailCostBps - m.retailCostBps, stalenessP95Bps: m.stalenessP95Bps });
     }
   }
   const base = run(cfg, 'flat30');
   for (const sfee of [30, 40, 50]) {
     const c = { ...cfg, fees: { ...cfg.fees, STANDARD: sfee } };
     const m = run(c, 'rotation');
-    rows.push({ label: `STANDARD ${sfee} bps (rotation)`, param: 'fees.STANDARD', value: sfee, regime: 'rotation', lpPnlVsFlat30UsdPerDay: (m.lpPnlVsHodlUsd - base.lpPnlVsHodlUsd) / days, retailCostBps: m.retailCostBps, retailCostSavedBps: base.retailCostBps - m.retailCostBps, stalenessP95Bps: m.stalenessP95Bps });
+    rows.push({ label: `STANDARD ${sfee} bps (rotation)`, param: 'fees.STANDARD', value: sfee, regime: 'rotation', lpPnlVsFlat30UsdPerDay: (m.lpPnlVsHodlUsd - base.lpPnlVsHodlUsd) / days, lpNetOfProtocolVsFlat30UsdPerDay: (m.lpPnlNetOfProtocolUsd - base.lpPnlVsHodlUsd) / days, retailCostBps: m.retailCostBps, retailCostSavedBps: base.retailCostBps - m.retailCostBps, stalenessP95Bps: m.stalenessP95Bps });
   }
   return rows;
 }

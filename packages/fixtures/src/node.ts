@@ -9,6 +9,8 @@ import { generateMarket } from './market';
 import type { Dataset, FixtureMeta } from './dataset';
 import { buildDataset } from './dataset';
 import type { Swap } from '@fairway/scoring';
+import type { MemecoinMarket } from './memecoin';
+import { generateMemecoinMarket } from './memecoin';
 
 export { buildBlocks };
 
@@ -31,6 +33,27 @@ export function generateFixtures(dir = FIXTURE_DIR, opts: { fairwayProgramId?: s
   writeFileSync(join(dir, 'blocks.json'), JSON.stringify(blocks.blocks));
   writeFileSync(join(dir, 'blocks.expected.json'), JSON.stringify({ expected: blocks.expected, edgeCases: blocks.edgeCases }, null, 1));
   return { swaps: dataset.swaps.length, blocks: blocks.blocks.length };
+}
+
+/** Writes data/memecoin.json (BONK-test pool). Reads meta.json for the wallets/personas, never touches the other files. */
+export function generateMemecoin(dir = FIXTURE_DIR, opts: { fairwayProgramId?: string } = {}): { swaps: number } {
+  const meta = read<FixtureMeta>(dir, 'meta.json');
+  const m = generateMemecoinMarket({
+    start: meta.start,
+    days: Math.round((meta.end - meta.start) / 86_400),
+    stepSec: meta.market.stepSec,
+    baseSlot: meta.market.baseSlot,
+    fees: meta.market.fairwayFees,
+    wallets: meta.wallets,
+    fairwayProgramId: opts.fairwayProgramId,
+  });
+  writeFileSync(join(dir, 'memecoin.json'), JSON.stringify(m));
+  return { swaps: m.swaps.length };
+}
+
+export function loadMemecoin(dir = FIXTURE_DIR): MemecoinMarket {
+  if (!existsSync(join(dir, 'memecoin.json'))) generateMemecoin(dir);
+  return read<MemecoinMarket>(dir, 'memecoin.json');
 }
 
 export function ensureFixtures(dir = FIXTURE_DIR): void {

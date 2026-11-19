@@ -43,6 +43,9 @@ fn pda(seeds: &[&[u8]]) -> Pubkey {
 fn config_pda() -> Pubkey {
     pda(&[b"config"])
 }
+fn treasury_pda() -> Pubkey {
+    pda(&[b"treasury"])
+}
 fn score_pda(trader: &Pubkey) -> Pubkey {
     pda(&[b"score", trader.as_ref()])
 }
@@ -216,6 +219,7 @@ fn swap_ix(env: &Env, t: &Trader, score_account: Pubkey, amount_in: u64, min_out
             trader_quote: t.quote,
             token_program: spl_token::ID,
             system_program: system_program::ID,
+            treasury: treasury_pda(),
         }
         .to_account_metas(None),
     )
@@ -245,8 +249,8 @@ fn set_score(env: &mut Env, trader: Pubkey, tier: u8) {
 fn buy_and_measure(env: &mut Env, t: &Trader, usdc: u64) -> (u64, u64, usize) {
     let before = token_balance(&env.svm, &t.base);
     let pool_before = pool_state(env);
-    let rq = token_balance(&env.svm, &env.quote_vault);
-    let rb = token_balance(&env.svm, &env.base_vault);
+    let rq = token_balance(&env.svm, &env.quote_vault) - pool_before.protocol_owed_quote;
+    let rb = token_balance(&env.svm, &env.base_vault) - pool_before.protocol_owed_base;
     swap(env, t, usdc, 1, false).unwrap();
     let got = token_balance(&env.svm, &t.base) - before;
     let p = pool_state(env);
@@ -409,8 +413,9 @@ fn remove_liquidity_proportionality() {
     let held = token_balance(&env.svm, &lp.lp);
     let supply = pool_state(&env).lp_supply;
     assert_eq!(held, supply - MIN_LIQUIDITY);
-    let rb = token_balance(&env.svm, &env.base_vault);
-    let rq = token_balance(&env.svm, &env.quote_vault);
+    let po = pool_state(&env);
+    let rb = token_balance(&env.svm, &env.base_vault) - po.protocol_owed_base;
+    let rq = token_balance(&env.svm, &env.quote_vault) - po.protocol_owed_quote;
     let quarter = held / 4;
     let (eb, eq) = withdraw(quarter, rb, rq, supply).unwrap();
     let (b0, q0) = (token_balance(&env.svm, &lp.base), token_balance(&env.svm, &lp.quote));
@@ -462,7 +467,7 @@ fn batch_scores_and_close() {
         Instruction::new_with_bytes(
             fairway::id(),
             &fairway::instruction::CloseScore {}.data(),
-            fairway::accounts::CloseScore { closer, config: config_pda(), score: score_pda(&trader), rent_receiver: receiver }.to_account_metas(None),
+            fairway::accounts::CloseScore { closer, config: config_pda(), treasury: treasury_pda(), score: score_pda(&trader), rent_receiver: receiver }.to_account_metas(None),
         )
     };
     let stranger = new_user(&mut env.svm);
@@ -486,6 +491,8 @@ const MAX_SETTLE: u64 = 450;
 const HISTORY: u64 = 100;
 const PRIOR: u64 = 2_000 * USDC;
 const ONCHAIN_MIN: u64 = 1_000 * USDC;
+/// onchain price fixed point (fairway_math::markout::PRICE_SCALE)
+const PX: u64 = 1_000_000_000_000;
 
 fn clock(env: &Env) -> anchor_lang::prelude::Clock {
     env.svm.get_sysvar::<anchor_lang::prelude::Clock>()
@@ -530,6 +537,16 @@ fn post_mid(env: &mut Env, o: &Oracle, mid_e6: u64) {
     write_price(env, o.key, PYTH_RECEIVER_PROGRAM, FEED, mid_e6, mid_e6 / 10_000, c.unix_timestamp, c.slot);
 }
 
+fn set_pool_oracle(env: &mut Env, pool: Pubkey, price_account: Pubkey, feed_id: [u8; 32]) {
+    let admin = env.admin.insecure_clone();
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::SetPoolOracle { price_account, feed_id }.data(),
+        fairway::accounts::SetPoolOracle { admin: admin.pubkey(), config: config_pda(), pool }.to_account_metas(None),
+    );
+    send(&mut env.svm, &[ix], &admin, &[]).unwrap();
+}
+
 fn markout_env() -> (Env, Lp, Oracle) {
     let (mut env, lp) = seeded();
     let mut c = clock(&env);
@@ -542,8 +559,6 @@ fn markout_env() -> (Env, Lp, Oracle) {
         prior_notional: PRIOR,
         onchain_min_notional: ONCHAIN_MIN,
         retail_min_history_slots: HISTORY,
-        pyth_price_account: o.key,
-        pyth_feed_id: FEED,
         ..MarkoutParams::default()
     };
     let admin = env.admin.insecure_clone();
@@ -553,6 +568,8 @@ fn markout_env() -> (Env, Lp, Oracle) {
         fairway::accounts::UpdateConfig { admin: admin.pubkey(), config: config_pda() }.to_account_metas(None),
     );
     send(&mut env.svm, &[ix], &admin, &[]).unwrap();
+    let pool = env.pool;
+    set_pool_oracle(&mut env, pool, o.key, FEED);
     post_mid(&mut env, &o, 150 * USDC);
     (env, lp, o)
 }
@@ -561,18 +578,19 @@ fn score_of(env: &Env, trader: &Pubkey) -> TraderScore {
     TraderScore::try_deserialize(&mut &env.svm.get_account(&score_pda(trader)).unwrap().data[..]).unwrap()
 }
 
-fn settle_ix(cranker: Pubkey, trader: Pubkey, score: Pubkey, oracle: Pubkey) -> Instruction {
+fn settle_ix(cranker: Pubkey, trader: Pubkey, score: Pubkey, pool: Pubkey, oracle: Pubkey) -> Instruction {
     Instruction::new_with_bytes(
         fairway::id(),
         &fairway::instruction::SettleMarkout { trader }.data(),
-        fairway::accounts::SettleMarkout { cranker, config: config_pda(), score, pyth_price: oracle }.to_account_metas(None),
+        fairway::accounts::SettleMarkout { cranker, config: config_pda(), score, pool, pyth_price: oracle }.to_account_metas(None),
     )
 }
 
 /// settle `trader` from a random permissionless cranker
 fn settle(env: &mut Env, trader: &Pubkey, oracle: Pubkey) -> Result<(), String> {
     let cranker = new_user(&mut env.svm);
-    send(&mut env.svm, &[settle_ix(cranker.pubkey(), *trader, score_pda(trader), oracle)], &cranker, &[])
+    let ix = settle_ix(cranker.pubkey(), *trader, score_pda(trader), env.pool, oracle);
+    send(&mut env.svm, &[ix], &cranker, &[])
 }
 
 fn pending_count(s: &TraderScore) -> usize {
@@ -597,7 +615,9 @@ fn swap_records_pending_trade_and_creates_score_pda() {
     let fee = fee_on_input(1_500 * USDC, 30).unwrap();
     assert_eq!((p.side, p.notional, p.slot), (fairway_math::markout::SIDE_BUY, 1_500 * USDC - fee, clock(&env).slot));
     // pre-fee price ≈ 150 USDC/SOL plus a little price impact
-    assert!(p.exec_price > 150 * USDC && p.exec_price < 151 * USDC, "{}", p.exec_price);
+    // 1e12 fixed point
+    assert!(p.exec_price > 150 * PX && p.exec_price < 151 * PX, "{}", p.exec_price);
+    assert_eq!(p.pool, env.pool);
 }
 
 #[test]
@@ -615,8 +635,8 @@ fn markout_sign_buy_and_sell() {
     settle(&mut env, &buyer.kp.pubkey(), o.key).unwrap();
     settle(&mut env, &seller.kp.pubkey(), o.key).unwrap();
     let (sb, ss) = (score_of(&env, &buyer.kp.pubkey()), score_of(&env, &seller.kp.pubkey()));
-    let mb = markout_bps(SIDE_BUY, pb.exec_price, 160 * USDC).unwrap();
-    let ms = markout_bps(SIDE_SELL, ps.exec_price, 160 * USDC).unwrap();
+    let mb = markout_bps(SIDE_BUY, pb.exec_price, 160 * PX).unwrap();
+    let ms = markout_bps(SIDE_SELL, ps.exec_price, 160 * PX).unwrap();
     assert!(mb > 600 && ms < -600, "buy {mb} sell {ms}");
     assert_eq!(sb.sum_weighted_markout, pb.notional as i128 * mb as i128);
     assert_eq!(ss.sum_weighted_markout, ps.notional as i128 * ms as i128);
@@ -690,12 +710,133 @@ fn stale_and_invalid_oracle_rejected() {
 }
 
 #[test]
-fn unconfigured_oracle_rejected() {
+fn pool_without_oracle_is_not_scored_onchain() {
     let (mut env, _lp) = seeded();
+    let t = new_trader(&mut env);
+    let tk = t.kp.pubkey();
+    // no oracle on the pool: the swap works, creates no score account, charges no rent, queues nothing
+    let bal0 = env.svm.get_balance(&tk).unwrap();
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    assert_eq!(bal0 - env.svm.get_balance(&tk).unwrap(), 5_000);
+    assert!(env.svm.get_account(&score_pda(&tk)).map_or(true, |a| a.data.is_empty()));
+    // a keeper RETAIL score still works, and never hits the full-buffer cap (nothing is queued)
+    set_score(&mut env, tk, RETAIL);
+    for _ in 0..6 {
+        assert_eq!(buy_and_measure(&mut env, &t, 100 * USDC).2, RETAIL as usize);
+    }
+    let s = score_of(&env, &tk);
+    assert_eq!((pending_count(&s), s.dropped_trades, s.trade_count), (0, 0, 0));
+}
+
+#[test]
+fn settle_fails_if_the_pool_oracle_is_removed() {
+    let (mut env, _lp, o) = markout_env();
     let t = new_trader(&mut env);
     swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
     warp(&mut env, MARKOUT_SLOTS);
-    assert!(settle(&mut env, &t.kp.pubkey(), Pubkey::new_unique()).unwrap_err().contains("Custom(6015)"));
+    post_mid(&mut env, &o, 150 * USDC);
+    let pool = env.pool;
+    set_pool_oracle(&mut env, pool, Pubkey::default(), [0u8; 32]);
+    assert!(settle(&mut env, &t.kp.pubkey(), o.key).unwrap_err().contains("Custom(6015)")); // OracleNotConfigured
+    // pointing the pool at a different feed id makes the (valid-looking) account invalid for it
+    set_pool_oracle(&mut env, pool, o.key, [9u8; 32]);
+    assert!(settle(&mut env, &t.kp.pubkey(), o.key).unwrap_err().contains("Custom(6017)"));
+}
+
+/// a second pool with its own mints and oracle, on the same program/config
+struct Pool2 {
+    pool: Pubkey,
+    base_mint: Pubkey,
+    quote_mint: Pubkey,
+    base_vault: Pubkey,
+    quote_vault: Pubkey,
+}
+fn create_pool2(env: &mut Env) -> Pool2 {
+    let base_mint = set_mint(&mut env.svm, 5); // a 5-decimal memecoin-like mint
+    let quote_mint = env.quote_mint; // shares USDC with pool 1
+    let pool = pda(&[b"pool", base_mint.as_ref(), quote_mint.as_ref()]);
+    let base_vault = pda(&[b"vault", pool.as_ref(), base_mint.as_ref()]);
+    let quote_vault = pda(&[b"vault", pool.as_ref(), quote_mint.as_ref()]);
+    let lp_mint = pda(&[b"lp_mint", pool.as_ref()]);
+    let admin = env.admin.insecure_clone();
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::CreatePool {}.data(),
+        fairway::accounts::CreatePool { payer: admin.pubkey(), base_mint, quote_mint, pool, base_vault, quote_vault, lp_mint, token_program: spl_token::ID, system_program: system_program::ID }
+            .to_account_metas(None),
+    );
+    send(&mut env.svm, &[ix], &admin, &[]).unwrap();
+    // seed it with liquidity: 10B tokens (5 dec) vs 200,000 USDC → $0.00002
+    let owner = new_user(&mut env.svm);
+    let ob = set_token_account(&mut env.svm, &base_mint, &owner.pubkey(), 20_000_000_000 * 100_000);
+    let oq = set_token_account(&mut env.svm, &quote_mint, &owner.pubkey(), 1_000_000 * USDC);
+    let ol = set_token_account(&mut env.svm, &lp_mint, &owner.pubkey(), 0);
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::AddLiquidity { max_base: 10_000_000_000 * 100_000, max_quote: 200_000 * USDC, min_lp: 1 }.data(),
+        fairway::accounts::Liquidity {
+            owner: owner.pubkey(), pool, base_mint, quote_mint, base_vault, quote_vault, lp_mint, owner_base: ob, owner_quote: oq, owner_lp: ol, token_program: spl_token::ID,
+        }
+        .to_account_metas(None),
+    );
+    send(&mut env.svm, &[ix], &owner, &[]).unwrap();
+    Pool2 { pool, base_mint, quote_mint, base_vault, quote_vault }
+}
+
+#[test]
+fn each_pool_settles_only_against_its_own_oracle() {
+    use fairway_math::markout::*;
+    let (mut env, _lp, o_sol) = markout_env();
+    let p2 = create_pool2(&mut env);
+    let o_meme = Oracle { key: Pubkey::new_unique() };
+    let meme_feed = [3u8; 32];
+    set_pool_oracle(&mut env, p2.pool, o_meme.key, meme_feed);
+    let t = new_trader(&mut env);
+    let tk = t.kp.pubkey();
+    let tb2 = set_token_account(&mut env.svm, &p2.base_mint, &tk, 0);
+    let tq2 = t.quote;
+    // one buy on each pool
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::Swap { amount_in: 1_000 * USDC, min_amount_out: 1, a_to_b: false }.data(),
+        fairway::accounts::Swap {
+            trader: tk, config: config_pda(), pool: p2.pool, trader_score: score_pda(&tk), base_mint: p2.base_mint, quote_mint: p2.quote_mint, base_vault: p2.base_vault, quote_vault: p2.quote_vault,
+            trader_base: tb2, trader_quote: tq2, token_program: spl_token::ID, system_program: system_program::ID, treasury: treasury_pda(),
+        }
+        .to_account_metas(None),
+    );
+    let k = t.kp.insecure_clone();
+    send(&mut env.svm, &[ix], &k, &[]).unwrap();
+    let s = score_of(&env, &tk);
+    assert_eq!(pending_count(&s), 2);
+    let meme = s.pending.iter().find(|p| p.pool == p2.pool).unwrap();
+    // $0.00002 with a 5-decimal token: the 1e12 fixed point keeps 5+ significant digits (1e6 would give "20")
+    assert!(meme.exec_price > 19_000_000 && meme.exec_price < 21_000_000, "{}", meme.exec_price);
+
+    warp(&mut env, MARKOUT_SLOTS);
+    // SOL oracle says 150 → 160, meme oracle says 0.00002 → 0.000021 (+5%)
+    post_mid(&mut env, &o_sol, 150 * USDC);
+    let c = clock(&env);
+    // meme price 0.000021 USD = 21 in USD×1e6; Pyth expo -8 → price = 2100
+    write_price(&mut env, o_meme.key, PYTH_RECEIVER_PROGRAM, meme_feed, 21, 0, c.unix_timestamp, c.slot);
+    // settling pool 1 with pool 2's oracle account is refused (address is checked against the pool)
+    let cr = new_user(&mut env.svm);
+    let ix = settle_ix(cr.pubkey(), tk, score_pda(&tk), env.pool, o_meme.key);
+    assert!(send(&mut env.svm, &[ix], &cr, &[]).unwrap_err().contains("Custom(6016)"));
+    // settle pool 1 only: the meme trade stays pending
+    let ix = settle_ix(cr.pubkey(), tk, score_pda(&tk), env.pool, o_sol.key);
+    send(&mut env.svm, &[ix], &cr, &[]).unwrap();
+    let s = score_of(&env, &tk);
+    assert_eq!((s.trade_count, pending_count(&s)), (1, 1));
+    assert_eq!(s.pending.iter().find(|p| p.notional != 0).unwrap().pool, p2.pool);
+    // now the meme pool, against ITS oracle: +5% on a buy
+    let ix = settle_ix(cr.pubkey(), tk, score_pda(&tk), p2.pool, o_meme.key);
+    send(&mut env.svm, &[ix], &cr, &[]).unwrap();
+    let s = score_of(&env, &tk);
+    assert_eq!((s.trade_count, pending_count(&s)), (2, 0));
+    let mk = markout_bps(SIDE_BUY, meme.exec_price, 21_000_000).unwrap(); // 0.000021 at 1e12 scale
+    assert!(mk > 400 && mk < 600, "{mk}");
 }
 
 #[test]
@@ -710,7 +851,7 @@ fn wrong_trader_account_rejected() {
     let k = attacker.kp.insecure_clone();
     // claim to settle the attacker, but pass the victim's score PDA (and vice versa)
     for (trader, score) in [(attacker.kp.pubkey(), score_pda(&victim.kp.pubkey())), (victim.kp.pubkey(), score_pda(&attacker.kp.pubkey()))] {
-        let err = send(&mut env.svm, &[settle_ix(k.pubkey(), trader, score, o.key)], &k, &[]).unwrap_err();
+        let err = send(&mut env.svm, &[settle_ix(k.pubkey(), trader, score, env.pool, o.key)], &k, &[]).unwrap_err();
         assert!(err.contains("Custom(2006)"), "expected ConstraintSeeds, got {err}");
     }
     assert_eq!(score_of(&env, &victim.kp.pubkey()).trade_count, 0);
@@ -756,7 +897,8 @@ fn round(env: &mut Env, o: &Oracle, t: &Trader, usdc: u64, bps_move: i64) -> usi
     let tier = buy_and_measure(env, t, usdc).2;
     let p = score_of(env, &t.kp.pubkey()).pending.into_iter().find(|p| p.notional != 0).unwrap();
     warp(env, MARKOUT_SLOTS);
-    post_mid(env, o, (p.exec_price as i128 * (10_000 + bps_move as i128) / 10_000) as u64);
+    // exec_price is 1e12 fixed point, the mock Pyth helper takes USD × 1e6
+    post_mid(env, o, (p.exec_price as i128 * (10_000 + bps_move as i128) / 10_000 / 1_000_000) as u64);
     settle(env, &t.kp.pubkey(), o.key).unwrap();
     tier
 }
@@ -833,7 +975,7 @@ fn authority_cannot_close_a_score_with_onchain_evidence() {
         Instruction::new_with_bytes(
             fairway::id(),
             &fairway::instruction::CloseScore {}.data(),
-            fairway::accounts::CloseScore { closer, config: config_pda(), score: score_pda(&tk), rent_receiver: tk }.to_account_metas(None),
+            fairway::accounts::CloseScore { closer, config: config_pda(), treasury: treasury_pda(), score: score_pda(&tk), rent_receiver: tk }.to_account_metas(None),
         )
     };
     // pending trade → the keeper cannot wipe it
@@ -863,4 +1005,227 @@ fn few_large_trades_do_not_override_a_toxic_keeper_score() {
     let s = score_of(&env, &bot.kp.pubkey());
     assert!(s.sum_notional >= ONCHAIN_MIN && s.trade_count == 3 && s.onchain_tier == STANDARD);
     assert_eq!(buy_and_measure(&mut env, &bot, 100 * USDC).2, TOXIC as usize);
+}
+
+
+// ======================================================================================
+// M14: protocol fee share, treasury, sponsored score rent
+// ======================================================================================
+
+/// treasury balance (the PDA is a system account; it does not exist until someone funds it)
+fn treasury_balance(env: &Env) -> u64 {
+    env.svm.get_balance(&treasury_pda()).unwrap_or(0)
+}
+/// the minimum a data-less account must keep to stay rent-exempt: the treasury never goes below this when sponsoring
+fn treasury_floor(env: &Env) -> u64 {
+    env.svm.minimum_balance_for_rent_exemption(0)
+}
+fn config_state(env: &Env) -> Config {
+    Config::try_deserialize(&mut &env.svm.get_account(&config_pda()).unwrap().data[..]).unwrap()
+}
+fn update_config(env: &mut Env, update: ConfigUpdate) -> Result<(), String> {
+    let admin = env.admin.insecure_clone();
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::UpdateConfig { update }.data(),
+        fairway::accounts::UpdateConfig { admin: admin.pubkey(), config: config_pda() }.to_account_metas(None),
+    );
+    send(&mut env.svm, &[ix], &admin, &[])
+}
+fn fund_treasury(env: &mut Env, lamports: u64) {
+    let cur = treasury_balance(env);
+    env.svm.set_account(treasury_pda(), Account { lamports: cur + lamports, data: vec![], owner: system_program::ID, executable: false, rent_epoch: 0 }).unwrap();
+}
+fn score_rent(env: &Env, t: &Pubkey) -> u64 {
+    let len = env.svm.get_account(&score_pda(t)).unwrap().data.len();
+    env.svm.minimum_balance_for_rent_exemption(len)
+}
+
+#[test]
+fn protocol_fee_defaults_and_bounds() {
+    let (mut env, _lp) = seeded();
+    assert_eq!(config_state(&env).protocol_fee_bps, 1_500); // 15% of swap fees
+    assert!(update_config(&mut env, ConfigUpdate { protocol_fee_bps: Some(5_001), ..Default::default() }).unwrap_err().contains("Custom(6021)"));
+    update_config(&mut env, ConfigUpdate { protocol_fee_bps: Some(5_000), ..Default::default() }).unwrap();
+    assert_eq!(config_state(&env).protocol_fee_bps, 5_000);
+}
+
+#[test]
+fn protocol_share_accrues_excluded_from_reserves_and_is_claimable() {
+    let (mut env, lp) = seeded();
+    let t = new_trader(&mut env);
+    // a buy (quote in) and a sell (base in), STANDARD tier
+    let (_, fee_q, _) = buy_and_measure(&mut env, &t, 10_000 * USDC);
+    swap(&mut env, &t, 5 * SOL, 1, true).unwrap();
+    let fee_b = fee_on_input(5 * SOL, 30).unwrap();
+    let p = pool_state(&env);
+    let cut_q = fairway_math::protocol_share(fee_q, 1_500).unwrap();
+    let cut_b = fairway_math::protocol_share(fee_b, 1_500).unwrap();
+    assert_eq!((p.protocol_owed_quote, p.protocol_owed_base), (cut_q, cut_b));
+    assert_eq!((p.protocol_earned_quote, p.protocol_earned_base), (cut_q, cut_b));
+    assert_eq!(cut_q, fee_q * 15 / 100);
+
+    // the LP's fee share is the other 85%: reserves used for pricing exclude the unclaimed protocol fees
+    let (rb, rq) = (token_balance(&env.svm, &env.base_vault) - p.protocol_owed_base, token_balance(&env.svm, &env.quote_vault) - p.protocol_owed_quote);
+    let q = swap_quote(1_000 * USDC, rq, rb, 30).unwrap();
+    let before = token_balance(&env.svm, &t.base);
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    assert_eq!(token_balance(&env.svm, &t.base) - before, q.amount_out, "swap must price off LP reserves, not the raw vault balance");
+
+    // LP withdrawal is proportional to LP reserves (protocol fees stay put)
+    let p = pool_state(&env);
+    let supply = p.lp_supply;
+    let held = token_balance(&env.svm, &lp.lp);
+    let (rb, rq) = (token_balance(&env.svm, &env.base_vault) - p.protocol_owed_base, token_balance(&env.svm, &env.quote_vault) - p.protocol_owed_quote);
+    let (eb, eq) = withdraw(held, rb, rq, supply).unwrap();
+    let (b0, q0) = (token_balance(&env.svm, &lp.base), token_balance(&env.svm, &lp.quote));
+    remove_liquidity(&mut env, &lp, held, eb, eq).unwrap();
+    assert_eq!((token_balance(&env.svm, &lp.base) - b0, token_balance(&env.svm, &lp.quote) - q0), (eb, eq));
+    let p = pool_state(&env);
+    assert!(token_balance(&env.svm, &env.base_vault) >= p.protocol_owed_base && token_balance(&env.svm, &env.quote_vault) >= p.protocol_owed_quote);
+
+    // claim into treasury-owned token accounts (permissionless), then admin moves them out
+    let (bm, qm) = (env.base_mint, env.quote_mint);
+    let tb = set_token_account(&mut env.svm, &bm, &treasury_pda(), 0);
+    let tq = set_token_account(&mut env.svm, &qm, &treasury_pda(), 0);
+    let claim = |env: &Env, cranker: Pubkey, tb: Pubkey, tq: Pubkey| {
+        Instruction::new_with_bytes(
+            fairway::id(),
+            &fairway::instruction::ClaimProtocolFees {}.data(),
+            fairway::accounts::ClaimProtocolFees {
+                cranker,
+                pool: env.pool,
+                treasury: treasury_pda(),
+                base_mint: env.base_mint,
+                quote_mint: env.quote_mint,
+                base_vault: env.base_vault,
+                quote_vault: env.quote_vault,
+                treasury_base: tb,
+                treasury_quote: tq,
+                token_program: spl_token::ID,
+            }
+            .to_account_metas(None),
+        )
+    };
+    // destinations must be owned by the treasury: a stranger's account is rejected
+    let stranger = new_user(&mut env.svm);
+    let (sb, sq) = (set_token_account(&mut env.svm, &bm, &stranger.pubkey(), 0), set_token_account(&mut env.svm, &qm, &stranger.pubkey(), 0));
+    let ix = claim(&env, stranger.pubkey(), sb, sq);
+    assert!(send(&mut env.svm, &[ix], &stranger, &[]).is_err());
+    let (owed_b, owed_q) = (p.protocol_owed_base, p.protocol_owed_quote);
+    let ix = claim(&env, stranger.pubkey(), tb, tq);
+    send(&mut env.svm, &[ix], &stranger, &[]).unwrap();
+    assert_eq!((token_balance(&env.svm, &tb), token_balance(&env.svm, &tq)), (owed_b, owed_q));
+    let p = pool_state(&env);
+    assert_eq!((p.protocol_owed_base, p.protocol_owed_quote), (0, 0));
+    assert_eq!((p.protocol_earned_base, p.protocol_earned_quote), (owed_b, owed_q)); // lifetime counters keep their value
+
+    let dest = set_token_account(&mut env.svm, &qm, &env.admin.pubkey(), 0);
+    let xfer = |signer: Pubkey, amount: u64| {
+        Instruction::new_with_bytes(
+            fairway::id(),
+            &fairway::instruction::TreasuryTransferTokens { amount }.data(),
+            fairway::accounts::TreasuryTransferTokens { admin: signer, config: config_pda(), treasury: treasury_pda(), mint: qm, from: tq, to: dest, token_program: spl_token::ID }.to_account_metas(None),
+        )
+    };
+    assert!(send(&mut env.svm, &[xfer(stranger.pubkey(), 1)], &stranger, &[]).unwrap_err().contains("Custom(6000)"));
+    let admin = env.admin.insecure_clone();
+    send(&mut env.svm, &[xfer(admin.pubkey(), owed_q)], &admin, &[]).unwrap();
+    assert_eq!(token_balance(&env.svm, &dest), owed_q);
+}
+
+#[test]
+fn zero_protocol_fee_keeps_everything_with_lps() {
+    let (mut env, _lp) = seeded();
+    update_config(&mut env, ConfigUpdate { protocol_fee_bps: Some(0), ..Default::default() }).unwrap();
+    let t = new_trader(&mut env);
+    buy_and_measure(&mut env, &t, 1_000 * USDC);
+    let p = pool_state(&env);
+    assert_eq!((p.protocol_owed_quote, p.protocol_earned_quote), (0, 0));
+}
+
+#[test]
+fn treasury_sponsors_first_score_account_rent() {
+    let (mut env, _lp, _o) = markout_env(); // scored pool (has an oracle): swaps create score accounts
+    fund_treasury(&mut env, 1_000_000_000);
+    let t = new_trader(&mut env);
+    let tk = t.kp.pubkey();
+    let (bal0, tre0) = (env.svm.get_balance(&tk).unwrap(), treasury_balance(&env));
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    let rent = score_rent(&env, &tk);
+    // the trader paid only the 5,000-lamport signature fee; the treasury paid the rent
+    assert_eq!(bal0 - env.svm.get_balance(&tk).unwrap(), 5_000);
+    assert_eq!(tre0 - treasury_balance(&env), rent);
+    assert!(score_of(&env, &tk).sponsored);
+    let p = pool_state(&env);
+    assert_eq!((p.sponsored_accounts, p.sponsored_lamports), (1, rent));
+    // a second swap does not charge the treasury again
+    let tre1 = treasury_balance(&env);
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    assert_eq!(treasury_balance(&env), tre1);
+    // closing refunds the treasury, not the trader, and the trader cannot redirect the rent
+    let close = |receiver: Pubkey| {
+        Instruction::new_with_bytes(
+            fairway::id(),
+            &fairway::instruction::CloseScore {}.data(),
+            fairway::accounts::CloseScore { closer: tk, config: config_pda(), treasury: treasury_pda(), score: score_pda(&tk), rent_receiver: receiver }.to_account_metas(None),
+        )
+    };
+    let k = t.kp.insecure_clone();
+    assert!(send(&mut env.svm, &[close(tk)], &k, &[]).unwrap_err().contains("Custom(6014)"));
+    send(&mut env.svm, &[close(treasury_pda())], &k, &[]).unwrap();
+    assert_eq!(treasury_balance(&env), tre1 + rent);
+}
+
+#[test]
+fn trader_pays_rent_when_treasury_is_empty() {
+    let (mut env, _lp, _o) = markout_env();
+    // fresh deployment: the treasury has no SOL
+    assert_eq!(treasury_balance(&env), 0);
+    let t = new_trader(&mut env);
+    let tk = t.kp.pubkey();
+    let bal0 = env.svm.get_balance(&tk).unwrap();
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    let rent = score_rent(&env, &tk);
+    assert_eq!(bal0 - env.svm.get_balance(&tk).unwrap(), rent + 5_000);
+    assert_eq!(treasury_balance(&env), 0);
+    assert!(!score_of(&env, &tk).sponsored);
+    assert_eq!(pool_state(&env).sponsored_accounts, 0);
+    // the treasury must stay rent-exempt: one lamport short of floor + rent → the trader pays
+    let floor = treasury_floor(&env);
+    fund_treasury(&mut env, floor + rent - 1);
+    let t2 = new_trader(&mut env);
+    swap(&mut env, &t2, 1_000 * USDC, 1, false).unwrap();
+    assert!(!score_of(&env, &t2.kp.pubkey()).sponsored);
+    assert_eq!(treasury_balance(&env), floor + rent - 1);
+    // exactly floor + rent → sponsored, and the treasury is left at exactly its floor
+    fund_treasury(&mut env, 1);
+    let t3 = new_trader(&mut env);
+    swap(&mut env, &t3, 1_000 * USDC, 1, false).unwrap();
+    assert!(score_of(&env, &t3.kp.pubkey()).sponsored);
+    assert_eq!(treasury_balance(&env), floor);
+}
+
+#[test]
+fn treasury_sol_withdraw_is_admin_only_and_keeps_rent_floor() {
+    let (mut env, _lp) = seeded();
+    fund_treasury(&mut env, 500_000_000);
+    let dest = Pubkey::new_unique();
+    let wd = |signer: Pubkey, lamports: u64| {
+        Instruction::new_with_bytes(
+            fairway::id(),
+            &fairway::instruction::TreasuryWithdrawSol { lamports }.data(),
+            fairway::accounts::TreasuryWithdrawSol { admin: signer, config: config_pda(), treasury: treasury_pda(), destination: dest, system_program: system_program::ID }.to_account_metas(None),
+        )
+    };
+    let stranger = new_user(&mut env.svm);
+    assert!(send(&mut env.svm, &[wd(stranger.pubkey(), 1)], &stranger, &[]).unwrap_err().contains("Custom(6000)"));
+    let admin = env.admin.insecure_clone();
+    let floor = treasury_floor(&env);
+    // leaving less than the rent-exempt minimum (but not zero) is rejected; so is overdrawing
+    assert!(send(&mut env.svm, &[wd(admin.pubkey(), 500_000_000 - floor + 1)], &admin, &[]).unwrap_err().contains("Custom(6022)"));
+    assert!(send(&mut env.svm, &[wd(admin.pubkey(), 500_000_001)], &admin, &[]).unwrap_err().contains("Custom(6022)"));
+    send(&mut env.svm, &[wd(admin.pubkey(), 500_000_000 - floor)], &admin, &[]).unwrap();
+    assert_eq!(env.svm.get_balance(&dest).unwrap(), 500_000_000 - floor);
+    assert_eq!(treasury_balance(&env), floor);
 }

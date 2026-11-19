@@ -1,12 +1,15 @@
 //! Onchain markout scoring math (M13). Integer-only; mirrored bit-for-bit by
 //! `packages/scoring/src/onchain.ts` and checked against `vectors/onchain.json` on both sides.
 //!
-//! Units: prices are fixed point with `PRICE_SCALE` (1e6) = quote UI units per base UI unit;
+//! Units: prices are fixed point with `PRICE_SCALE` (1e12) = quote UI units per base UI unit;
 //! notionals are raw quote-token units (e.g. USDC with 6 decimals); markouts are integer bps.
 
 use crate::{MathError, MathResult, BPS_DENOM};
 
-pub const PRICE_SCALE: u64 = 1_000_000;
+/// 1e12: a $0.00002 memecoin still has 7 significant digits (1e6 would give it 20 units, i.e. 5% steps).
+pub const PRICE_SCALE: u64 = 1_000_000_000_000;
+/// log10(PRICE_SCALE)
+pub const PRICE_DECIMALS: i32 = 12;
 /// A single trade's markout is clamped to ±100% so one oracle glitch cannot dominate a score.
 pub const MARKOUT_CLAMP_BPS: i64 = 10_000;
 /// side: trader RECEIVES base
@@ -28,8 +31,8 @@ fn pow10(e: u32) -> MathResult<u128> {
     10u128.checked_pow(e).ok_or(MathError::Overflow)
 }
 
-/// Pre-fee execution price (quote per base, 1e6 fixed point) from raw token amounts.
-pub fn exec_price_e6(quote_raw: u64, quote_decimals: u8, base_raw: u64, base_decimals: u8) -> MathResult<u64> {
+/// Pre-fee execution price (quote per base, 1e12 fixed point) from raw token amounts.
+pub fn exec_price_scaled(quote_raw: u64, quote_decimals: u8, base_raw: u64, base_decimals: u8) -> MathResult<u64> {
     if quote_raw == 0 || base_raw == 0 {
         return Err(MathError::ZeroAmount);
     }
@@ -42,12 +45,12 @@ pub fn exec_price_e6(quote_raw: u64, quote_decimals: u8, base_raw: u64, base_dec
     u64::try_from(p).map_err(|_| MathError::Overflow)
 }
 
-/// Pyth price (`price * 10^expo`) → 1e6 fixed point. Rejects non-positive prices.
-pub fn pyth_to_price_e6(price: i64, expo: i32) -> MathResult<u64> {
+/// Pyth price (`price * 10^expo`) → 1e12 fixed point. Rejects non-positive prices.
+pub fn pyth_to_price_scaled(price: i64, expo: i32) -> MathResult<u64> {
     if price <= 0 {
         return Err(MathError::ZeroAmount);
     }
-    let shift = expo + 6;
+    let shift = expo + PRICE_DECIMALS;
     if !(-30..=30).contains(&shift) {
         return Err(MathError::Overflow);
     }

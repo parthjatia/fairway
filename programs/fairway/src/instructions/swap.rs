@@ -1,8 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, TransferChecked};
 use fairway_math::{
-    markout::{exec_price_e6, SIDE_BUY, SIDE_SELL},
-    resolve_blended, swap_quote, OnchainView, ScoreView, TierSource, TIER_RETAIL, TIER_STANDARD,
+    markout::{exec_price_scaled, SIDE_BUY, SIDE_SELL},
+    protocol_share, resolve_blended, swap_quote, OnchainView, ScoreView, TierSource, TIER_RETAIL, TIER_STANDARD,
 };
 
 use crate::{
@@ -46,6 +46,10 @@ pub struct Swap<'info> {
     pub trader_quote: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+    /// Protocol treasury: sponsors the rent of a trader's first score account when it holds enough SOL.
+    /// CHECK: system-owned PDA ["treasury"]; may be empty (then the trader pays)
+    #[account(mut, seeds = [TREASURY_SEED], bump)]
+    pub treasury: SystemAccount<'info>,
 }
 
 /// What the swap needs from the signer's score PDA.
@@ -54,6 +58,7 @@ struct ScoreRead {
     onchain: Option<OnchainView>,
     pending_full: bool,
 }
+
 
 fn read_score(acc: &AccountInfo, trader: &Pubkey) -> ScoreRead {
     match load_score(acc) {
@@ -76,12 +81,15 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
         resolve_blended(sr.onchain, m.onchain_min_notional, m.min_trades(), sr.bootstrap, slot, a.config.score_ttl_slots, a.config.default_tier);
     // If this trade cannot be queued for scoring (buffer full), it gets no RETAIL discount: otherwise a wallet could
     // keep its buffer full to hide trades from the onchain score while still paying the low fee.
-    if sr.pending_full && tier == TIER_RETAIL {
+    let scored = a.pool.oracle_price_account != Pubkey::default();
+    if scored && sr.pending_full && tier == TIER_RETAIL {
         tier = TIER_STANDARD;
     }
     let fee_bps = a.config.fee_bps[tier as usize];
 
-    let (reserve_in, reserve_out) = if a_to_b { (a.base_vault.amount, a.quote_vault.amount) } else { (a.quote_vault.amount, a.base_vault.amount) };
+    // pricing uses LP reserves only: unclaimed protocol fees sit in the vaults but do not move the curve
+    let (rb, rq) = a.pool.lp_reserves(a.base_vault.amount, a.quote_vault.amount).ok_or(FairwayError::Overflow)?;
+    let (reserve_in, reserve_out) = if a_to_b { (rb, rq) } else { (rq, rb) };
     let q = swap_quote(amount_in, reserve_in, reserve_out, fee_bps).m()?;
     require!(q.amount_out >= min_amount_out, FairwayError::SlippageExceeded);
 
@@ -112,12 +120,17 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
     )?;
 
     let pool_key = a.pool.key();
+    let cut = protocol_share(q.fee, a.config.protocol_fee_bps).m()?;
     let p = &mut ctx.accounts.pool;
     let t = tier as usize;
     if a_to_b {
         p.fees_base[t] = p.fees_base[t].saturating_add(q.fee);
+        p.protocol_owed_base = p.protocol_owed_base.checked_add(cut).ok_or(FairwayError::Overflow)?;
+        p.protocol_earned_base = p.protocol_earned_base.saturating_add(cut);
     } else {
         p.fees_quote[t] = p.fees_quote[t].saturating_add(q.fee);
+        p.protocol_owed_quote = p.protocol_owed_quote.checked_add(cut).ok_or(FairwayError::Overflow)?;
+        p.protocol_earned_quote = p.protocol_earned_quote.saturating_add(cut);
     }
     p.swaps[t] = p.swaps[t].saturating_add(1);
 
@@ -125,17 +138,27 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
         msg!("fairway: tier {} ({:?})", tier, source);
     }
 
-    // ---- queue the trade for trustless markout scoring (settle_markout)
+    // ---- queue the trade for trustless markout scoring (settle_markout), if this pool has an oracle
+    if !scored {
+        emit!(SwapExecuted { trader, pool: pool_key, a_to_b, amount_in, amount_out: q.amount_out, fee_bps, tier });
+        return Ok(());
+    }
     let (side, quote_leg, base_leg) = if a_to_b { (SIDE_SELL, q.amount_out, q.in_after_fee) } else { (SIDE_BUY, q.in_after_fee, q.amount_out) };
     let (bd, qd) = (ctx.accounts.base_mint.decimals, ctx.accounts.quote_mint.decimals);
     let score_info = ctx.accounts.trader_score.to_account_info();
     let payer = ctx.accounts.trader.to_account_info();
-    ensure_score_account(&score_info, &trader, ctx.bumps.trader_score, &payer)?;
+    let treasury_info = ctx.accounts.treasury.to_account_info();
+    let sponsored = ensure_score_account(&score_info, &trader, ctx.bumps.trader_score, &payer, Some((&treasury_info, ctx.bumps.treasury)))?;
+    if sponsored > 0 {
+        let p = &mut ctx.accounts.pool;
+        p.sponsored_accounts = p.sponsored_accounts.saturating_add(1);
+        p.sponsored_lamports = p.sponsored_lamports.saturating_add(sponsored);
+    }
     let mut ts = load_score(&score_info).ok_or(error!(FairwayError::ScoreAccountMismatch))?;
     require_keys_eq!(ts.trader, trader, FairwayError::ScoreAccountMismatch);
-    match (exec_price_e6(quote_leg, qd, base_leg, bd), ts.pending.iter_mut().find(|p| p.notional == 0)) {
+    match (exec_price_scaled(quote_leg, qd, base_leg, bd), ts.pending.iter_mut().find(|p| p.notional == 0)) {
         (Ok(exec_price), Some(free)) => {
-            *free = PendingTrade { exec_price, slot, side, notional: quote_leg };
+            *free = PendingTrade { pool: pool_key, exec_price, slot, side, notional: quote_leg };
             if ts.first_slot == 0 {
                 ts.first_slot = slot.max(1);
             }

@@ -1,12 +1,12 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Persona } from '../types';
+import type { PairMeta, Persona, PoolKey } from '../types';
 
 export const MODE = (process.env.NEXT_PUBLIC_MODE === 'live' ? 'live' : 'mock') as 'mock' | 'live';
 
 type Theme = 'dark' | 'light';
 type MockPool = { base: number; quote: number };
-export type SessionTrade = { id: number; ts: number; persona: string; side: 'buy' | 'sell'; amountIn: number; amountOut: number; feeBps: number; tier: string };
+export type SessionTrade = { id: number; ts: number; persona: string; pair: PoolKey; side: 'buy' | 'sell'; amountIn: number; amountOut: number; feeBps: number; tier: string };
 
 type AppState = {
   personas: Persona[];
@@ -14,39 +14,53 @@ type AppState = {
   setPersonaKey: (k: Persona['key']) => void;
   theme: Theme;
   toggleTheme: () => void;
+  /** tradable pairs (SOL/USDC and the BONK-test/USDC memecoin pool) */
+  pairs: PairMeta[];
+  pair: PairMeta;
+  setPairKey: (k: PoolKey) => void;
+  /** mock reserves of the selected pair */
   pool: MockPool;
   initialPool: MockPool;
-  applySwap: (next: MockPool, trade: Omit<SessionTrade, 'id' | 'ts'>) => void;
+  applySwap: (next: MockPool, trade: Omit<SessionTrade, 'id' | 'ts' | 'pair'>) => void;
   resetPool: () => void;
+  /** this session's swaps on the selected pair */
   trades: SessionTrade[];
 };
 
 const Ctx = createContext<AppState | null>(null);
-const KEYS = { persona: 'fw.persona', theme: 'fw.theme', pool: 'fw.pool', trades: 'fw.trades' };
+const KEYS = { persona: 'fw.persona', theme: 'fw.theme', pools: 'fw.pools.v2', trades: 'fw.trades.v2', pair: 'fw.pair' };
+type Pools = Record<PoolKey, MockPool>;
 
-export function AppStateProvider({ personas, initialPool, children }: { personas: Persona[]; initialPool: MockPool; children: ReactNode }) {
+export function AppStateProvider({ personas, pairs, initialPools, children }: { personas: Persona[]; pairs: PairMeta[]; initialPools: Pools; children: ReactNode }) {
   const [personaKey, setKey] = useState<Persona['key']>('rita');
+  const [pairKey, setPair] = useState<PoolKey>('sol');
   const [theme, setTheme] = useState<Theme>('dark');
-  const [pool, setPool] = useState<MockPool>(initialPool);
-  const [trades, setTrades] = useState<SessionTrade[]>([]);
+  const [pools, setPools] = useState<Pools>(initialPools);
+  const [allTrades, setTrades] = useState<SessionTrade[]>([]);
 
   useEffect(() => {
     const k = localStorage.getItem(KEYS.persona) as Persona['key'] | null;
     if (k && personas.some((p) => p.key === k)) setKey(k);
+    const pk = localStorage.getItem(KEYS.pair) as PoolKey | null;
+    if (pk && pairs.some((p) => p.key === pk)) setPair(pk);
     setTheme((document.documentElement.dataset.theme as Theme) || 'dark');
     try {
-      const p = JSON.parse(localStorage.getItem(KEYS.pool) || 'null');
-      if (p && p.base > 0 && p.quote > 0) setPool(p);
+      const p = JSON.parse(localStorage.getItem(KEYS.pools) || 'null');
+      if (p && Object.values(p as Pools).every((x) => x && x.base > 0 && x.quote > 0)) setPools({ ...initialPools, ...p });
       const t = JSON.parse(localStorage.getItem(KEYS.trades) || '[]');
       if (Array.isArray(t)) setTrades(t);
     } catch {
       /* ignore corrupt local state */
     }
-  }, [personas]);
+  }, [personas, pairs, initialPools]);
 
   const setPersonaKey = useCallback((k: Persona['key']) => {
     setKey(k);
     localStorage.setItem(KEYS.persona, k);
+  }, []);
+  const setPairKey = useCallback((k: PoolKey) => {
+    setPair(k);
+    localStorage.setItem(KEYS.pair, k);
   }, []);
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
@@ -56,26 +70,40 @@ export function AppStateProvider({ personas, initialPool, children }: { personas
       return n;
     });
   }, []);
-  const applySwap = useCallback((next: MockPool, trade: Omit<SessionTrade, 'id' | 'ts'>) => {
-    setPool(next);
-    localStorage.setItem(KEYS.pool, JSON.stringify(next));
+  const applySwap = useCallback(
+    (next: MockPool, trade: Omit<SessionTrade, 'id' | 'ts' | 'pair'>) => {
+      setPools((ps) => {
+        const n = { ...ps, [pairKey]: next };
+        localStorage.setItem(KEYS.pools, JSON.stringify(n));
+        return n;
+      });
+      setTrades((ts) => {
+        const n = [{ ...trade, pair: pairKey, id: Date.now(), ts: Math.floor(Date.now() / 1000) }, ...ts].slice(0, 40);
+        localStorage.setItem(KEYS.trades, JSON.stringify(n));
+        return n;
+      });
+    },
+    [pairKey],
+  );
+  const resetPool = useCallback(() => {
+    setPools((ps) => {
+      const n = { ...ps, [pairKey]: initialPools[pairKey] };
+      localStorage.setItem(KEYS.pools, JSON.stringify(n));
+      return n;
+    });
     setTrades((ts) => {
-      const n = [{ ...trade, id: Date.now(), ts: Math.floor(Date.now() / 1000) }, ...ts].slice(0, 20);
+      const n = ts.filter((t) => t.pair !== pairKey);
       localStorage.setItem(KEYS.trades, JSON.stringify(n));
       return n;
     });
-  }, []);
-  const resetPool = useCallback(() => {
-    setPool(initialPool);
-    setTrades([]);
-    localStorage.setItem(KEYS.pool, 'null');
-    localStorage.setItem(KEYS.trades, '[]');
-  }, [initialPool]);
+  }, [initialPools, pairKey]);
 
   const persona = personas.find((p) => p.key === personaKey) ?? personas[0]!;
+  const pair = pairs.find((p) => p.key === pairKey) ?? pairs[0]!;
+  const trades = useMemo(() => allTrades.filter((t) => t.pair === pairKey), [allTrades, pairKey]);
   const value = useMemo(
-    () => ({ personas, persona, setPersonaKey, theme, toggleTheme, pool, initialPool, applySwap, resetPool, trades }),
-    [personas, persona, setPersonaKey, theme, toggleTheme, pool, initialPool, applySwap, resetPool, trades],
+    () => ({ personas, persona, setPersonaKey, theme, toggleTheme, pairs, pair, setPairKey, pool: pools[pairKey], initialPool: initialPools[pairKey], applySwap, resetPool, trades }),
+    [personas, persona, setPersonaKey, theme, toggleTheme, pairs, pair, setPairKey, pools, pairKey, initialPools, applySwap, resetPool, trades],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

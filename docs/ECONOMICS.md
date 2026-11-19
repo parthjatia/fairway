@@ -12,6 +12,8 @@ All numbers below come from the **synthetic** agent-based simulation in `package
 
 The fee is charged on the input token and stays in the vault, so `k` never decreases. The score oracle chooses the *tier*. It cannot set a fee. The admin sets the three fees in `Config`.
 
+**Protocol share.** `Config.protocol_fee_bps` (default 1,500 = 15%, max 5,000) of each swap fee is booked to the protocol (`Pool.protocol_owed_*`, rounded down so LPs keep the dust). It stays in the vault but is excluded from the reserves that price the curve and from LP shares, until `claim_protocol_fees` moves it to the treasury PDA's token accounts. LPs therefore keep 85% of fees by default. Every LP number below is shown before and after this share, because it comes out of the same pool the LP-vs-flat-30 comparison is about. A fee-free flat-30 reference pool is shown with LPs keeping 100%, which is the conservative comparison.
+
 ## 2. Score and shrinkage
 
 `markout_bps = side × (mid(t+h) − execPrice) / execPrice × 10,000`, using the pre-fee price. `score = Σ(notional·markout) / (Σ notional + K)`, `K = 2,000`.
@@ -32,47 +34,52 @@ In the warm-up of the simulation (4,238 swaps over 72 h), the classifier gave: a
 
 ## 4. What the simulation says
 
-Per day, mean of 8 seeds. "LP fees − arb profit" is the LVR-style net (arb profit measured at the CEX mid).
+Per day, mean of 8 seeds, 24 h, 60% vol, $3M pool. **LP PnL vs HODL** is the complete LP result (reserves plus fees at the final CEX price, minus holding the initial reserves). It already contains every loss to arbitrageurs and snipers, so it is the LVR check: "fees − arb profit" alone ignores sniper losses and rebalancing. The protocol keeps `protocol_fee_bps` (15%) of swap fees, so LPs keep the rest; the flat-30 reference pool is shown with LPs keeping 100%.
 
-| Regime | LP fees | Arb profit | Fees − arb | Retail cost | Mean / p95 staleness (bps) |
-|---|---:|---:|---:|---:|---:|
-| Flat 30 | $1,528 | $132 | $1,396 | 34.8 bps | 17.1 / 31.6 |
-| Fairway 5/30/80 | $1,070 | $36 | $1,035 | 16.7 bps | 44.3 / 79.9 |
-| Fairway 20/30/80 (recommended) | $1,366 | $36 | $1,331 | 27.7 bps | n/a / 79.9 |
-| Fairway 5/30/80, arbs rotate | $1,035 | $132 | $903 | 16.3 bps | 17.1 / 31.6 |
-| Flat 5 | $579 | $642 | −$63 | 9.6 bps | 4.0 / 8.5 |
-| Flat 80 | $2,903 | $35 | $2,868 | 85.2 bps | 44.2 / 79.8 |
+| Regime | LP fees | Arb profit | LP PnL vs HODL | LP PnL after protocol share | Retail cost | Mean / p95 staleness (bps) |
+|---|---:|---:|---:|---:|---:|---:|
+| Flat 30 (reference) | $1,528 | $132 | $644 | $644 | 34.8 bps | 17.1 / 31.6 |
+| Fairway 5/30/80 (demo fees) | $1,070 | $36 | $191 | $30 | 16.7 bps | 44.3 / 79.9 |
+| Fairway 20/30/200 (sweep pick) | $1,529 | $13 | $718 | $489 | 27.6 bps | n/a / 196 |
+| Fairway 5/30/80, arbs rotate | $1,035 | $132 | $148 | −$7 | 16.3 bps | 17.1 / 31.6 |
+| Flat 5 | $579 | $642 | −$311 | −$398 | 9.6 bps | 4.0 / 8.5 |
+| Flat 80 | $2,903 | $35 | $2,033 | $1,597 | 85.2 bps | 44.2 / 79.8 |
 
-Retail cost is the fee plus price impact versus the CEX mid, in bps.
+Retail cost is the fee plus price impact versus the CEX mid, in bps (it includes the effect of a staler pool).
 
 ### Reading the table honestly
 
-1. **Versus flat 30, LPs do not gain in this simulation.** At 5/30/80, LP PnL vs flat 30 is −$453/day (±$66). In the sim, retail volume is about 5× the informed volume, so the fee revenue lost on retail (30 → 5 bps) exceeds the extra revenue from TOXIC (30 → 80 bps). Informed flow also trades *less* when its fee is higher.
-2. **Versus a low flat fee, Fairway is much better for LPs.** A flat 5 bps pool is the "retail-friendly" alternative, and it loses money after LVR. Fairway gives retail a similar fee (16.7 vs 9.6 bps cost, including impact) while LPs earn about $502/day more.
-3. **Arbitrage profit drops about 73%** (from $132 to $36/day), and sniper profit drops about 70%.
-4. **The cost is staleness.** The pool deviates more from the CEX price when toxic flow pays 80 bps: p95 deviation goes from 32 to 80 bps. Arbs wait for a bigger gap before trading. That is a real execution-quality cost for everyone (retail's price impact is measured against the CEX mid, so the effect is already in the retail cost column).
-5. **Rotation worst case.** If arbs rotate wallets they pay STANDARD, so the pool behaves like flat 30 for them (same profit, same staleness), and retail still gets its discount. LPs bear that. The mechanism degrades to "retail subsidized by LPs", which is the weakest outcome. The recommended parameters reduce that exposure.
+Question checked on 2026-11-19: *do LPs earn more than in a flat 30 bps pool while retail pays less?* **Not unconditionally.**
 
-### Sensitivity (`packages/sim/out/sensitivity.json`, 4 seeds)
+1. **Retail pays less, bots pay more.** At 5/30/80 retail saves 18 bps. Arbitrage profit falls 73% (90% at 20/30/200). Bots pay about $475/day more than the STANDARD fee on the same volume (the "extra fees from bots" number on `/pool`).
+2. **The retail discount is paid by LPs.** In the sim, retail volume is about 5× the informed volume, so revenue lost on retail (30 → 5 bps) exceeds the extra from TOXIC (30 → 80 bps), and informed flow trades less when its fee is higher. At 5/30/80, LP PnL vs flat 30 is −$453/day (±66). Rule of thumb on this pool: ~$20/day per bp of retail saving.
+3. **A high toxic fee closes the gap at a price.** At 20/30/200, LP PnL vs flat 30 is +$74/day before the protocol share (±214, not statistically different from 0) and −$155/day after it. Retail saves 7.1 bps. The price is staleness: p95 deviation 196 bps vs 32 bps, because arbs wait for a larger gap before trading.
+4. **Versus a low flat fee, Fairway is much better for LPs.** A flat 5 bps pool (similar retail cost) loses money after LVR. 5/30/80 gives LPs about $500/day more than flat 5.
+5. **Rotation worst case.** If arbs rotate wallets they pay STANDARD: same profit, same staleness as flat 30, and retail still gets its discount. LPs bear that (−$496/day vs flat 30 at 5/30/80, −$196 at 20/30/200). Raising STANDARD to 40–50 bps narrows it (below) but makes fresh wallets pay more than the baseline.
 
-| Variation | Fairway 5/30/80 LP vs flat 30 | Retail saves |
+### Elasticity (an assumption, labeled)
+
+Retail arrival rate × (1 + e·(30 − fee)/30) / (1 + e): at `e = 1`, a wallet paying 15 bps instead of 30 trades ~33% more. Real elasticity depends on aggregator routing and is unmeasured here. LP PnL vs flat 30 per day, **before / after** the 15% protocol share (`sensitivity.json`, `sensitivity-recommended.json`; 4 seeds):
+
+| Retail elasticity | 5/30/80 | 20/30/200 |
 |---|---:|---:|
-| Baseline (elasticity 0) | −$527 | 16.8 bps |
-| Retail fee elasticity 0.5 | −$417 | 18.2 bps |
-| Retail fee elasticity 1 | −$293 | 17.6 bps |
-| Informed flow ×0.25 | −$416 | 16.7 bps |
-| Informed flow ×4 | −$855 | 17.0 bps |
+| 0 | −$527 / −$673 | +$127 / −$104 |
+| 0.25 | −$386 / −$547 | +$184 / −$54 |
+| 0.5 | −$417 / −$567 | +$132 / −$92 |
+| 1 | −$293 / −$466 | +$339 / +$79 |
 
-Elasticity helps because lower retail fees attract more volume. It did not close the gap in the range we tested. Informed flow makes things worse, not better, because it is filtered out by the high fee rather than monetized. (The baseline row uses 4 seeds, which is why it differs from the 8-seed −$453.)
+Elasticity-labeled sweeps are in `sweep-elastic.json` (e = 0.5 and 1; every toxic × retail cell with LP-vs-flat-30 before and after the protocol share, retail saving and staleness). With e = 1 the sweep pick moves to 10/30/200. LPs beat flat 30 after the protocol share only in the high-toxic-fee, e ≥ 1 corner.
+
+Other sensitivities (5/30/80 → 20/30/200 LP vs flat 30, before protocol share): informed flow ×0.25: −$416 → +$233; ×2: −$585 → +$66; ×4: −$855 → −$202. More informed flow hurts: it is filtered out by the high fee rather than monetized. STANDARD fee in the rotation case (5/30/80): 30 → −$513, 40 → −$469, 50 → −$409 (4 seeds).
 
 ## 5. Choosing the parameters
 
-The sweep covers toxic fee ∈ {30, 50, 80, 100, 150} bps × retail fee ∈ {5, 10, 20} bps (15 cells, 8 seeds each). The recommended setting maximizes LP net PnL subject to:
+The sweep covers toxic fee ∈ {30, 50, 80, 100, 150, 200} bps × retail fee ∈ {5, 10, 15, 20, 25} bps (30 cells, 8 seeds each, STANDARD fixed at 30). The pick maximizes **LP PnL after the protocol's fee share** subject to:
 
-- retail cost ≤ the flat-30 baseline (34.8 bps), and
-- p95 staleness ≤ **95 bps** (configurable).
+- retail cost saved ≥ **5 bps** vs flat 30 (smaller savings are within noise), and
+- p95 staleness ≤ **200 bps** (configurable). Staleness reaches users through retail cost, which is already measured, but a very stale pool price is also a risk for anything that reads it as an oracle.
 
-Result: **toxic 80 bps, retail 20 bps** (the highest LP PnL among the 9 settings that pass both constraints). The binding constraint is staleness: toxic fees of 100 and 150 bps raise p95 deviation to 99 and 148 bps. Those fail the bound even though their raw LP PnL is higher. A 20 bps retail fee keeps most of the retail discount (30 → 20) and most of the LP revenue.
+Result: **toxic 200 bps, retail 20 bps** (24 of 30 cells pass). Nothing in the grid gives LPs more than flat 30 after the protocol share with a robust retail saving at elasticity 0, so the pick is the least costly one that still delivers a meaningful retail saving. The frontier is a transfer: every bp saved for retail costs LPs about $20/day unless toxic fees or volume make up for it.
 
 ![Sweep](charts/sweep.png)
 ![Frontier](charts/frontier.png)

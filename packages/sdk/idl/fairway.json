@@ -117,6 +117,117 @@
       ]
     },
     {
+      "name": "claim_protocol_fees",
+      "docs": [
+        "Permissionless: move the protocol's accrued share of swap fees into the treasury's token accounts."
+      ],
+      "discriminator": [
+        34,
+        142,
+        219,
+        112,
+        109,
+        54,
+        133,
+        23
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "anyone may crank: the destinations are fixed to treasury-owned token accounts"
+          ],
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.base_mint",
+                "account": "Pool"
+              },
+              {
+                "kind": "account",
+                "path": "pool.quote_mint",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "base_mint",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "quote_mint",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "base_vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "quote_vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "treasury_base",
+          "writable": true
+        },
+        {
+          "name": "treasury_quote",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "close_score",
       "discriminator": [
         119,
@@ -149,6 +260,26 @@
                   102,
                   105,
                   103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
                 ]
               }
             ]
@@ -492,6 +623,88 @@
       ]
     },
     {
+      "name": "set_pool_oracle",
+      "discriminator": [
+        140,
+        225,
+        146,
+        45,
+        210,
+        81,
+        225,
+        223
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.base_mint",
+                "account": "Pool"
+              },
+              {
+                "kind": "account",
+                "path": "pool.quote_mint",
+                "account": "Pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "price_account",
+          "type": "pubkey"
+        },
+        {
+          "name": "feed_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "set_score",
       "discriminator": [
         218,
@@ -694,6 +907,35 @@
           }
         },
         {
+          "name": "pool",
+          "docs": [
+            "The pool whose pending trades are settled, and whose oracle is used."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.base_mint",
+                "account": "Pool"
+              },
+              {
+                "kind": "account",
+                "path": "pool.quote_mint",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
           "name": "pyth_price",
           "docs": [
             "full verification, staleness and confidence."
@@ -842,6 +1084,30 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "treasury",
+          "docs": [
+            "Protocol treasury: sponsors the rent of a trader's first score account when it holds enough SOL."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -856,6 +1122,162 @@
         {
           "name": "a_to_b",
           "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "treasury_transfer_tokens",
+      "discriminator": [
+        90,
+        131,
+        60,
+        38,
+        7,
+        140,
+        98,
+        236
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "from",
+          "writable": true
+        },
+        {
+          "name": "to",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "treasury_withdraw_sol",
+      "discriminator": [
+        21,
+        167,
+        254,
+        81,
+        104,
+        130,
+        11,
+        168
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "destination",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "lamports",
+          "type": "u64"
         }
       ]
     },
@@ -1098,6 +1520,16 @@
       "code": 6020,
       "name": "InvalidMarkoutParams",
       "msg": "Invalid markout parameters"
+    },
+    {
+      "code": 6021,
+      "name": "InvalidProtocolFee",
+      "msg": "Protocol fee must be at most 50% (5000 bps)"
+    },
+    {
+      "code": 6022,
+      "name": "TreasuryBelowFloor",
+      "msg": "Withdrawal would take the treasury below its rent-exempt minimum"
     }
   ],
   "types": [
@@ -1160,6 +1592,13 @@
                 "name": "MarkoutParams"
               }
             }
+          },
+          {
+            "name": "protocol_fee_bps",
+            "docs": [
+              "share of every swap fee that goes to the protocol treasury, in bps of the fee (1500 = 15%)"
+            ],
+            "type": "u16"
           }
         ]
       }
@@ -1212,6 +1651,12 @@
                   "name": "MarkoutParams"
                 }
               }
+            }
+          },
+          {
+            "name": "protocol_fee_bps",
+            "type": {
+              "option": "u16"
             }
           }
         ]
@@ -1274,25 +1719,6 @@
             "type": "u64"
           },
           {
-            "name": "pyth_price_account",
-            "docs": [
-              "Pyth PriceUpdateV2 account for the base/quote feed (default pubkey = unconfigured → settle fails)"
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "pyth_feed_id",
-            "docs": [
-              "expected Pyth feed id inside that account"
-            ],
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
             "name": "pyth_max_staleness_secs",
             "type": "u64"
           },
@@ -1352,9 +1778,16 @@
         "kind": "struct",
         "fields": [
           {
+            "name": "pool",
+            "docs": [
+              "the pool it was traded on: settled only against that pool's oracle"
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "exec_price",
             "docs": [
-              "pre-fee execution price, quote per base, 1e6 fixed point"
+              "pre-fee execution price, quote per base, 1e12 fixed point (`fairway_math::markout::PRICE_SCALE`)"
             ],
             "type": "u64"
           },
@@ -1474,6 +1907,59 @@
           {
             "name": "lp_mint_bump",
             "type": "u8"
+          },
+          {
+            "name": "protocol_owed_base",
+            "docs": [
+              "protocol fees accrued in the vaults and not yet claimed (excluded from the reserves used for pricing / LP shares)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "protocol_owed_quote",
+            "type": "u64"
+          },
+          {
+            "name": "protocol_earned_base",
+            "docs": [
+              "cumulative protocol fees (claimed or not)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "protocol_earned_quote",
+            "type": "u64"
+          },
+          {
+            "name": "sponsored_accounts",
+            "docs": [
+              "score accounts whose rent the protocol treasury paid on a trader's first swap here, and the lamports it spent"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "sponsored_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "oracle_price_account",
+            "docs": [
+              "Pyth `PriceUpdateV2` account for THIS pool's base/USD price. The default pubkey means \"no oracle\": swaps on this",
+              "pool are not queued for onchain scoring (they build no onchain evidence and cannot hit the full-buffer cap)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_feed_id",
+            "docs": [
+              "the feed id that account must carry"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
@@ -1670,6 +2156,13 @@
                 4
               ]
             }
+          },
+          {
+            "name": "sponsored",
+            "docs": [
+              "the treasury paid this account's rent, so closing it refunds the treasury"
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -1695,6 +2188,11 @@
       "name": "SCORE_SEED",
       "type": "bytes",
       "value": "[115, 99, 111, 114, 101]"
+    },
+    {
+      "name": "TREASURY_SEED",
+      "type": "bytes",
+      "value": "[116, 114, 101, 97, 115, 117, 114, 121]"
     },
     {
       "name": "VAULT_SEED",

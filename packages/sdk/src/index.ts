@@ -7,3 +7,4 @@ export * from './events';
 export * from './errors';
 export * from './math';
 export * from './client';
+export * from './feetier';

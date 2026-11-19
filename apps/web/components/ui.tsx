@@ -45,6 +45,19 @@ export function TierBadge({ tier, size = 'sm' }: { tier: Tier; size?: 'sm' | 'lg
   );
 }
 
+/** Earned, not claimed: onchain-verified RETAIL-like markout over enough settled trades. Bots can earn it too. */
+export function FairFlowBadge({ minTrades, className = '' }: { minTrades: number; className?: string }) {
+  return (
+    <span
+      title={`Verified fair flow: the program measured this wallet's own trades against Pyth and found no informed edge (onchain RETAIL tier) over at least ${minTrades} settled trades. Human or bot, good flow pays less.`}
+      className={`inline-flex items-center gap-1.5 rounded-full border border-retail/50 bg-retail/10 px-2.5 py-0.5 text-[11px] font-semibold text-retail ${className}`}
+    >
+      <span aria-hidden>✓</span>
+      Verified fair flow
+    </span>
+  );
+}
+
 /** Where the fee tier comes from: trustless onchain markout (settle_markout) or the keeper's bootstrap score. */
 export function ScoreSourceBadge({ source }: { source: 'onchain' | 'bootstrap' | 'default' }) {
   const s = {

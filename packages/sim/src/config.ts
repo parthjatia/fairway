@@ -41,6 +41,8 @@ export type SimConfig = {
   };
   /** Fairway tier fees */
   fees: FeeSchedule;
+  /** share of swap fees the protocol keeps (Config.protocol_fee_bps / 10_000); LPs get the rest */
+  protocolFeeShare: number;
   /** warm-up window (flat fee) used to learn wallet tiers before evaluation */
   warmupHours: number;
   /** sample interval for time series output, seconds */
@@ -60,6 +62,7 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
   arb: { nWallets: 3, gasUsd: 0.1 },
   sniper: { nWallets: 3, probPerStep: 0.02, lookaheadSteps: 150, minEdgeBps: 5, medianUsd: 3_000 },
   fees: { RETAIL: 5, STANDARD: 30, TOXIC: 80 },
+  protocolFeeShare: 0.15,
   warmupHours: 72,
   sampleEverySec: 300,
 };

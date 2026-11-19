@@ -1,7 +1,8 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { decodeConfig, decodePool, decodeTraderScore, type ConfigAccount, type PoolAccount, type TraderScoreAccount } from './accounts';
 import { PROGRAM_ID } from './constants';
-import { resolveTier, swapQuote } from './math';
+import { feeTierFromAccounts } from './feetier';
+import { swapQuote } from './math';
 import { configPda, poolAddresses, scorePda } from './pda';
 
 /** Thin read-side client; instruction builders live in ./instructions. */
@@ -22,7 +23,8 @@ export class FairwayClient {
     if (!info) return null;
     const pool = decodePool(info.data);
     const [b, q] = await Promise.all([this.connection.getTokenAccountBalance(pool.baseVault), this.connection.getTokenAccountBalance(pool.quoteVault)]);
-    return { ...pool, address: a.pool, reserveBase: BigInt(b.value.amount), reserveQuote: BigInt(q.value.amount) };
+    // reserves that price the curve exclude protocol fees that have accrued in the vaults but are not yet claimed
+    return { ...pool, address: a.pool, reserveBase: BigInt(b.value.amount) - pool.protocolOwedBase, reserveQuote: BigInt(q.value.amount) - pool.protocolOwedQuote };
   }
 
   async fetchScore(trader: PublicKey): Promise<TraderScoreAccount | null> {
@@ -39,8 +41,8 @@ export class FairwayClient {
   async effectiveFee(trader: PublicKey): Promise<{ tier: number; source: string; feeBps: number } | null> {
     const [config, score, slot] = await Promise.all([this.fetchConfig(), this.fetchScore(trader), this.connection.getSlot()]);
     if (!config) return null;
-    const r = resolveTier(score ? { tier: score.tier, updatedSlot: score.updatedSlot } : null, BigInt(slot), config.scoreTtlSlots, config.defaultTier);
-    return { ...r, feeBps: config.feeBps[r.tier as 0 | 1 | 2] };
+    const t = feeTierFromAccounts(trader, config, score, BigInt(slot));
+    return { tier: t.tier, source: t.source, feeBps: t.feeBps };
   }
 
   async quote(trader: PublicKey, baseMint: PublicKey, quoteMint: PublicKey, amountIn: bigint, aToB: boolean) {

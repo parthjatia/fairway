@@ -2,6 +2,11 @@ import 'server-only';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
+  accumulateOnchain,
+  EMPTY_SUMS,
+  onchainMarkoutBps,
+  onchainTier,
+  type OnchainSums,
   explainTier,
   FixtureMidPrice,
   makeConfig,
@@ -14,7 +19,8 @@ import {
   type Tier,
   type WalletScore,
 } from '@fairway/scoring';
-import type { OnchainScore, PoolView, Persona, WalletView } from '../types';
+import type { MemecoinMarket } from '@fairway/fixtures';
+import type { OnchainScore, PairMeta, PoolKey, PoolView, Persona, WalletView } from '../types';
 
 /** Repo root = nearest ancestor of cwd containing pnpm-workspace.yaml (Next runs from apps/web). */
 function repoRoot(): string {
@@ -57,6 +63,24 @@ export function fixtures() {
 
 export const personas = (): Persona[] => fixtures().meta.personas;
 
+/** BONK-test / USDC (a TEST mint): the second Fairway pool. Additive fixture (data/memecoin.json), see packages/fixtures/src/memecoin.ts. */
+let memeCache: null | { m: MemecoinMarket; mids: FixtureMidPrice } = null;
+export function memecoin() {
+  if (memeCache) return memeCache;
+  const m = readJson<MemecoinMarket>('packages', 'fixtures', 'data', 'memecoin.json');
+  const mids = new FixtureMidPrice(m.cex.prices.map((p, i) => [m.cex.start + i * m.cex.stepSec, p] as [number, number]), Math.max(5, m.cex.stepSec * 2));
+  memeCache = { m, mids };
+  return memeCache;
+}
+
+export function pairs(): PairMeta[] {
+  const m = memecoin().m;
+  return [
+    { key: 'sol', label: 'SOL / USDC', baseSymbol: 'SOL', baseDecimals: 9, quoteSymbol: 'USDC', quoteDecimals: 6, blurb: 'Blue-chip pair. Arbitrage bots dominate the toxic flow.' },
+    { key: 'bonk', label: `${m.symbol} / USDC`, baseSymbol: m.symbol, baseDecimals: m.pool.baseDecimals, quoteSymbol: 'USDC', quoteDecimals: 6, blurb: 'Test memecoin (not the real BONK). Pumps and dumps make snipers earn a big markout, so they are scored TOXIC fastest here.' },
+  ];
+}
+
 const INGEST = process.env.INGEST_URL || process.env.NEXT_PUBLIC_INGEST_URL || '';
 
 async function fromIngest<T>(path: string): Promise<T | null> {
@@ -69,7 +93,12 @@ async function fromIngest<T>(path: string): Promise<T | null> {
   }
 }
 
-const labelOf = (address: string) => fixtures().meta.personas.find((p) => p.address === address)?.name ?? null;
+const labelOf = (address: string) => {
+  const p = fixtures().meta.personas.find((x) => x.address === address)?.name;
+  if (p) return p;
+  const i = memecoin().m.extraWallets.findIndex((w) => w.address === address);
+  return i >= 0 ? `Memecoin sniper ${i + 1}` : null;
+};
 const CLASS_LABEL: Record<string, string> = { retail: 'retail trader', arb: 'arbitrage bot', sniper: 'momentum sniper', new: 'new wallet' };
 
 /** Program defaults (MarkoutParams::default): ~30 s horizon, onchain score wins after 1,000 USDC of settled notional. */
@@ -77,23 +106,81 @@ const MARKOUT_SLOTS = 75;
 const ONCHAIN_MIN_NOTIONAL_USDC = 1_000;
 const ONCHAIN_PARAMS = { ...onchainParamsFrom(cfg), onchainMinNotional: BigInt(ONCHAIN_MIN_NOTIONAL_USDC * 1e6) };
 
-/** What `settle_markout` would have recorded from this wallet's swaps on the Fairway pool (same integer math as the program). */
+/** Verified fair flow: onchain RETAIL tier from at least this many settled trades. */
+export const FAIR_FLOW_MIN_TRADES = 10;
+
+type FairwaySwap = Swap & { _pool: PoolKey };
+
+/** Every swap on a Fairway pool by `address`, tagged with its pool key and priced against that pool's own mid path. */
+function fairwaySwaps(address: string): FairwaySwap[] {
+  const f = fixtures();
+  const solPool = f.meta.pools.find((p) => p.venue === 'fairway')!.id;
+  const sol = f.swaps.filter((s) => s.trader === address && s.pool === solPool).map((s) => ({ ...s, _pool: 'sol' as const }));
+  const meme = memecoin().m.swaps.filter((s) => s.trader === address).map((s) => ({ ...s, _pool: 'bonk' as const }));
+  return [...sol, ...meme];
+}
+const midFor = (swap: { pool: string }) => (memecoin().m.pool.id === swap.pool ? memecoin().mids : fixtures().mids);
+
+/** What `settle_markout` would have recorded from this wallet's swaps on the Fairway pools (same integer math as the program). */
 function onchainScoreOf(address: string): OnchainScore {
   const f = fixtures();
-  const fairwayPools = new Set(f.meta.pools.filter((p) => p.venue === 'fairway').map((p) => p.id));
-  const own = f.swaps.filter((s) => s.trader === address && fairwayPools.has(s.pool));
-  const v = onchainScoreFromSwaps(own, (ts) => f.mids.midAt(ts), ONCHAIN_PARAMS, { horizonSec: MARKOUT_SLOTS * 0.4, asOf: f.meta.end });
+  const own = fairwaySwaps(address);
+  const horizonSec = MARKOUT_SLOTS * 0.4;
+  const run = (swaps: FairwaySwap[]) => onchainScoreFromSwaps(swaps, (ts, pool) => midFor({ pool }).midAt(ts), ONCHAIN_PARAMS, { horizonSec, asOf: f.meta.end });
+  const v = run(own);
+  const labels: Record<PoolKey, string> = { sol: 'SOL / USDC', bonk: `${memecoin().m.symbol} / USDC` };
+  const perPool = (['sol', 'bonk'] as const)
+    .map((key) => {
+      const sw = own.filter((s) => s._pool === key);
+      const r = run(sw);
+      return { key, label: labels[key], trades: r.tradeCount, notional: Number(r.sumNotional) / 1e6, scoreBps: r.scoreBps, tier: r.tier, tradesToToxic: tradesToToxic(sw, horizonSec) };
+    })
+    .filter((p) => p.trades > 0);
+  const scoreBps = v.scoreBps;
   return {
     tradeCount: v.tradeCount,
     notional: Number(v.sumNotional) / 1e6,
-    scoreBps: v.scoreBps,
+    scoreBps,
     tier: v.tier,
     historyDays: (Number(v.historySlots) * 0.4) / cfg.secondsPerDay,
     verified: v.verified,
     thresholdNotional: ONCHAIN_MIN_NOTIONAL_USDC,
     minTrades: Math.min(cfg.toxicMinTrades, cfg.retailMinTrades),
+    fairFlow: v.verified && v.tier === 'RETAIL' && v.tradeCount >= FAIR_FLOW_MIN_TRADES,
+    fairFlowMinTrades: FAIR_FLOW_MIN_TRADES,
+    perPool,
     markoutSlots: MARKOUT_SLOTS,
   };
+}
+
+/** How many settled trades until this wallet's running onchain score first reaches TOXIC (null = never). */
+function tradesToToxic(swaps: FairwaySwap[], horizonSec: number): number | null {
+  let s: OnchainSums = EMPTY_SUMS;
+  for (const sw of [...swaps].sort((a, b) => a.ts - b.ts)) {
+    const mid = midFor(sw).midAt(sw.ts + horizonSec);
+    if (mid === undefined || !(sw.execPrice > 0)) continue;
+    s = accumulateOnchain(s, BigInt(Math.round(Math.abs(sw.quoteAmount) * 1e6)), onchainMarkoutBps(sw.side, BigInt(Math.round(sw.execPrice * 1e12)), BigInt(Math.round(mid * 1e12))));
+    if (onchainTier(s, 0n, { ...ONCHAIN_PARAMS, retailMinHistorySlots: 0n }) === 2) return s.trades;
+  }
+  return null;
+}
+
+/** Memecoin vs SOL: settled trades until each sniper wallet's running onchain score first reaches TOXIC. */
+export function sniperTimeToToxic(): Array<{ address: string; label: string; meme: number | null; sol: number | null; solTrades: number }> {
+  const f = fixtures();
+  const snipers = [...f.meta.wallets.filter((w) => w.cls === 'sniper').map((w) => w.address), ...memecoin().m.extraWallets.map((w) => w.address)];
+  const horizonSec = MARKOUT_SLOTS * 0.4;
+  return snipers.map((address) => {
+    const own = fairwaySwaps(address);
+    const solSwaps = own.filter((s) => s._pool === 'sol');
+    return {
+      address,
+      label: labelOf(address) ?? 'sniper',
+      meme: tradesToToxic(own.filter((s) => s._pool === 'bonk'), horizonSec),
+      sol: tradesToToxic(solSwaps, horizonSec),
+      solTrades: solSwaps.length,
+    };
+  });
 }
 
 /** Blend rule (programs/fairway `resolve_blended`): onchain tier once verified, else the keeper's bootstrap tier. */
@@ -159,33 +246,52 @@ export function exampleWallets(): Array<{ address: string; tier: Tier; trades: n
     .map((s) => ({ address: s.trader, tier: s.tier, trades: s.trades, label: labelOf(s.trader), scoreBps: s.scoreBps }));
 }
 
-/** Fairway fixture pool: reserves (replayed from swaps), volume/fees by tier, recent swaps. */
-export function poolView(): PoolView {
+/** Protocol's share of swap fees (Config.protocol_fee_bps default) and the rent of one score account (≈ 0.0023 SOL). */
+export const PROTOCOL_FEE_BPS = 1_500;
+const SCORE_ACCOUNT_RENT_SOL = 0.0023;
+
+/** Fairway fixture pool: reserves (replayed from swaps), volume/fees by tier, M14 economics, recent swaps. */
+export function poolView(key: PoolKey = 'sol'): PoolView {
   const f = fixtures();
-  const pool = f.meta.pools.find((p) => p.venue === 'fairway')!;
+  const meme = memecoin().m;
+  const pair = pairs().find((p) => p.key === key)!;
+  const pool = key === 'bonk' ? meme.pool : f.meta.pools.find((p) => p.venue === 'fairway')!;
+  const s0 = key === 'bonk' ? meme.cex.prices[0]! : f.meta.market.s0;
+  const allSwaps = key === 'bonk' ? meme.swaps : f.swaps;
   let base = pool.initialBase;
-  let quote = pool.initialBase * f.meta.market.s0;
+  let quote = pool.initialBase * s0;
   const zero = () => ({ RETAIL: 0, STANDARD: 0, TOXIC: 0 }) as Record<Tier, number>;
   const volumeByTier = zero();
   const feesByTier = zero();
   const tradesByTier = zero();
   const traders = new Set<string>();
   const daily = new Map<string, Record<Tier, number>>();
-  const mine = f.swaps.filter((s) => s.pool === pool.id);
+  const mine = allSwaps.filter((s) => s.pool === pool.id);
+  let botExtra = 0;
+  let retailSaved = 0;
   for (const s of mine) {
     base += s.side === 'buy' ? -s.baseAmount : s.baseAmount;
     quote += s.side === 'buy' ? s.quoteAmount : -s.quoteAmount;
     const t = s.tier ?? 'STANDARD';
+    const fee = (s.quoteAmount * (s.feeBps ?? 30)) / 10_000;
     volumeByTier[t] += s.quoteAmount;
-    feesByTier[t] += (s.quoteAmount * (s.feeBps ?? 30)) / 10_000;
+    feesByTier[t] += fee;
     tradesByTier[t] += 1;
     traders.add(s.trader);
+    // vs a flat STANDARD (30 bps) pool on the same volume: bots pay extra, retail saves
+    const vsFlat = (s.quoteAmount * ((s.feeBps ?? 30) - 30)) / 10_000;
+    if (t === 'TOXIC') botExtra += vsFlat;
+    if (t === 'RETAIL') retailSaved -= vsFlat;
     const day = new Date(s.ts * 1000).toISOString().slice(5, 10);
     if (!daily.has(day)) daily.set(day, zero());
-    daily.get(day)![t] += (s.quoteAmount * (s.feeBps ?? 30)) / 10_000;
+    daily.get(day)![t] += fee;
   }
   const price = quote / base;
+  const lpFees = feesByTier.RETAIL + feesByTier.STANDARD + feesByTier.TOXIC;
   return {
+    key,
+    baseSymbol: pair.baseSymbol,
+    baseDecimals: pair.baseDecimals,
     id: pool.id,
     label: pool.label,
     baseVault: pool.baseVault,
@@ -199,6 +305,14 @@ export function poolView(): PoolView {
     feesByTier,
     tradesByTier,
     daily: [...daily.entries()].map(([day, v]) => ({ day, ...v })),
+    economics: {
+      botExtraFeesUsd: botExtra,
+      retailSavedUsd: retailSaved,
+      protocolFeeBps: PROTOCOL_FEE_BPS,
+      protocolRevenueUsd: (lpFees * PROTOCOL_FEE_BPS) / 10_000,
+      lpFeesUsd: lpFees - (lpFees * PROTOCOL_FEE_BPS) / 10_000,
+      sponsoredRentSol: traders.size * SCORE_ACCOUNT_RENT_SOL,
+    },
     recent: mine
       .slice(-14)
       .reverse()

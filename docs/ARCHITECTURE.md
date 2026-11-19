@@ -39,13 +39,13 @@ flowchart LR
 4. If `current_slot − updated_slot > score_ttl_slots`, use STANDARD.
 5. Otherwise read the bootstrap `tier`. An invalid tier maps to STANDARD.
 6. If the 4-entry pending buffer is full, RETAIL is raised to STANDARD.
-7. `fee = config.fee_bps[tier]`. The fee is taken from the input, and `out = in_after_fee × reserve_out / (reserve_in + in_after_fee)`.
-8. Slippage check against `min_amount_out`, then emit `SwapExecuted`.
-9. Create the score PDA if missing (payer = trader) and queue `{exec_price (pre-fee, 1e6), slot, side, notional}`.
+7. `fee = config.fee_bps[tier]`. Pricing uses LP reserves: `vault balance − Pool.protocol_owed_*`. The fee is taken from the input, and `out = in_after_fee × reserve_out / (reserve_in + in_after_fee)`.
+8. Slippage check against `min_amount_out`. The protocol's share `floor(fee × protocol_fee_bps / 10_000)` is booked to `Pool.protocol_owed_*` / `protocol_earned_*` (LPs keep the rest). Then emit `SwapExecuted`.
+9. If the pool has an oracle: create the score PDA if missing (rent paid by the treasury PDA when it holds more than its rent-exempt minimum plus the rent, else by the trader; flagged `sponsored`) and queue `{pool, exec_price (pre-fee, 1e12 fixed point), slot, side, notional}`.
 
 ## Onchain markout settlement
 
-`settle_markout(trader)` is permissionless. It expires pending trades older than `max_settle_slots`. If any trade is at least `markout_slots` old, it validates the Pyth `PriceUpdateV2` account (address in Config, owner, discriminator, full verification, feed id, staleness, confidence), then, for each trade whose horizon is before the price's `posted_slot`: `markout = side × (mid − exec) × 10⁴ / exec` (clamped ±10,000), `Σn += n`, `Σn·m += n·m`. It then sets `onchain_score_bps = Σn·m / (Σn + K)` and `onchain_tier` from the same thresholds as `packages/scoring` (history = slots since the first trade). The math lives in `crates/fairway-math/src/markout.rs` and is mirrored in `packages/scoring/src/onchain.ts` (shared vectors).
+`settle_markout(trader)` is permissionless and takes a `pool`. It expires pending trades older than `max_settle_slots`. If any of that pool's trades is at least `markout_slots` old, it validates the Pyth `PriceUpdateV2` account (address and feed id from `Pool.oracle_*`, owner, discriminator, full verification, feed id, staleness, confidence), then, for each trade whose horizon is before the price's `posted_slot`: `markout = side × (mid − exec) × 10⁴ / exec` (clamped ±10,000), `Σn += n`, `Σn·m += n·m`. It then sets `onchain_score_bps = Σn·m / (Σn + K)` and `onchain_tier` from the same thresholds as `packages/scoring` (history = slots since the first trade). The math lives in `crates/fairway-math/src/markout.rs` and is mirrored in `packages/scoring/src/onchain.ts` (shared vectors).
 
 ## Data modes
 

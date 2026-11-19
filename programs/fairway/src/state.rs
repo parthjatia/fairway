@@ -16,7 +16,10 @@ pub struct Config {
     pub bump: u8,
     /// onchain markout scoring + oracle parameters (M13)
     pub markout: MarkoutParams,
+    /// share of every swap fee that goes to the protocol treasury, in bps of the fee (1500 = 15%)
+    pub protocol_fee_bps: u16,
 }
+
 
 /// Parameters of the trustless onchain markout score. Defaults mirror `DEFAULT_SCORING_CONFIG` in packages/scoring.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
@@ -34,10 +37,6 @@ pub struct MarkoutParams {
     pub retail_bps: i32,
     pub retail_min_trades: u32,
     pub retail_min_history_slots: u64,
-    /// Pyth PriceUpdateV2 account for the base/quote feed (default pubkey = unconfigured → settle fails)
-    pub pyth_price_account: Pubkey,
-    /// expected Pyth feed id inside that account
-    pub pyth_feed_id: [u8; 32],
     pub pyth_max_staleness_secs: u64,
     pub pyth_max_conf_bps: u16,
 }
@@ -54,8 +53,6 @@ impl Default for MarkoutParams {
             retail_bps: 3,
             retail_min_trades: 5,
             retail_min_history_slots: 648_000,
-            pyth_price_account: Pubkey::default(),
-            pyth_feed_id: [0u8; 32],
             pyth_max_staleness_secs: 60,
             pyth_max_conf_bps: 50,
         }
@@ -103,12 +100,35 @@ pub struct Pool {
     pub base_vault_bump: u8,
     pub quote_vault_bump: u8,
     pub lp_mint_bump: u8,
+    /// protocol fees accrued in the vaults and not yet claimed (excluded from the reserves used for pricing / LP shares)
+    pub protocol_owed_base: u64,
+    pub protocol_owed_quote: u64,
+    /// cumulative protocol fees (claimed or not)
+    pub protocol_earned_base: u64,
+    pub protocol_earned_quote: u64,
+    /// score accounts whose rent the protocol treasury paid on a trader's first swap here, and the lamports it spent
+    pub sponsored_accounts: u32,
+    pub sponsored_lamports: u64,
+    /// Pyth `PriceUpdateV2` account for THIS pool's base/USD price. The default pubkey means "no oracle": swaps on this
+    /// pool are not queued for onchain scoring (they build no onchain evidence and cannot hit the full-buffer cap).
+    pub oracle_price_account: Pubkey,
+    /// the feed id that account must carry
+    pub oracle_feed_id: [u8; 32],
+}
+
+impl Pool {
+    /// reserves that belong to LPs and price the curve: vault balance minus unclaimed protocol fees
+    pub fn lp_reserves(&self, base_vault_amount: u64, quote_vault_amount: u64) -> Option<(u64, u64)> {
+        Some((base_vault_amount.checked_sub(self.protocol_owed_base)?, quote_vault_amount.checked_sub(self.protocol_owed_quote)?))
+    }
 }
 
 /// A swap waiting for its markout horizon (ring buffer entry; `notional == 0` = empty).
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, Default, PartialEq, Eq, InitSpace)]
 pub struct PendingTrade {
-    /// pre-fee execution price, quote per base, 1e6 fixed point
+    /// the pool it was traded on: settled only against that pool's oracle
+    pub pool: Pubkey,
+    /// pre-fee execution price, quote per base, 1e12 fixed point (`fairway_math::markout::PRICE_SCALE`)
     pub exec_price: u64,
     pub slot: u64,
     /// 0 = buy (trader received base), 1 = sell
@@ -149,6 +169,8 @@ pub struct TraderScore {
     /// trades not scored: buffer was full at swap time, or expired before anyone settled them
     pub dropped_trades: u32,
     pub pending: [PendingTrade; PENDING_CAP],
+    /// the treasury paid this account's rent, so closing it refunds the treasury
+    pub sponsored: bool,
 }
 
 impl TraderScore {
@@ -168,6 +190,7 @@ impl TraderScore {
             onchain_score_bps: 0,
             dropped_trades: 0,
             pending: [PendingTrade::default(); PENDING_CAP],
+            sponsored: false,
         }
     }
     pub fn pending_full(&self) -> bool {

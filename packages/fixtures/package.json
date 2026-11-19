@@ -12,6 +12,7 @@
   },
   "scripts": {
     "generate": "tsx scripts/generate.ts",
+    "generate:memecoin": "tsx scripts/generate-memecoin.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "build": "tsc -p tsconfig.json"

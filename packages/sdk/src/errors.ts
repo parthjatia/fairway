@@ -21,6 +21,8 @@ export const FAIRWAY_ERRORS = [
   ['OracleStale', 'Oracle price is stale'],
   ['OracleLowConfidence', 'Oracle confidence interval is too wide'],
   ['InvalidMarkoutParams', 'Invalid markout parameters'],
+  ['InvalidProtocolFee', 'Protocol fee must be at most 50% (5000 bps)'],
+  ['TreasuryBelowFloor', 'Withdrawal would take the treasury below its rent-exempt minimum'],
 ] as const;
 
 export type FairwayErrorName = (typeof FAIRWAY_ERRORS)[number][0];

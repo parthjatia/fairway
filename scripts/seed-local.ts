@@ -9,19 +9,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, sendAndConfirmTransaction, Transaction, type TransactionInstruction } from '@solana/web3.js';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, sendAndConfirmTransaction, Transaction, type TransactionInstruction } from '@solana/web3.js';
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo } from '@solana/spl-token';
 import {
   addLiquidityIx,
   createPoolIx,
-  defaultMarkoutParams,
   initializeConfigIx,
   poolAddresses,
   PYTH_SOL_USD_FEED_ID,
   PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET,
   setScoresBatchIx,
   TIER,
-  updateConfigIx,
+  setPoolOracleIx,
+  treasuryPda,
 } from '@fairway/sdk';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,6 +43,18 @@ async function airdrop(k: Keypair, sol: number) {
 }
 const send = (ixs: TransactionInstruction[], signers: Keypair[]) => sendAndConfirmTransaction(conn, new Transaction().add(...ixs), signers, { commitment: 'confirmed' });
 
+async function createPoolAndSeed(baseMint: PublicKey, quote: PublicKey, baseAmount: bigint, quoteAmount: bigint) {
+  const admin = key('deployer');
+  const aBase = await getOrCreateAssociatedTokenAccount(conn, admin, baseMint, admin.publicKey);
+  const aQuote = await getOrCreateAssociatedTokenAccount(conn, admin, quote, admin.publicKey);
+  await mintTo(conn, admin, baseMint, aBase.address, admin, baseAmount);
+  await mintTo(conn, admin, quote, aQuote.address, admin, quoteAmount);
+  await send([createPoolIx({ payer: admin.publicKey, baseMint, quoteMint: quote })], [admin]);
+  await getOrCreateAssociatedTokenAccount(conn, admin, poolAddresses(baseMint, quote).lpMint, admin.publicKey);
+  await send([addLiquidityIx({ owner: admin.publicKey, baseMint, quoteMint: quote, maxBase: baseAmount, maxQuote: quoteAmount, minLp: 0n })], [admin]);
+  console.log(`seeded pool ${poolAddresses(baseMint, quote).pool.toBase58()} (base ${baseMint.toBase58()})`);
+}
+
 async function main() {
   const admin = key('deployer');
   const authority = key('score-authority');
@@ -59,15 +71,23 @@ async function main() {
   await mintTo(conn, admin, quote, adminQuote.address, admin, 1_500_000n * 10n ** 6n);
 
   await send([initializeConfigIx({ admin: admin.publicKey, scoreAuthority: authority.publicKey, feeBps: [5, 30, 80], scoreTtlSlots: 2_000_000 })], [admin]).catch((e) => console.warn('config:', String(e).split('\n')[0]));
-  // onchain markout scoring: Pyth SOL/USD (override with PYTH_PRICE_ACCOUNT; on a local validator clone it from devnet,
-  // see docs/SETUP_REMAINING.md). TODO(human): verify the account on devnet before relying on it.
+  await send([createPoolIx({ payer: admin.publicKey, baseMint: base, quoteMint: quote })], [admin]);
+  // Onchain markout scoring is per pool: point this pool at Pyth SOL/USD (override with PYTH_PRICE_ACCOUNT / PYTH_FEED_ID; on a
+  // local validator clone the account from devnet, see docs/SETUP_REMAINING.md). TODO(human): verify the account on devnet first.
+  // A pool without an oracle still trades; it just does not build onchain evidence.
   const pyth = new PublicKey(process.env.PYTH_PRICE_ACCOUNT || PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET);
   const feedId = Uint8Array.from(Buffer.from(process.env.PYTH_FEED_ID || PYTH_SOL_USD_FEED_ID, 'hex'));
-  const markout = defaultMarkoutParams({ pythPriceAccount: pyth, pythFeedId: feedId });
-  await send([updateConfigIx({ admin: admin.publicKey, update: { markout } })], [admin]).catch((e) => console.warn('markout config:', String(e).split('\n')[0]));
-  await send([createPoolIx({ payer: admin.publicKey, baseMint: base, quoteMint: quote })], [admin]);
+  await send([setPoolOracleIx({ admin: admin.publicKey, baseMint: base, quoteMint: quote, priceAccount: pyth, feedId })], [admin]);
+  // The protocol treasury sponsors the rent of each new wallet's score account while it holds SOL (the trader pays otherwise).
+  const treasury = treasuryPda()[0];
+  await send([SystemProgram.transfer({ fromPubkey: admin.publicKey, toPubkey: treasury, lamports: Math.round(0.05 * LAMPORTS_PER_SOL) })], [admin]);
+  console.log(`treasury ${treasury.toBase58()} funded with 0.05 SOL (sponsors ~20 score accounts)`);
   await getOrCreateAssociatedTokenAccount(conn, admin, poolAddresses(base, quote).lpMint, admin.publicKey); // LP token account must exist
   await send([addLiquidityIx({ owner: admin.publicKey, baseMint: base, quoteMint: quote, maxBase: 10_000n * 10n ** 9n, maxQuote: 1_500_000n * 10n ** 6n, minLp: 0n })], [admin]);
+  // Second pool: BONK-test / USDC (a TEST mint, 5 decimals, $0.00002). No Pyth feed exists for a test mint, so this pool has no
+  // oracle: it trades and charges tiers from keeper scores, but builds no onchain evidence.
+  const bonk = await createMint(conn, admin, admin.publicKey, null, 5);
+  await createPoolAndSeed(bonk, quote, 50_000_000_000n * 10n ** 5n, 1_000_000n * 10n ** 6n);
   await send(
     [setScoresBatchIx({ authority: authority.publicKey, entries: [
       { trader: rita.publicKey, tier: TIER.RETAIL, scoreBps: 0, trades: 40 },

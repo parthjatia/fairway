@@ -5,6 +5,8 @@ const enc = (s: string) => new TextEncoder().encode(s);
 const find = (seeds: Uint8Array[], programId: PublicKey) => PublicKey.findProgramAddressSync(seeds, programId);
 
 export const configPda = (programId = PROGRAM_ID) => find([enc(SEEDS.config)], programId);
+/** Protocol treasury: a system-owned PDA that sponsors score-account rent and owns the claimed protocol-fee token accounts. */
+export const treasuryPda = (programId = PROGRAM_ID) => find([enc(SEEDS.treasury)], programId);
 export const poolPda = (baseMint: PublicKey, quoteMint: PublicKey, programId = PROGRAM_ID) =>
   find([enc(SEEDS.pool), baseMint.toBytes(), quoteMint.toBytes()], programId);
 export const vaultPda = (pool: PublicKey, mint: PublicKey, programId = PROGRAM_ID) => find([enc(SEEDS.vault), pool.toBytes(), mint.toBytes()], programId);

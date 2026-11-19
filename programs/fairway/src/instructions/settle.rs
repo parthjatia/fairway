@@ -1,12 +1,12 @@
 //! `settle_markout`: permissionless crank that turns a wallet's pending trades into a trustless onchain score.
 use anchor_lang::prelude::*;
-use fairway_math::markout::{accumulate, confidence_ok, markout_bps, onchain_tier, pyth_to_price_e6, score_bps, Sums};
+use fairway_math::markout::{accumulate, confidence_ok, markout_bps, onchain_tier, pyth_to_price_scaled, score_bps, Sums};
 
 use crate::{
     constants::*,
     error::FairwayError,
     events::MarkoutSettled,
-    state::{Config, PendingTrade, TraderScore},
+    state::{Config, PendingTrade, Pool, TraderScore},
 };
 
 #[derive(Accounts)]
@@ -22,7 +22,10 @@ pub struct SettleMarkout<'info> {
         constraint = score.trader == trader @ FairwayError::ScoreAccountMismatch
     )]
     pub score: Box<Account<'info, TraderScore>>,
-    /// CHECK: validated in `read_pyth`: address = config, owner = Pyth receiver, discriminator, feed id,
+    /// The pool whose pending trades are settled, and whose oracle is used.
+    #[account(seeds = [POOL_SEED, pool.base_mint.as_ref(), pool.quote_mint.as_ref()], bump = pool.bump)]
+    pub pool: Box<Account<'info, Pool>>,
+    /// CHECK: validated in `read_pyth`: address = the pool's oracle, owner = Pyth receiver, discriminator, feed id,
     /// full verification, staleness and confidence.
     pub pyth_price: UncheckedAccount<'info>,
 }
@@ -66,18 +69,18 @@ pub fn parse_price_update_v2(data: &[u8]) -> Option<PythPrice> {
 /// Max seconds an oracle publish_time may be ahead of the validator clock.
 const MAX_FUTURE_SKEW_SECS: i64 = 10;
 
-fn read_pyth(acc: &AccountInfo, cfg: &Config, now_ts: i64) -> Result<(u64, u64)> {
+fn read_pyth(acc: &AccountInfo, cfg: &Config, pool: &Pool, now_ts: i64) -> Result<(u64, u64)> {
     let m = &cfg.markout;
-    require!(m.pyth_price_account != Pubkey::default(), FairwayError::OracleNotConfigured);
-    require_keys_eq!(acc.key(), m.pyth_price_account, FairwayError::OracleMismatch);
+    require!(pool.oracle_price_account != Pubkey::default(), FairwayError::OracleNotConfigured);
+    require_keys_eq!(acc.key(), pool.oracle_price_account, FairwayError::OracleMismatch);
     require_keys_eq!(*acc.owner, PYTH_RECEIVER_PROGRAM, FairwayError::OracleInvalid);
     let data = acc.try_borrow_data()?;
     let p = parse_price_update_v2(&data).ok_or(error!(FairwayError::OracleInvalid))?;
-    require!(p.feed_id == m.pyth_feed_id, FairwayError::OracleInvalid);
+    require!(p.feed_id == pool.oracle_feed_id, FairwayError::OracleInvalid);
     let age = now_ts - p.publish_time;
     require!(age >= -MAX_FUTURE_SKEW_SECS && age <= m.pyth_max_staleness_secs as i64, FairwayError::OracleStale);
     require!(confidence_ok(p.price, p.conf, m.pyth_max_conf_bps), FairwayError::OracleLowConfidence);
-    let mid = pyth_to_price_e6(p.price, p.expo).map_err(|_| error!(FairwayError::OracleInvalid))?;
+    let mid = pyth_to_price_scaled(p.price, p.expo).map_err(|_| error!(FairwayError::OracleInvalid))?;
     Ok((mid, p.posted_slot))
 }
 
@@ -86,6 +89,8 @@ pub fn handle_settle_markout(ctx: Context<SettleMarkout>, trader: Pubkey) -> Res
     let slot = clock.slot;
     let cfg = &ctx.accounts.config;
     let m = cfg.markout;
+    let pool = &ctx.accounts.pool;
+    let pool_key = pool.key();
     let s = &mut ctx.accounts.score;
 
     // 1) drop trades nobody settled in time; find the ones whose horizon has passed
@@ -96,7 +101,7 @@ pub fn handle_settle_markout(ctx: Context<SettleMarkout>, trader: Pubkey) -> Res
         if age > m.max_settle_slots {
             *p = PendingTrade::default();
             expired += 1;
-        } else if age >= m.markout_slots {
+        } else if age >= m.markout_slots && p.pool == pool_key {
             due = true;
         }
     }
@@ -110,12 +115,13 @@ pub fn handle_settle_markout(ctx: Context<SettleMarkout>, trader: Pubkey) -> Res
     }
 
     // 2) one validated oracle mid for all due trades. The price must have been posted after each trade's horizon.
-    let (mid, posted_slot) = read_pyth(&ctx.accounts.pyth_price.to_account_info(), cfg, clock.unix_timestamp)?;
+    let (mid, posted_slot) = read_pyth(&ctx.accounts.pyth_price.to_account_info(), cfg, pool, clock.unix_timestamp)?;
     let mut sums = Sums { sum_notional: s.sum_notional, sum_weighted_markout: s.sum_weighted_markout, trades: s.trade_count };
     let mut settled = 0u8;
     for p in s.pending.iter_mut().filter(|p| p.notional != 0) {
         let horizon = p.slot.saturating_add(m.markout_slots);
-        if slot < horizon || posted_slot < horizon {
+        // only this pool's trades are marked against this pool's oracle
+        if p.pool != pool_key || slot < horizon || posted_slot < horizon {
             continue;
         }
         let mk = markout_bps(p.side, p.exec_price, mid).map_err(|_| error!(FairwayError::OracleInvalid))?;

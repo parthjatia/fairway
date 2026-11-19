@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { useWalletView } from '@/lib/client/use-wallet-view';
-import { Card, Empty, PageHeader, ScoreSourceBadge, Stat, TierBadge, TIER_FEE_DEFAULT } from './ui';
+import { Card, Empty, FairFlowBadge, PageHeader, ScoreSourceBadge, Stat, TierBadge, TIER_FEE_DEFAULT } from './ui';
 import { Histogram, MarkoutBars, ScoreTimeline } from './charts';
 import { WalletSearch } from './wallet-search';
 import { bps, num, short, signed, time, usd } from '@/lib/format';
@@ -43,6 +43,7 @@ export function WalletDetail({ address }: { address: string }) {
           <TierBadge tier={data.tier} size="lg" />
           <span>pays {TIER_FEE_DEFAULT[data.tier]} bps</span>
           <ScoreSourceBadge source={data.scoreSource} />
+          {data.onchain.fairFlow && <FairFlowBadge minTrades={data.onchain.fairFlowMinTrades} />}
           {data.label && <span className="text-muted">· {data.label}</span>}
           {data.agentClass && <span className="text-muted">· fixture class: {data.agentClass}</span>}
         </div>
@@ -134,7 +135,7 @@ function OnchainCard({ data }: { data: NonNullable<ReturnType<typeof useWalletVi
     <Card
       title="Onchain verified score"
       subtitle="Computed by the Fairway program from this wallet's Fairway trades, marked out against Pyth. No oracle operator involved."
-      action={<ScoreSourceBadge source={data.scoreSource} />}
+      action={<span className="flex items-center gap-2">{o.fairFlow && <FairFlowBadge minTrades={o.fairFlowMinTrades} />}<ScoreSourceBadge source={data.scoreSource} /></span>}
     >
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Settled trades" value={o.tradeCount} hint={`needs ${o.minTrades} · horizon ${o.markoutSlots} slots`} />
@@ -157,6 +158,29 @@ function OnchainCard({ data }: { data: NonNullable<ReturnType<typeof useWalletVi
           <div className={`h-full rounded-full ${o.verified ? 'bg-retail' : 'bg-muted'}`} style={{ width: `${pct}%` }} />
         </div>
       </div>
+      {o.perPool.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-[13px] tnum">
+            <thead className="text-[12px] uppercase tracking-wide text-muted">
+              <tr><th className="py-2 pr-4">Where the evidence comes from</th><th className="pr-4">Settled trades</th><th className="pr-4">Notional</th><th className="pr-4">Score</th><th>Tier on this pool alone</th></tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {o.perPool.map((p) => (
+                <tr key={p.key}>
+                  <td className="py-2 pr-4">{p.label}</td>
+                  <td className="pr-4">{p.trades}</td>
+                  <td className="pr-4">{usd(p.notional)}</td>
+                  <td className="pr-4">{signed(p.scoreBps)} bps</td>
+                  <td><TierBadge tier={p.tier} />{p.tradesToToxic != null && <span className="ml-2 text-[12px] text-muted">TOXIC after {p.tradesToToxic} trades</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="mt-3 text-[12px] leading-relaxed text-muted">
+        Verified fair flow = onchain RETAIL tier (score ≤ 3 bps, ≥ 5 trades, ≥ 3 days) with at least {o.fairFlowMinTrades} settled trades. It is earned from measured behaviour, so a market-making or hedging bot with no informed edge can have it too.
+      </p>
     </Card>
   );
 }

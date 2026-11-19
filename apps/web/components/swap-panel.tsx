@@ -7,40 +7,47 @@ import type { Tier } from '@fairway/scoring';
 import { useAppState } from '@/lib/client/state';
 import { useWalletView } from '@/lib/client/use-wallet-view';
 import { bps, num, short, signed, usd } from '@/lib/format';
-import { Card, Empty, ScoreSourceBadge, TierBadge, TIER_FEE_DEFAULT } from './ui';
+import { Card, Empty, FairFlowBadge, ScoreSourceBadge, TierBadge, TIER_FEE_DEFAULT } from './ui';
 import { MarkoutBars } from './charts';
+import { TwoWallets } from './two-wallets';
 
-const DEC = { SOL: 9, USDC: 6 } as const;
 const toRaw = (v: number, d: number) => BigInt(Math.floor(v * 10 ** d));
 const fromRaw = (v: bigint, d: number) => Number(v) / 10 ** d;
 
 export function SwapPanel() {
-  const { persona, pool, applySwap, resetPool, trades, initialPool } = useAppState();
+  const { persona, pool, applySwap, resetPool, trades, initialPool, pairs, pair, setPairKey } = useAppState();
   const { data: wallet, loading, error } = useWalletView(persona.address);
-  const [sellToken, setSellToken] = useState<'USDC' | 'SOL'>('USDC');
+  const [sellBase, setSellBase] = useState(false);
+  const baseSym = pair.baseSymbol;
+  const baseDec = pair.baseDecimals;
+  const sellToken = sellBase ? baseSym : 'USDC';
+  const buyToken = sellBase ? 'USDC' : baseSym;
+  const decOf = (tok: string) => (tok === 'USDC' ? 6 : baseDec);
+  // display precision: SOL shows 4 dp, a memecoin quoted in millions shows none
+  const baseDp = pair.key === 'bonk' ? 0 : 4;
+  const dpOf = (tok: string) => (tok === 'USDC' ? 2 : baseDp);
   const [amount, setAmount] = useState('250');
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState<string | null>(null);
 
   const tier: Tier = wallet?.tier ?? 'STANDARD';
   const feeBps = TIER_FEE_DEFAULT[tier];
-  const buyToken = sellToken === 'USDC' ? 'SOL' : 'USDC';
   const price = pool.quote / pool.base;
 
   const q = useMemo(() => {
     const v = Number(amount);
     if (!amount || !Number.isFinite(v) || v <= 0) return { error: null as string | null, res: null };
-    const aToB = sellToken === 'SOL';
-    const rin = aToB ? toRaw(pool.base, DEC.SOL) : toRaw(pool.quote, DEC.USDC);
-    const rout = aToB ? toRaw(pool.quote, DEC.USDC) : toRaw(pool.base, DEC.SOL);
-    const amtRaw = toRaw(v, DEC[sellToken]);
+    const aToB = sellBase;
+    const rin = aToB ? toRaw(pool.base, baseDec) : toRaw(pool.quote, 6);
+    const rout = aToB ? toRaw(pool.quote, 6) : toRaw(pool.base, baseDec);
+    const amtRaw = toRaw(v, decOf(sellToken));
     try {
       const calc = (fee: number) => swapQuote(amtRaw, rin, rout, fee);
       const mine = calc(feeBps);
       const std = calc(TIER_FEE_DEFAULT.STANDARD);
-      const out = fromRaw(mine.amountOut, DEC[buyToken]);
-      const outStd = fromRaw(std.amountOut, DEC[buyToken]);
-      const feeTok = fromRaw(mine.fee, DEC[sellToken]);
+      const out = fromRaw(mine.amountOut, decOf(buyToken));
+      const outStd = fromRaw(std.amountOut, decOf(buyToken));
+      const feeTok = fromRaw(mine.fee, decOf(sellToken));
       const feeUsd = sellToken === 'USDC' ? feeTok : feeTok * price;
       const execPrice = sellToken === 'USDC' ? v / out : out / v;
       const impactBps = (Math.abs(execPrice - price) / price) * 10_000 - feeBps;
@@ -50,7 +57,7 @@ export function SwapPanel() {
       const m = e instanceof MathError ? e.message : 'Invalid amount';
       return { error: m === 'InsufficientLiquidity' ? 'Not enough liquidity in the pool' : m === 'InsufficientOutput' ? 'Amount too small' : m, res: null };
     }
-  }, [amount, sellToken, buyToken, pool, feeBps, price]);
+  }, [amount, sellBase, sellToken, buyToken, baseDec, pool, feeBps, price]);
 
   const execute = () => {
     if (!q.res) return;
@@ -58,7 +65,7 @@ export function SwapPanel() {
     const next = q.res.aToB ? { base: pool.base + v, quote: pool.quote - q.res.out } : { base: pool.base - q.res.out, quote: pool.quote + v };
     applySwap(next, { persona: persona.name, side: q.res.aToB ? 'sell' : 'buy', amountIn: v, amountOut: q.res.out, feeBps, tier });
     setConfirming(false);
-    setDone(`Swapped ${num(v, sellToken === 'SOL' ? 4 : 2)} ${sellToken} → ${num(q.res.out, buyToken === 'SOL' ? 4 : 2)} ${buyToken} at ${feeBps} bps (${tier}).`);
+    setDone(`Swapped ${num(v, dpOf(sellToken))} ${sellToken} → ${num(q.res.out, dpOf(buyToken))} ${buyToken} at ${feeBps} bps (${tier}).`);
     setTimeout(() => setDone(null), 4000);
   };
 
@@ -72,8 +79,23 @@ export function SwapPanel() {
       <div className="space-y-4">
         <Card>
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm font-semibold text-ink">Swap</span>
-            <span className="text-[12px] text-muted tnum">1 SOL = {usd(price, 2)}</span>
+            <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+              Swap
+              <span role="tablist" aria-label="Pair" className="flex rounded-full border border-line bg-surface-2 p-0.5 text-[12px] font-medium">
+                {pairs.map((p) => (
+                  <button
+                    key={p.key}
+                    role="tab"
+                    aria-selected={p.key === pair.key}
+                    onClick={() => { setPairKey(p.key); setSellBase(false); setAmount(p.key === 'bonk' ? '100' : '250'); }}
+                    className={`rounded-full px-2.5 py-1 ${p.key === pair.key ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink'}`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </span>
+            </span>
+            <span className="text-[12px] text-muted tnum">1 {baseSym} = {usd(price, pair.key === 'bonk' ? 8 : 2)}</span>
           </div>
           <TokenBox label="You pay" token={sellToken}>
             <input
@@ -87,8 +109,8 @@ export function SwapPanel() {
           <div className="relative z-10 -my-3 flex justify-center">
             <button
               onClick={() => {
-                setSellToken(buyToken);
-                setAmount(q.res ? String(Number(q.res.out.toFixed(buyToken === 'SOL' ? 4 : 2))) : amount);
+                setSellBase((b) => !b);
+                setAmount(q.res ? String(Number(q.res.out.toFixed(dpOf(buyToken)))) : amount);
               }}
               aria-label="Switch direction"
               className="rounded-xl border border-line bg-surface p-2 text-ink-2 hover:text-ink"
@@ -97,7 +119,7 @@ export function SwapPanel() {
             </button>
           </div>
           <TokenBox label="You receive" token={buyToken}>
-            <div className="text-3xl font-semibold tracking-tight text-ink tnum">{q.res ? num(q.res.out, buyToken === 'SOL' ? 4 : 2) : '—'}</div>
+            <div className="text-3xl font-semibold tracking-tight text-ink tnum">{q.res ? num(q.res.out, dpOf(buyToken)) : '—'}</div>
           </TokenBox>
 
           <div className="mt-4 space-y-2 rounded-xl bg-surface-2 p-3 text-[13px]">
@@ -146,8 +168,8 @@ export function SwapPanel() {
         >
           <div className="mb-3 grid grid-cols-2 gap-2 text-[12px] text-ink-2 tnum">
             <div>
-              SOL reserve <span className="font-semibold text-ink">{num(pool.base, 2)}</span>
-              {pool.base !== initialPool.base && <span className="ml-1 text-muted">({signed(pool.base - initialPool.base, 2)})</span>}
+              {baseSym} reserve <span className="font-semibold text-ink">{num(pool.base, pair.key === 'bonk' ? 0 : 2)}</span>
+              {pool.base !== initialPool.base && <span className="ml-1 text-muted">({signed(pool.base - initialPool.base, pair.key === 'bonk' ? 0 : 2)})</span>}
             </div>
             <div>
               USDC reserve <span className="font-semibold text-ink">{num(pool.quote, 0)}</span>
@@ -160,7 +182,7 @@ export function SwapPanel() {
               {trades.map((t) => (
                 <li key={t.id} className="flex items-center justify-between py-2">
                   <span className="text-ink-2">
-                    <span className="font-medium text-ink">{t.persona}</span> {t.side === 'buy' ? 'bought' : 'sold'} {t.side === 'buy' ? `${num(t.amountOut, 3)} SOL` : `${num(t.amountIn, 3)} SOL`}
+                    <span className="font-medium text-ink">{t.persona}</span> {t.side === 'buy' ? 'bought' : 'sold'} {t.side === 'buy' ? `${num(t.amountOut, baseDp)} ${baseSym}` : `${num(t.amountIn, baseDp)} ${baseSym}`}
                   </span>
                   <span className="flex items-center gap-2">
                     <TierBadge tier={t.tier as Tier} />
@@ -197,7 +219,7 @@ export function SwapPanel() {
           {loading && !wallet && <div className="h-40 animate-pulse rounded-xl bg-surface-2" />}
           {wallet && (
             <>
-              <div className="mb-2"><ScoreSourceBadge source={wallet.scoreSource} /></div>
+              <div className="mb-2 flex flex-wrap items-center gap-2"><ScoreSourceBadge source={wallet.scoreSource} />{wallet.onchain.fairFlow && <FairFlowBadge minTrades={wallet.onchain.fairFlowMinTrades} />}</div>
               <p className="text-[14px] leading-relaxed text-ink-2">{wallet.explanation}</p>
               {wallet.known && wallet.score ? (
                 <>
@@ -234,9 +256,13 @@ export function SwapPanel() {
             </>
           )}
         </Card>
-        <Card title="Same trade, every tier" subtitle={`What ${amount || 0} ${sellToken} gets you right now, by tier.`}>
-          <TierCompare amount={Number(amount)} sellToken={sellToken} pool={pool} current={tier} />
+        <Card title="Same trade, every tier" subtitle={`What ${amount || 0} ${sellToken} gets you right now on ${pair.label}, by tier.`}>
+          <TierCompare amount={Number(amount)} sellBase={sellBase} baseSym={baseSym} baseDec={baseDec} baseDp={baseDp} pool={pool} current={tier} />
         </Card>
+      </div>
+
+      <div className="lg:col-span-2">
+        <TwoWallets amount={Number(amount)} sellBase={sellBase} />
       </div>
 
       {confirming && q.res && (
@@ -253,7 +279,7 @@ export function SwapPanel() {
                 {amount} {sellToken}
               </Row>
               <Row k="Receive (min)">
-                {num(q.res.out, buyToken === 'SOL' ? 4 : 2)} {buyToken}
+                {num(q.res.out, dpOf(buyToken))} {buyToken}
               </Row>
               <Row k="Tier">
                 <TierBadge tier={tier} />
@@ -305,15 +331,15 @@ const Mini = ({ k, v }: { k: string; v: string }) => (
   </div>
 );
 
-function TierCompare({ amount, sellToken, pool, current }: { amount: number; sellToken: 'USDC' | 'SOL'; pool: { base: number; quote: number }; current: Tier }) {
+function TierCompare({ amount, sellBase, baseSym, baseDec, baseDp, pool, current }: { amount: number; sellBase: boolean; baseSym: string; baseDec: number; baseDp: number; pool: { base: number; quote: number }; current: Tier }) {
   if (!(amount > 0)) return <Empty>Enter an amount to compare.</Empty>;
-  const aToB = sellToken === 'SOL';
-  const rin = aToB ? toRaw(pool.base, 9) : toRaw(pool.quote, 6);
-  const rout = aToB ? toRaw(pool.quote, 6) : toRaw(pool.base, 9);
-  const outDec = aToB ? 6 : 9;
+  const aToB = sellBase;
+  const rin = aToB ? toRaw(pool.base, baseDec) : toRaw(pool.quote, 6);
+  const rout = aToB ? toRaw(pool.quote, 6) : toRaw(pool.base, baseDec);
+  const outDec = aToB ? 6 : baseDec;
   const rows = (['RETAIL', 'STANDARD', 'TOXIC'] as Tier[]).map((t) => {
     try {
-      const r = swapQuote(toRaw(amount, aToB ? 9 : 6), rin, rout, TIER_FEE_DEFAULT[t]);
+      const r = swapQuote(toRaw(amount, aToB ? baseDec : 6), rin, rout, TIER_FEE_DEFAULT[t]);
       return { t, out: fromRaw(r.amountOut, outDec) };
     } catch {
       return { t, out: NaN };
@@ -337,9 +363,9 @@ function TierCompare({ amount, sellToken, pool, current }: { amount: number; sel
               <TierBadge tier={r.t} />
             </td>
             <td className="py-2 text-ink-2">{TIER_FEE_DEFAULT[r.t]} bps</td>
-            <td className="py-2 text-right text-ink">{Number.isFinite(r.out) ? num(r.out, aToB ? 2 : 4) : '—'}</td>
+            <td className="py-2 text-right text-ink">{Number.isFinite(r.out) ? num(r.out, aToB ? 2 : baseDp) : '—'}</td>
             <td className={`py-2 text-right ${r.out - std > 0 ? 'text-good' : r.out - std < 0 ? 'text-bad' : 'text-muted'}`}>
-              {Number.isFinite(r.out) ? `${signed(r.out - std, aToB ? 2 : 5)} ${aToB ? 'USDC' : 'SOL'}` : '—'}
+              {Number.isFinite(r.out) ? `${signed(r.out - std, aToB ? 2 : baseDp)} ${aToB ? 'USDC' : baseSym}` : '—'}
             </td>
           </tr>
         ))}

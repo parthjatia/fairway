@@ -52,9 +52,26 @@ pub mod fairway {
         instructions::score::handle_set_scores_batch(ctx, entries)
     }
 
+    pub fn set_pool_oracle(ctx: Context<SetPoolOracle>, price_account: Pubkey, feed_id: [u8; 32]) -> Result<()> {
+        instructions::config::handle_set_pool_oracle(ctx, price_account, feed_id)
+    }
+
     /// Permissionless: score the signer-recorded pending trades of `trader` against the Pyth mid.
     pub fn settle_markout(ctx: Context<SettleMarkout>, trader: Pubkey) -> Result<()> {
         instructions::settle::handle_settle_markout(ctx, trader)
+    }
+
+    /// Permissionless: move the protocol's accrued share of swap fees into the treasury's token accounts.
+    pub fn claim_protocol_fees(ctx: Context<ClaimProtocolFees>) -> Result<()> {
+        instructions::treasury::handle_claim_protocol_fees(ctx)
+    }
+
+    pub fn treasury_transfer_tokens(ctx: Context<TreasuryTransferTokens>, amount: u64) -> Result<()> {
+        instructions::treasury::handle_treasury_transfer_tokens(ctx, amount)
+    }
+
+    pub fn treasury_withdraw_sol(ctx: Context<TreasuryWithdrawSol>, lamports: u64) -> Result<()> {
+        instructions::treasury::handle_treasury_withdraw_sol(ctx, lamports)
     }
 
     pub fn close_score(ctx: Context<CloseScore>) -> Result<()> {

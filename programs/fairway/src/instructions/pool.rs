@@ -50,6 +50,14 @@ pub fn handle_create_pool(ctx: Context<CreatePool>) -> Result<()> {
     p.base_vault_bump = ctx.bumps.base_vault;
     p.quote_vault_bump = ctx.bumps.quote_vault;
     p.lp_mint_bump = ctx.bumps.lp_mint;
+    p.protocol_owed_base = 0;
+    p.protocol_owed_quote = 0;
+    p.protocol_earned_base = 0;
+    p.protocol_earned_quote = 0;
+    p.sponsored_accounts = 0;
+    p.sponsored_lamports = 0;
+    p.oracle_price_account = Pubkey::default();
+    p.oracle_feed_id = [0u8; 32];
     Ok(())
 }
 
@@ -90,7 +98,8 @@ pub fn handle_add_liquidity(ctx: Context<Liquidity>, max_base: u64, max_quote: u
         let (lp, total) = initial_lp(max_base, max_quote).m()?;
         (lp, max_base, max_quote, total)
     } else {
-        let d = deposit(max_base, max_quote, a.base_vault.amount, a.quote_vault.amount, a.pool.lp_supply).m()?;
+        let (rb, rq) = a.pool.lp_reserves(a.base_vault.amount, a.quote_vault.amount).ok_or(FairwayError::Overflow)?;
+        let d = deposit(max_base, max_quote, rb, rq, a.pool.lp_supply).m()?;
         (d.lp, d.used_a, d.used_b, a.pool.lp_supply.checked_add(d.lp).ok_or(FairwayError::Overflow)?)
     };
     require!(lp_out >= min_lp, FairwayError::SlippageExceeded);
@@ -119,7 +128,8 @@ pub fn handle_add_liquidity(ctx: Context<Liquidity>, max_base: u64, max_quote: u
 
 pub fn handle_remove_liquidity(ctx: Context<Liquidity>, lp_amount: u64, min_base: u64, min_quote: u64) -> Result<()> {
     let a = &ctx.accounts;
-    let (out_base, out_quote) = withdraw(lp_amount, a.base_vault.amount, a.quote_vault.amount, a.pool.lp_supply).m()?;
+    let (rb, rq) = a.pool.lp_reserves(a.base_vault.amount, a.quote_vault.amount).ok_or(FairwayError::Overflow)?;
+    let (out_base, out_quote) = withdraw(lp_amount, rb, rq, a.pool.lp_supply).m()?;
     require!(out_base >= min_base && out_quote >= min_quote, FairwayError::SlippageExceeded);
     let tp = a.token_program.key();
     token::burn(

@@ -44,6 +44,10 @@ pub enum FairwayError {
     OracleLowConfidence,
     #[msg("Invalid markout parameters")]
     InvalidMarkoutParams,
+    #[msg("Protocol fee must be at most 50% (5000 bps)")]
+    InvalidProtocolFee,
+    #[msg("Withdrawal would take the treasury below its rent-exempt minimum")]
+    TreasuryBelowFloor,
 }
 
 impl From<fairway_math::MathError> for FairwayError {

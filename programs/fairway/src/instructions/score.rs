@@ -61,7 +61,7 @@ pub fn handle_set_scores_batch<'info>(ctx: Context<'info, SetScoresBatch<'info>>
         require_keys_eq!(acc.key(), pda, FairwayError::ScoreAccountMismatch);
         require!(acc.is_writable, FairwayError::BadBatch);
         let authority = ctx.accounts.authority.to_account_info();
-        ensure_score_account(acc, &e.trader, bump, &authority)?;
+        ensure_score_account(acc, &e.trader, bump, &authority, None)?;
         // keep the program-written onchain fields; only the bootstrap fields come from the keeper
         let mut s = load_score(acc).unwrap_or_else(|| TraderScore::new(e.trader, bump));
         s.tier = e.tier;
@@ -74,24 +74,53 @@ pub fn handle_set_scores_batch<'info>(ctx: Context<'info, SetScoresBatch<'info>>
     Ok(())
 }
 
-/// Create the score PDA (funded by `payer`) if it does not exist yet; otherwise require it to be program-owned.
-pub(crate) fn ensure_score_account<'info>(acc: &AccountInfo<'info>, trader: &Pubkey, bump: u8, payer: &AccountInfo<'info>) -> Result<()> {
+/// Create the score PDA if it does not exist yet; otherwise require it to be program-owned.
+///
+/// Rent: if a `sponsor` (the protocol treasury, a program-owned PDA) can pay the rent and stay rent-exempt itself, it
+/// pays (lamports moved directly) and the account is marked `sponsored`. Otherwise `payer` (the trader / keeper) pays.
+/// Returns the lamports the sponsor paid (0 = not sponsored, or the account already existed).
+pub(crate) fn ensure_score_account<'info>(
+    acc: &AccountInfo<'info>,
+    trader: &Pubkey,
+    bump: u8,
+    payer: &AccountInfo<'info>,
+    sponsor: Option<(&AccountInfo<'info>, u8)>,
+) -> Result<u64> {
+    let mut sponsored_lamports = 0u64;
     if acc.owner == &system_program::ID && acc.data_len() == 0 {
         let space = 8 + TraderScore::INIT_SPACE;
-        let lamports = Rent::get()?.minimum_balance(space);
+        let rent = Rent::get()?;
+        let lamports = rent.minimum_balance(space);
         let seeds: &[&[u8]] = &[SCORE_SEED, trader.as_ref(), &[bump]];
-        let needed = lamports.saturating_sub(acc.lamports());
+        let mut needed = lamports.saturating_sub(acc.lamports());
+        if needed > 0 {
+            if let Some((t, t_bump)) = sponsor {
+                // the treasury is a system-owned PDA: it pays through a signed system transfer, and must stay rent-exempt
+                let floor = rent.minimum_balance(0);
+                if t.owner == &system_program::ID && t.data_len() == 0 && t.lamports() >= floor.saturating_add(needed) {
+                    let t_seeds: &[&[u8]] = &[TREASURY_SEED, &[t_bump]];
+                    system_program::transfer(
+                        CpiContext::new_with_signer(system_program::ID, system_program::Transfer { from: t.clone(), to: acc.clone() }, &[t_seeds]),
+                        needed,
+                    )?;
+                    sponsored_lamports = needed;
+                    needed = 0;
+                }
+            }
+        }
         if needed > 0 {
             system_program::transfer(CpiContext::new(system_program::ID, system_program::Transfer { from: payer.clone(), to: acc.clone() }), needed)?;
         }
         system_program::allocate(CpiContext::new_with_signer(system_program::ID, system_program::Allocate { account_to_allocate: acc.clone() }, &[seeds]), space as u64)?;
         system_program::assign(CpiContext::new_with_signer(system_program::ID, system_program::Assign { account_to_assign: acc.clone() }, &[seeds]), &crate::ID)?;
         // fresh zeroed data is not a valid TraderScore yet: write neutral defaults
-        store_score(acc, &TraderScore::new(*trader, bump))?;
+        let mut fresh = TraderScore::new(*trader, bump);
+        fresh.sponsored = sponsored_lamports > 0;
+        store_score(acc, &fresh)?;
     } else {
         require!(acc.owner == &crate::ID, FairwayError::ScoreAccountMismatch);
     }
-    Ok(())
+    Ok(sponsored_lamports)
 }
 
 /// Read a program-owned `TraderScore`, if the account holds one.
@@ -116,6 +145,8 @@ pub struct CloseScore<'info> {
     pub closer: Signer<'info>,
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, Config>,
+    #[account(seeds = [TREASURY_SEED], bump)]
+    pub treasury: SystemAccount<'info>,
     #[account(
         mut, seeds = [SCORE_SEED, score.trader.as_ref()], bump = score.bump,
         constraint = closer.key() == score.trader
@@ -124,8 +155,8 @@ pub struct CloseScore<'info> {
         close = rent_receiver
     )]
     pub score: Account<'info, TraderScore>,
-    /// CHECK: rent always goes back to the trader (since M13 the trader usually paid it on their first swap)
-    #[account(mut, address = score.trader)]
+    /// CHECK: rent goes back to whoever paid it: the treasury if it sponsored the account, else the trader
+    #[account(mut, constraint = rent_receiver.key() == if score.sponsored { treasury.key() } else { score.trader } @ FairwayError::CannotClose)]
     pub rent_receiver: UncheckedAccount<'info>,
 }
 

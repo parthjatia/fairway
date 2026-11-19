@@ -1,5 +1,10 @@
 import type { Tier } from '@fairway/scoring';
 
+export type PoolKey = 'sol' | 'bonk';
+
+/** Static description of a tradable pair for the pickers. */
+export type PairMeta = { key: PoolKey; label: string; baseSymbol: string; baseDecimals: number; quoteSymbol: 'USDC'; quoteDecimals: 6; blurb: string };
+
 export type Persona = { key: 'rita' | 'new' | 'arb7' | 'sniper'; name: string; address: string; expectedTier: Tier; blurb: string };
 
 export type WalletTrade = {
@@ -26,6 +31,11 @@ export type OnchainScore = {
   verified: boolean;
   /** notional needed before the onchain score overrides the keeper's bootstrap score */
   thresholdNotional: number;
+  /** "Verified fair flow": verified onchain RETAIL-like markout over at least `fairFlowMinTrades` settled trades */
+  fairFlow: boolean;
+  fairFlowMinTrades: number;
+  /** the same score computed per Fairway pool (a wallet has one TraderScore across pools; this shows where the evidence comes from) */
+  perPool: Array<{ key: PoolKey; label: string; trades: number; notional: number; scoreBps: number; tier: Tier; tradesToToxic: number | null }>;
   /** settled trades also required (min of the tier trade minimums) */
   minTrades: number;
   markoutSlots: number;
@@ -60,6 +70,9 @@ export type WalletView = {
 };
 
 export type PoolView = {
+  key: PoolKey;
+  baseSymbol: string;
+  baseDecimals: number;
   id: string;
   label: string;
   baseVault: string;
@@ -73,6 +86,8 @@ export type PoolView = {
   feesByTier: Record<Tier, number>;
   tradesByTier: Record<Tier, number>;
   daily: Array<{ day: string; RETAIL: number; STANDARD: number; TOXIC: number }>;
+  /** M14 business model (fixture replay): what bots pay above a flat STANDARD fee, what retail saves, and the protocol's cut */
+  economics: { botExtraFeesUsd: number; retailSavedUsd: number; protocolFeeBps: number; protocolRevenueUsd: number; lpFeesUsd: number; sponsoredRentSol: number };
   recent: Array<{ sig: string; ts: number; trader: string; side: 'buy' | 'sell'; quoteAmount: number; execPrice: number; feeBps?: number; tier?: Tier; label?: string | null }>;
   source: 'ingest' | 'in-process';
 };

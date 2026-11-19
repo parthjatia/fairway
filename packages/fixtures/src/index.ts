@@ -5,4 +5,5 @@ export * from './cpamm';
 export * from './market';
 export * from './event';
 export * from './dataset';
+export * from './memecoin';
 export type { RpcBlock, RpcTransaction, TokenBalance, UiTokenAmount, ParsedAccountKey, BlocksFixture, EdgeCaseKind } from './blocks';

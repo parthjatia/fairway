@@ -6,6 +6,40 @@ Fairway is a constant-product AMM whose swap fee depends on the trader's **toxic
 
 > **Hackathon status, read this first.** Everything runs offline on **synthetic data** (a deterministic simulator and fixtures). The Anchor program is unaudited and has not been deployed to devnet yet. The Raydium SOL-USDC vault addresses in the Stream config were checked against mainnet, but no live Stream has run yet. See [What is simulated vs. live](#what-is-simulated-vs-live).
 
+**Fairway is bot-friendly: good bots pay less, extractive flow pays its fair share.** The fee follows measured behaviour (markout), not whether the signer is a human or a program.
+
+## For judges
+
+**In three lines.** (1) A Solana AMM whose swap fee depends on the signer's measured toxicity tier (5 / 30 / 80 bps), so retail pays less and informed bots pay more. (2) Scores come from two sources: a keeper that backfills history through a QuickNode Stream, and the program itself, which marks every Fairway swap against Pyth and scores it onchain with no oracle operator. (3) A backtest on synthetic data shows who pays and who gains, including where it does not work (LPs vs a flat 30 bps pool; see [Backtest results](#backtest-results-synthetic)).
+
+| Criterion | What to look at | Proof |
+|---|---|---|
+| Technical execution | Anchor program with PDAs, SPL vaults, checked integer math, a permissionless oracle-based settlement, a protocol treasury, rent sponsorship; 30 LiteSVM tests including the wrong-signer attack | [`programs/fairway/src/`](programs/fairway/src) ([`swap.rs`](programs/fairway/src/instructions/swap.rs), [`settle.rs`](programs/fairway/src/instructions/settle.rs), [`treasury.rs`](programs/fairway/src/instructions/treasury.rs)), [`tests/fairway.rs`](programs/fairway/tests/fairway.rs), [`crates/fairway-math/`](crates/fairway-math), shared Rust/TS test vectors [`vectors/onchain.json`](crates/fairway-math/vectors/onchain.json) |
+| Product & UX | Swap page with a "same trade, two wallets" panel, wallet score explorer with "Onchain verified" and "Verified fair flow" badges, LP dashboard with protocol revenue and "extra fees from bots", interactive backtest, two pools (SOL/USDC, BONK-test/USDC), dark mode, mock mode needs no wallet | [`apps/web/app/`](apps/web/app), [`swap-panel.tsx`](apps/web/components/swap-panel.tsx), [`two-wallets.tsx`](apps/web/components/two-wallets.tsx), [`wallet-detail.tsx`](apps/web/components/wallet-detail.tsx) |
+| Innovation | Fee keyed on a wallet's own measured markout (information content), scored trustlessly onchain; STANDARD floor makes wallet rotation useless; any DEX can read the score | [Scoring and trust model](#scoring-and-trust-model), [`docs/ECONOMICS.md`](docs/ECONOMICS.md), [`getFeeTier`](packages/sdk/src/feetier.ts) |
+| Impact & potential | Retail execution cost down 18 bps in the backtest, LVR down 70–90%, a revenue model (15% protocol share, score licensing), honest limits | [Business model](#business-model), [Backtest](#backtest-results-synthetic), [`docs/RISKS.md`](docs/RISKS.md) |
+| Demo | `pnpm demo` runs everything offline in one command; a 2–3 minute shot list | [Quick start](#quick-start), [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`docs/PITCH.md`](docs/PITCH.md) (5-minute script, 15 Q&As) |
+
+**Per-prize requirements**
+
+- **DeFi track**
+  - [x] A new AMM fee primitive: tier-by-markout fees, [`swap.rs`](programs/fairway/src/instructions/swap.rs), [`fairway-math`](crates/fairway-math/src/tier.rs)
+  - [x] Economic design: [Economic design](#economic-design) and [`docs/ECONOMICS.md`](docs/ECONOMICS.md)
+  - [x] Risk assumptions: [Risk assumptions](#risk-assumptions) and [`docs/RISKS.md`](docs/RISKS.md)
+  - [x] Program addresses: [Program IDs](#program-ids) (localnet ID; devnet is **not deployed yet**)
+  - [x] Simulation evidence, with limits stated: [`packages/sim/`](packages/sim), [`packages/sim/out/`](packages/sim/out)
+- **Best use of Solana**
+  - [x] Anchor program, PDAs (`config`, `pool`, `vault`, `lp_mint`, `score`, `treasury`), SPL Token vaults and LP mint: [`state.rs`](programs/fairway/src/state.rs), [`pool.rs`](programs/fairway/src/instructions/pool.rs)
+  - [x] Program IDs and a Solana-usage explanation: [Program IDs](#program-ids), [How we use Solana](#how-we-use-solana)
+  - [x] Solana-native data: v0 transactions with lookup tables, token-balance deltas, Anchor events: [`packages/parser/`](packages/parser/src/core.ts)
+  - [x] Onchain oracle use (Pyth `PriceUpdateV2`) and slot-based timing: [`settle.rs`](programs/fairway/src/instructions/settle.rs)
+  - [ ] Devnet deployment: not done (needs the human steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md))
+- **QuickNode Streams bounty**
+  - [x] A Stream with a server-side filter and a webhook destination, config documented (network, dataset, filter logic, destination, why): [`streams/STREAM_CONFIG.md`](streams/STREAM_CONFIG.md), [QuickNode Stream configuration](#quicknode-stream-configuration)
+  - [x] The filter itself, standalone and tested against `getBlock`-shaped fixtures: [`streams/filter.js`](streams/filter.js), [`streams/filter.test.ts`](streams/filter.test.ts), shared logic in [`packages/parser/`](packages/parser/src/core.ts)
+  - [x] Webhook receiver with signature check, idempotent storage, scoring: [`services/ingest/`](services/ingest/src/app.ts)
+  - [ ] A live Stream running: not yet created (needs a QuickNode account; steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md))
+
 ![LP and retail outcomes by fee regime](docs/charts/regimes.png)
 
 ## The problem
@@ -27,7 +61,7 @@ Fairway is a constant-product AMM whose swap fee depends on the trader's **toxic
    | `STANDARD` | everyone else, **including every new wallet** | 30 bps |
 
 4. **Onchain lookup.** The `swap` instruction derives the `TraderScore` PDA from the **signer** (`["score", trader]`). If it is missing, stale (older than `score_ttl_slots`) or malformed, the swap pays STANDARD. A bot cannot pass someone else's RETAIL account, because the seeds check fails.
-5. **Onchain verified scoring.** Every Fairway swap is queued in the signer's `TraderScore` (a 4-entry buffer of `{exec_price, slot, side, notional}`; the PDA is created on the first swap, paid by the trader). After `markout_slots` (default 75 slots, about 30 s) **anyone** can call `settle_markout(trader)`. It reads the Pyth SOL/USD price account, applies the same markout formula, shrinkage `K` and tier thresholds as `packages/scoring`, and updates the wallet's onchain tier. See [Scoring and trust model](#scoring-and-trust-model).
+5. **Onchain verified scoring.** Every Fairway swap is queued in the signer's `TraderScore` (a 4-entry buffer of `{pool, exec_price, slot, side, notional}`; the PDA is created on the first swap, with the rent sponsored by the protocol treasury when it can, else paid by the trader). After `markout_slots` (default 75 slots, about 30 s) **anyone** can call `settle_markout(trader)` for a pool. It reads that pool's Pyth price account, applies the same markout formula, shrinkage `K` and tier thresholds as `packages/scoring`, and updates the wallet's onchain tier. See [Scoring and trust model](#scoring-and-trust-model).
 6. **Data layer.** A QuickNode Stream filters Solana blocks down to swaps on chosen pools. Backfill scores wallets from day one using their activity on other DEXs (Raydium SOL-USDC is configured; Orca and Meteora only need their vault addresses added), and the live stream keeps scores fresh.
 
 ```mermaid
@@ -39,7 +73,7 @@ flowchart LR
   K -->|bootstrap tier| P[(Fairway program<br/>TraderScore PDAs)]
   P --> SW[swap: fee by tier]
   SW -->|queue trade| P
-  PY[Pyth SOL/USD] --> ST[settle_markout<br/>permissionless crank]
+  PY[Pyth base/USD<br/>per pool] --> ST[settle_markout<br/>permissionless crank]
   ST -->|onchain tier| P
   I --> W[apps/web]
   SIM[packages/sim<br/>agent-based backtest] --> W
@@ -52,7 +86,7 @@ Each `TraderScore` PDA holds two independent scores:
 | | Bootstrap score | Onchain verified score |
 |---|---|---|
 | Written by | the keeper (`score_authority`) with `set_score` / `set_scores_batch` | the program only: `swap` queues trades, `settle_markout` scores them |
-| Inputs | history on every venue, from QuickNode Streams (Raydium today) | the wallet's own Fairway swaps + Pyth SOL/USD (feed id, staleness ≤ 60 s and confidence ≤ 0.5% checked) |
+| Inputs | history on every venue, from QuickNode Streams (Raydium today) | the wallet's own swaps on pools that have a Pyth oracle (set per pool with `set_pool_oracle`; feed id, staleness ≤ 60 s and confidence ≤ 0.5% checked) |
 | Horizons | 5 s / 30 s / 60 s, float, "all horizons" rule | one horizon (`markout_slots` = 75 ≈ 30 s), integer bps, primary-horizon rule |
 | Expiry | TTL (`score_ttl_slots`), then STANDARD | does not expire |
 | Trust | trust the keeper (it can mislabel, but cannot set fees or touch funds) | trust Pyth and the program; no operator |
@@ -68,7 +102,46 @@ Details that keep it hard to game:
 - If the 4-entry buffer is full, the new trade is not queued (`dropped_trades += 1`) and **gets no RETAIL discount**. A wallet cannot hide trades and still pay 5 bps.
 - Trades not settled within `max_settle_slots` (450) expire unscored. The wallet keeps its current tier, so the worst case is STANDARD pricing for unscored flow. There is no crank reward in the MVP: LPs, the keeper and retail wallets (who want RETAIL) have the incentive to crank.
 - **Same math in TypeScript and Rust:** `crates/fairway-math/src/markout.rs` and `packages/scoring/src/onchain.ts` both run on `crates/fairway-math/vectors/onchain.json` (markout signs, price conversion, shrinkage, tier boundaries). The TS suite also checks that the integer path gives the same tier as the float scorer, and a score within 1 bps.
-- Prices are 1e6 fixed point (quote per base). The program assumes the quote token is USD-pegged (USDC), so the SOL/USD Pyth feed is the mid.
+- Prices are 1e12 fixed point (quote per base), so a $0.00002 memecoin keeps 7 significant digits. The program assumes the quote token is USD-pegged (USDC), so a base/USD Pyth feed is the mid.
+- **The oracle is per pool.** A pending trade is tagged with its pool and settled only against that pool's feed (`Pool.oracle_price_account` / `oracle_feed_id`). A pool with no oracle (for example a test memecoin that has no Pyth feed) still trades and charges tiers from keeper scores, but builds no onchain evidence, creates no score account and cannot trigger the full-buffer cap. Tested: `each_pool_settles_only_against_its_own_oracle`, `pool_without_oracle_is_not_scored_onchain`.
+
+## Business model
+
+Retail pays less, LPs earn from flow that used to be free, the protocol takes a small cut, and the scores themselves can be licensed.
+
+| Who | What they get | Where it shows |
+|---|---|---|
+| **Retail** | A lower fee (RETAIL tier, 5 bps vs a 30 bps flat fee) once their own trades show no informed edge | `/swap`, "Same trade, two wallets" |
+| **Good bots** | The same fee as retail if their flow is uninformed (market makers, hedgers, rebalancers). "Verified fair flow" is earned from measured behaviour, not from being human | `/wallet/[address]` badge |
+| **Extractive flow** | Pays its fair share: TOXIC tier (80 bps) for arbitrage and sniping | `/pool` headline "Extra fees earned from bots" |
+| **LPs** | 85% of every swap fee, plus less LVR (arbitrage profit falls 73–90% in the sim). **Not** unconditionally more than a flat 30 bps pool: see the [verdict](#backtest-results-synthetic) | `/pool`, `/backtest` |
+| **Protocol** | `Config.protocol_fee_bps` = **15%** of every swap fee (max 50%), accrued per pool and claimed into the treasury PDA by anyone | `/pool` "Protocol revenue" |
+| **Other DEXes** | Read a wallet's score with one call and price flow with it. Licensing the scores (an access API and SLA, or a revenue share when another DEX routes by Fairway tiers) is the next revenue line, not built yet | [Any Solana DEX can read Fairway scores](#any-solana-dex-can-read-fairway-scores) |
+
+**Protocol fee mechanics.** The protocol's share of each swap fee stays in the vault but is booked in `Pool.protocol_owed_*` and excluded from the reserves that price the curve and the LP shares. `claim_protocol_fees` (permissionless) moves it into token accounts owned by the treasury PDA `["treasury"]`. Only the admin can move treasury funds out (`treasury_transfer_tokens`, `treasury_withdraw_sol`).
+
+**Sponsored score accounts.** A trader's first swap on a scored pool creates their `TraderScore` PDA (about 0.0023 SOL of rent). The treasury pays that rent when it holds more SOL than its own rent-exempt minimum plus the rent; otherwise the trader pays (fallback). The account is flagged `sponsored`, and `close_score` refunds the treasury, not the trader. The treasury is funded by anyone sending SOL to its address (the seed script sends 0.05 SOL). Treasury SOL is a cost of onboarding, so a deployment should fund it from the protocol's fee revenue.
+
+**The cost side is real.** The protocol's 15% comes out of LP fees, so LPs net less than the pre-protocol figures; the backtest tables show both. The sweep's best setting still leaves LPs about $155/day below a flat 30 bps pool after the protocol share (±$214), and that setting needs a 200 bps toxic fee. See [`docs/ECONOMICS.md`](docs/ECONOMICS.md).
+
+## Any Solana DEX can read Fairway scores
+
+`TraderScore` accounts are public PDAs (`["score", wallet]`). Another AMM, an aggregator or a wallet can price flow by tier without trusting our API:
+
+```ts
+import { Connection, PublicKey } from '@solana/web3.js';
+import { getFeeTier } from '@fairway/sdk';
+
+const t = await getFeeTier(new Connection(rpcUrl), new PublicKey(wallet));
+// { tier: 0|1|2, tierName: 'RETAIL'|'STANDARD'|'TOXIC', feeBps, source: 'onchain'|'score'|…,
+//   verified: boolean,            // true = computed by the Fairway program from the wallet's own trades vs Pyth
+//   onchain: { scoreBps, settledTrades, settledNotional } | null, isNew: boolean }
+```
+
+- **One read, no signer.** `getFeeTier` fetches `Config` and the wallet's score PDA and resolves the tier exactly as the program does (keeper bootstrap until the onchain evidence threshold, then the onchain tier; stale or missing → STANDARD; a full pending buffer removes the RETAIL discount). If you already hold the two accounts, call the pure `feeTierFromAccounts(wallet, config, score, slot)`.
+- **From onchain code (CPI-free).** Derive the PDA `["score", wallet]` under the Fairway program id, check its owner, and read the `tier` / `onchain_tier` / `sum_notional` fields (layout in [`state.rs`](programs/fairway/src/state.rs) and the IDL `packages/sdk/idl/fairway.json`). The blend rule is in [`resolve_blended`](crates/fairway-math/src/tier.rs).
+- **Trust.** `verified: true` means the tier comes from the program's own markout computation. Otherwise it is the keeper's bootstrap score (trusted, expires after `score_ttl_slots`).
+- **Not built yet:** a hosted API, rate limits, SLAs or a revenue share. Those are the licensing line of the business model.
 
 ## What makes it unique
 
@@ -82,26 +155,37 @@ Details that keep it hard to game:
 
 Agent-based simulation: 24 h, 60% annualized volatility, 400 ms steps, 10,000 SOL / $1.5M pool ($3M TVL), 8 seeds averaged. Retail follows Poisson arrivals with lognormal sizes (median $150). There are 3 arbitrageur wallets and 3 momentum-sniper wallets. Tiers are learned in a 72 h warm-up and then applied.
 
-| Regime (per day, mean of 8 seeds) | LP fees | Arb profit | LP fees − arb profit | Retail cost (bps) | p95 staleness (bps) |
-|---|---:|---:|---:|---:|---:|
-| Flat 30 bps (baseline) | $1,528 | $132 | $1,396 | 34.8 | 31.6 |
-| Fairway 5/30/80 | $1,070 | $36 | $1,035 | **16.7** | 79.9 |
-| Fairway 20/30/80 (recommended) | $1,366 | $36 | $1,331 | **27.7** | 79.9 |
-| Fairway 5/30/80, **arbs rotate wallets** | $1,035 | $132 | $903 | 16.3 | 31.6 |
-| Flat 5 bps | $579 | $642 | −$63 | 9.6 | 8.5 |
-| Flat 80 bps | $2,903 | $35 | $2,868 | 85.2 | 79.8 |
+| Regime (per day, mean of 8 seeds) | LP fees | Arb profit (LVR proxy) | LP PnL vs HODL | LP PnL after 15% protocol share | Retail cost (bps) | p95 staleness (bps) |
+|---|---:|---:|---:|---:|---:|---:|
+| Flat 30 bps (baseline; LPs keep 100%) | $1,528 | $132 | $644 | $644 | 34.8 | 31.6 |
+| Fairway 5/30/80 (demo fees) | $1,070 | $36 | $191 | $30 | **16.7** | 79.9 |
+| Fairway 20/30/200 (sweep pick) | $1,529 | $13 | $718 | $489 | **27.6** | 196 |
+| Fairway 5/30/80, **arbs rotate wallets** | $1,035 | $132 | $148 | −$7 | 16.3 | 31.6 |
+| Flat 5 bps | $579 | $642 | −$311 | −$398 | 9.6 | 8.5 |
+| Flat 80 bps | $2,903 | $35 | $2,033 | $1,597 | 85.2 | 79.8 |
 
-Arbitrage profit is measured at the CEX mid. All numbers come from `packages/sim/out/*.json`, and `pnpm sim` regenerates them.
+"LP PnL vs HODL" is the full LP result (reserves plus fees, valued at the final CEX price, minus holding the initial reserves), so it includes arbitrage and sniper losses. "Arb profit" is measured at the CEX mid. The flat-30 baseline row has no protocol share because it is the reference pool. All numbers come from `packages/sim/out/*.json`, and `pnpm sim` regenerates them.
 
-**What this does and does not show. Please read it before quoting a number.**
+**Verdict on "do LPs earn more than a flat 30 bps pool, while retail pays less?" (checked 2026-11-19): not unconditionally. Read this before quoting a number.**
 
-- Retail pays **18 bps less** than under flat 30 (5/30/80), and arbitrage profit falls about 73%. Against a low flat fee (5 bps) the LPs earn about **+$502/day** more, at a retail cost of 16.7 bps instead of 9.6.
-- **Fairway does not beat flat 30 bps for LPs in this simulation.** LP PnL is about −$453/day versus flat 30 (±66) at 5/30/80. Retail is the main fee payer, so cutting its fee costs LPs more than the toxic surcharge recovers. The recommended 20/30/80 setting narrows the gap to about −$155/day while still saving retail 7 bps. In sensitivity runs (more informed flow, fee elasticity up to 1) LP PnL stays below flat 30.
-- A fee-elastic retail response (more volume at lower fees) narrows the gap but did not close it in the range we tested.
-- **The wallet-rotation worst case** is where the design is weakest. Rotating arbs pay STANDARD, so they keep their full profit ($132) and the pool stays as accurate as flat 30 (p95 staleness 31.6 bps). Retail still gets the discount, which LPs fund. Fairway's advantage is that rotation costs the bot nothing extra versus a flat-30 pool. The gain is on the retail side and in the **TOXIC surcharge for bots that do not rotate**.
-- A higher toxic fee makes the pool price staler: p95 deviation is 80 bps at an 80 bps toxic fee, versus 32 bps at flat 30. The sweep caps staleness at a configurable bound (default 95 bps).
+- **Retail pays less and bots pay more: yes.** At 5/30/80, retail saves **18 bps** (34.8 → 16.7) and arbitrage profit falls 73%. Bots pay about **$475/day** more in fees than they would at the STANDARD fee on the same volume.
+- **LPs vs flat 30 depends on the schedule.** At the demo schedule 5/30/80, LPs earn **$453/day less** than in a flat-30 pool (±66). The retail discount is paid by LPs: each bp of retail saving costs roughly $20/day on this $3M pool.
+- **Sweep pick 20/30/200** (best LP result after the protocol share among settings that save retail ≥ 5 bps): retail saves **7.1 bps**, arbitrage profit falls 90% (LVR check), and LP PnL is **+$74/day vs flat 30 before the protocol share (±214, not statistically different from zero) and −$155/day after the 15% share**. It needs a 200 bps toxic fee, which pushes p95 pool-vs-CEX deviation to 196 bps (flat 30: 32).
+- **With the protocol's 15% share, LPs beat flat 30 only under assumptions**: retail volume rising with lower fees (elasticity ≥ 1 in the sweep below), or a retail fee close to 30. These are labeled results, not measurements.
+- **The wallet-rotation worst case is the weakest point.** Rotating arbs pay STANDARD, keep their full profit ($132/day), and the pool is as accurate as flat 30. Retail still gets its discount, and LPs fund it: −$496/day vs flat 30 at 5/30/80, −$196/day at 20/30/200.
 
-So the honest pitch is a **retail execution-cost reduction with a smaller LP cost than a flat low fee imposes**, not free money. See [`docs/ECONOMICS.md`](docs/ECONOMICS.md) for the full discussion.
+**Elasticity sensitivity (assumption, not a measurement).** Arrival rate × (1 + e·(30 − fee)/30) / (1 + e): `e = 1` means a retail wallet paying 15 bps instead of 30 trades about 33% more often. LP PnL vs flat 30 per day (before / after the 15% protocol share), 4 seeds:
+
+| Retail elasticity | 5/30/80 | 20/30/200 |
+|---|---:|---:|
+| 0 (default) | −$527 / −$673 | +$127 / −$104 |
+| 0.25 | −$386 / −$547 | +$184 / −$54 |
+| 0.5 | −$417 / −$567 | +$132 / −$92 |
+| 1 | −$293 / −$466 | +$339 / +$79 |
+
+Informed-flow intensity matters too: with 4× the sniper activity, 20/30/200 falls to −$202/day vs flat 30. Full tables: [`docs/ECONOMICS.md`](docs/ECONOMICS.md) §4–5, files `sensitivity*.json` and `sweep-elastic.json`.
+
+So the defensible pitch is: **retail execution cost falls, LVR falls by 70–90%, and the cost is paid by LPs (and the protocol's share) unless volume responds to the lower retail fee.** Fairway is a way to move value from bots to retail and LPs, not free money.
 
 ![Parameter sweep](docs/charts/sweep.png)
 
@@ -197,7 +281,9 @@ The program's tests use LiteSVM: `anchor build && cargo test -p fairway`. The wr
 | Ingest, scoring, keeper | Real code. Run on fixtures in `DATA_MODE=fixture`. The keeper defaults to `dry-run`. |
 | QuickNode Stream | **Config and filter are real and tested against getBlock-shaped fixtures.** No live Stream has been created yet. |
 | Mid prices | Fixture mode uses the simulated CEX path. Live mode uses the pool-implied mid. `PythMidPrice` (offchain) is a stub. |
-| Onchain markout scoring | **Real program code, tested in LiteSVM with a mock Pyth account.** In mock mode the wallet page computes the "Onchain verified" score from the wallet's fixture trades on the Fairway pool, with the same integer math. The devnet Pyth SOL/USD account in the seed script is **not verified yet** (see SETUP_REMAINING). |
+| Onchain markout scoring | **Real program code, tested in LiteSVM with a mock Pyth account.** In mock mode the wallet page computes the "Onchain verified" score from the wallet's fixture trades on both Fairway pools, with the same integer math. The devnet Pyth SOL/USD account in the seed script is **not verified yet** (see SETUP_REMAINING). BONK-test has no real price feed: in mock mode its score uses the fixture CEX path as if a BONK/USD feed existed; live, that pool would have no oracle. |
+| Second pool (BONK-test / USDC) | **Synthetic and additive.** A TEST mint (not the real BONK) with its own seeded price path, generated separately in `packages/fixtures/data/memecoin.json` so the SOL-USDC fixtures are unchanged. Snipers reach TOXIC after 5–9 settled trades there; on SOL/USDC the sniper persona stays STANDARD after 3. |
+| Protocol revenue, bot extra fees, retail saved (`/pool`) | **Fixture replay.** Fees recomputed from the fixture swaps at the fee they paid, volume held fixed. Treasury rent sponsorship is a count of wallets × about 0.0023 SOL. |
 | Raydium vault addresses | **Real.** Checked on mainnet with `getAccountInfo` (2026-11-19): a wSOL and a USDC token account owned by the Raydium AMM v4 authority. The Orca and Fairway entries are placeholders. |
 
 ## Repo map

@@ -47,6 +47,33 @@ lap('backtest-recommended.json');
 const sens = runSensitivity(cfg, seeds.slice(0, Math.min(4, seeds.length)), wu);
 write('sensitivity.json', { synthetic: true, rows: sens });
 lap('sensitivity.json');
+// the same sensitivities at the recommended fee schedule
+const sensRec = runSensitivity(recCfg, seeds.slice(0, Math.min(4, seeds.length)), wu);
+write('sensitivity-recommended.json', { synthetic: true, fees: recCfg.fees, rows: sensRec });
+lap('sensitivity-recommended.json');
+// elasticity-labelled sweeps: more retail volume at lower fees (aggregators route to the cheaper pool)
+const elastic: Record<string, unknown> = {};
+for (const e of [0.5, 1]) {
+  const ec = { ...cfg, retail: { ...cfg.retail, elasticity: e } };
+  const sw = runSweep(ec, seeds.slice(0, Math.min(4, seeds.length)), { wu });
+  const b = sw.baseline;
+  elastic[String(e)] = {
+    elasticity: e,
+    recommended: sw.recommended,
+    baseline: { lpPnlVsHodlUsd: b.lpPnlVsHodlUsd, retailCostBps: b.retailCostBps },
+    cells: sw.cells.map((c) => ({
+      toxicBps: c.toxicBps,
+      retailBps: c.retailBps,
+      lpVsFlat30: c.fairway.lpPnlVsHodlUsd - b.lpPnlVsHodlUsd,
+      lpNetOfProtocolVsFlat30: c.fairway.lpPnlNetOfProtocolUsd - b.lpPnlVsHodlUsd,
+      retailSavedBps: b.retailCostBps - c.fairway.retailCostBps,
+      stalenessP95Bps: c.fairway.stalenessP95Bps,
+      rotationLpVsFlat30: c.rotation.lpPnlVsHodlUsd - b.lpPnlVsHodlUsd,
+    })),
+  };
+}
+write('sweep-elastic.json', { synthetic: true, note: 'Elasticity is an ASSUMPTION: arrival rate ×(1 + e·(30 − fee)/30)/(1 + e). Per-day values are for the 24 h window.', byElasticity: elastic });
+lap('sweep-elastic.json');
 const ds = loadDataset();
 const scores = scoreWallets(ds.swaps, fixtureMids(ds.cex), makeConfig());
 const rec = sweep.recommended;

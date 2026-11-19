@@ -29,6 +29,11 @@ import {
   setScoreIx,
   setScoresBatchIx,
   settleMarkoutIx,
+  setPoolOracleIx,
+  claimProtocolFeesIx,
+  treasuryTransferTokensIx,
+  treasuryWithdrawSolIx,
+  feeTierFromAccounts,
   defaultMarkoutParams,
   writeMarkoutParams,
   resolveBlendedTier,
@@ -60,7 +65,11 @@ describe('IDL parity', () => {
       set_score: setScoreIx({ authority: t, entry: { trader: t, tier: 0, scoreBps: 0, trades: 0 } }),
       set_scores_batch: setScoresBatchIx({ authority: t, entries: [{ trader: t, tier: 0, scoreBps: 0, trades: 0 }] }),
       close_score: closeScoreIx({ closer: t, trader: t }),
-      settle_markout: settleMarkoutIx({ cranker: t, trader: t, pythPriceAccount: k() }),
+      settle_markout: settleMarkoutIx({ cranker: t, trader: t, baseMint: base, quoteMint: quote, pythPriceAccount: k() }),
+      set_pool_oracle: setPoolOracleIx({ admin: t, baseMint: base, quoteMint: quote, priceAccount: k(), feedId: new Uint8Array(32) }),
+      claim_protocol_fees: claimProtocolFeesIx({ cranker: t, baseMint: base, quoteMint: quote }),
+      treasury_transfer_tokens: treasuryTransferTokensIx({ admin: t, mint: base, to: k(), amount: 1n }),
+      treasury_withdraw_sol: treasuryWithdrawSolIx({ admin: t, destination: k(), lamports: 1n }),
     };
     for (const i of idl.instructions) {
       const ix = built[i.name]!;
@@ -105,13 +114,13 @@ describe('account decoders', () => {
   it('decode Config / Pool / TraderScore', () => {
     const admin = k();
     const auth = k();
-    const oracle = k();
     const cw = new Writer().bytes(discriminator('account', 'Config')).pubkey(admin).pubkey(auth).u16(5).u16(30).u16(80).u8(1).u64(1000n).u8(254);
-    writeMarkoutParams(cw, defaultMarkoutParams({ pythPriceAccount: oracle, pythMaxConfBps: 77 }));
+    writeMarkoutParams(cw, defaultMarkoutParams({ pythMaxConfBps: 77 }));
+    cw.u16(1500);
     const cfg = cw.toBytes();
+    expect(decodeConfig(cfg).protocolFeeBps).toBe(1500);
     expect(decodeConfig(cfg)).toMatchObject({ feeBps: [5, 30, 80], defaultTier: 1, scoreTtlSlots: 1000n, bump: 254 });
     expect(decodeConfig(cfg).markout).toMatchObject({ markoutSlots: 75n, priorNotional: 2_000_000_000n, toxicBps: 10, pythMaxConfBps: 77 });
-    expect(decodeConfig(cfg).markout.pythPriceAccount.equals(oracle)).toBe(true);
     expect(decodeConfig(cfg).admin.equals(admin)).toBe(true);
     const keys = [k(), k(), k(), k(), k()];
     const w = new Writer().bytes(discriminator('account', 'Pool'));
@@ -119,7 +128,13 @@ describe('account decoders', () => {
     w.u64(777n);
     for (let i = 0; i < 9; i++) w.u64(BigInt(i));
     w.u8(1).u8(2).u8(3).u8(4);
+    w.u64(11n).u64(12n).u64(13n).u64(14n).u32(2).u64(5_000_000n);
+    const oracleKey = k();
+    w.pubkey(oracleKey).bytes(new Uint8Array(32).fill(7));
     const pool = decodePool(w.toBytes());
+    expect(pool.oracleCfg.priceAccount.equals(oracleKey)).toBe(true);
+    expect(Array.from(pool.oracleCfg.feedId)).toEqual(new Array(32).fill(7));
+    expect(pool).toMatchObject({ protocolOwedBase: 11n, protocolOwedQuote: 12n, protocolEarnedBase: 13n, protocolEarnedQuote: 14n, sponsoredAccounts: 2, sponsoredLamports: 5_000_000n });
     expect(pool.lpSupply).toBe(777n);
     expect(pool.feesQuote).toEqual([3n, 4n, 5n]);
     expect(pool.swaps).toEqual([6n, 7n, 8n]);
@@ -127,9 +142,12 @@ describe('account decoders', () => {
     const tr = k();
     const sw = new Writer().bytes(discriminator('account', 'TraderScore')).pubkey(tr).u8(2).i32(-12).u32(40).u64(99n).u8(250);
     sw.u64(5_000n).i128(-123_456_789_012_345_678_901n).u32(6).u64(10n).u8(0).i32(-3).u32(1);
-    sw.u64(150_000_000n).u64(500n).u8(1).u64(42n); // one pending sell
-    for (let i = 0; i < 3; i++) sw.u64(0n).u64(0n).u8(0).u64(0n);
+    const poolKey = k();
+    sw.pubkey(poolKey).u64(150_000_000_000_000n).u64(500n).u8(1).u64(42n); // one pending sell
+    for (let i = 0; i < 3; i++) sw.pubkey(PublicKey.default).u64(0n).u64(0n).u8(0).u64(0n);
+    sw.bool(true); // sponsored
     const sc = sw.toBytes();
+    expect(decodeTraderScore(sc).sponsored).toBe(true);
     expect(decodeTraderScore(sc)).toMatchObject({ tier: 2, tierName: 'TOXIC', scoreBps: -12, trades: 40, updatedSlot: 99n });
     expect(decodeTraderScore(sc)).toMatchObject({
       sumNotional: 5_000n,
@@ -138,10 +156,10 @@ describe('account decoders', () => {
       onchainTierName: 'RETAIL',
       onchainScoreBps: -3,
       droppedTrades: 1,
-      pending: [{ execPrice: 150_000_000n, slot: 500n, side: 'sell', notional: 42n }],
+      pending: [{ execPrice: 150_000_000_000_000n, slot: 500n, side: 'sell', notional: 42n }],
     });
     // account size matches the program's InitSpace (8 + 185 + 4 × 25)
-    expect(sc.length).toBe(8 + 32 + 1 + 4 + 4 + 8 + 1 + 8 + 16 + 4 + 8 + 1 + 4 + 4 + 4 * 25);
+    expect(sc.length).toBe(8 + 32 + 1 + 4 + 4 + 8 + 1 + 8 + 16 + 4 + 8 + 1 + 4 + 4 + 4 * 57 + 1);
     expect(() => decodeTraderScore(cfg)).toThrow(/TraderScore/);
   });
 });
@@ -155,6 +173,39 @@ describe('onchain/bootstrap blend', () => {
     expect(r(100n)).toEqual({ tier: 2, source: 'onchain' });
     expect(r(100n, false, 4)).toEqual({ tier: 0, source: 'score' }); // too few trades
     expect(r(99n, true).tier).toBe(1); // full buffer: no RETAIL discount
+  });
+});
+
+describe('getFeeTier (composable read)', () => {
+  const wallet = k();
+  const cfgBytes = () => {
+    const cw = new Writer().bytes(discriminator('account', 'Config')).pubkey(k()).pubkey(k()).u16(5).u16(30).u16(80).u8(1).u64(1000n).u8(254);
+    writeMarkoutParams(cw, defaultMarkoutParams());
+    return decodeConfig(cw.u16(1500).toBytes());
+  };
+  const scoreBytes = (o: { tier: number; onchainTier: number; sumNotional: bigint; trades: number; pending?: number }) => {
+    const w = new Writer().bytes(discriminator('account', 'TraderScore')).pubkey(wallet).u8(o.tier).i32(0).u32(9).u64(90n).u8(250);
+    w.u64(o.sumNotional).i128(0n).u32(o.trades).u64(10n).u8(o.onchainTier).i32(-2).u32(0);
+    for (let i = 0; i < 4; i++) {
+      if (i < (o.pending ?? 0)) w.pubkey(wallet).u64(1n).u64(1n).u8(0).u64(5n);
+      else w.pubkey(PublicKey.default).u64(0n).u64(0n).u8(0).u64(0n);
+    }
+    return decodeTraderScore(w.bool(false).toBytes());
+  };
+  it('unknown wallet pays STANDARD', () => {
+    const r = feeTierFromAccounts(wallet, cfgBytes(), null, 100n);
+    expect(r).toMatchObject({ tier: 1, tierName: 'STANDARD', feeBps: 30, isNew: true, verified: false, onchain: null });
+  });
+  it('keeper tier below the evidence threshold, onchain tier above it', () => {
+    const boot = feeTierFromAccounts(wallet, cfgBytes(), scoreBytes({ tier: 0, onchainTier: 2, sumNotional: 999_999_999n, trades: 9 }), 100n);
+    expect(boot).toMatchObject({ tier: 0, feeBps: 5, source: 'score', verified: false });
+    const ver = feeTierFromAccounts(wallet, cfgBytes(), scoreBytes({ tier: 0, onchainTier: 2, sumNotional: 1_000_000_000n, trades: 9 }), 100n);
+    expect(ver).toMatchObject({ tier: 2, feeBps: 80, source: 'onchain', verified: true });
+    expect(ver.onchain).toEqual({ scoreBps: -2, settledTrades: 9, settledNotional: 1_000_000_000n });
+  });
+  it('stale keeper score falls back to STANDARD; a full pending buffer removes the RETAIL discount', () => {
+    expect(feeTierFromAccounts(wallet, cfgBytes(), scoreBytes({ tier: 0, onchainTier: 1, sumNotional: 0n, trades: 0 }), 5_000n).source).toBe('stale');
+    expect(feeTierFromAccounts(wallet, cfgBytes(), scoreBytes({ tier: 0, onchainTier: 1, sumNotional: 0n, trades: 0, pending: 4 }), 100n).tier).toBe(1);
   });
 });
 

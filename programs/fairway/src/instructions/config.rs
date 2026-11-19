@@ -28,6 +28,7 @@ pub fn handle_initialize_config(ctx: Context<InitializeConfig>, score_authority:
     c.score_ttl_slots = score_ttl_slots;
     c.bump = ctx.bumps.config;
     c.markout = MarkoutParams::default();
+    c.protocol_fee_bps = DEFAULT_PROTOCOL_FEE_BPS;
     Ok(())
 }
 
@@ -46,6 +47,7 @@ pub struct ConfigUpdate {
     pub default_tier: Option<u8>,
     pub score_ttl_slots: Option<u64>,
     pub markout: Option<MarkoutParams>,
+    pub protocol_fee_bps: Option<u16>,
 }
 
 pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) -> Result<()> {
@@ -61,6 +63,10 @@ pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) ->
     if let Some(s) = update.score_authority {
         c.score_authority = s;
     }
+    if let Some(p) = update.protocol_fee_bps {
+        require!(p <= MAX_PROTOCOL_FEE_BPS, FairwayError::InvalidProtocolFee);
+        c.protocol_fee_bps = p;
+    }
     if let Some(m) = update.markout {
         validate_markout(&m)?;
         c.markout = m;
@@ -68,6 +74,24 @@ pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) ->
     if let Some(t) = update.score_ttl_slots {
         c.score_ttl_slots = t;
     }
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct SetPoolOracle<'info> {
+    pub admin: Signer<'info>,
+    #[account(seeds = [CONFIG_SEED], bump = config.bump, has_one = admin @ FairwayError::Unauthorized)]
+    pub config: Account<'info, Config>,
+    #[account(mut, seeds = [POOL_SEED, pool.base_mint.as_ref(), pool.quote_mint.as_ref()], bump = pool.bump)]
+    pub pool: Account<'info, crate::state::Pool>,
+}
+
+/// Point a pool at its Pyth price account (base/USD; the quote token is assumed USD-pegged). `Pubkey::default()` turns
+/// onchain scoring off for the pool.
+pub fn handle_set_pool_oracle(ctx: Context<SetPoolOracle>, price_account: Pubkey, feed_id: [u8; 32]) -> Result<()> {
+    let p = &mut ctx.accounts.pool;
+    p.oracle_price_account = price_account;
+    p.oracle_feed_id = feed_id;
     Ok(())
 }
 
