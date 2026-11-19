@@ -1,12 +1,12 @@
 # PROGRESS.md
 
 ## Current state / next step
-M0–M1 done. Next: M2 fixtures.
+M0–M2 done. Next: M3 simulator + backtest.
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
 - [x] **M1 Scoring package:** types, markout, shrinkage, tiers, MidPriceProviders, tests green
-- [ ] **M2 Fixtures:** deterministic generator (agents, CEX path, swaps, getBlock-shaped blocks incl. edge cases)
+- [x] **M2 Fixtures:** deterministic generator (agents, CEX path, swaps, getBlock-shaped blocks incl. edge cases)
 - [ ] **M3 Simulator and backtest:** regimes, metrics, sweep grid, recommended params, chart export
 - [ ] **M4 Math crate and Anchor program:** accounts, instructions, events, security checks, tests green (or the Section 5.6 fallback)
 - [ ] **M5 SDK:** PDAs, instruction builders, account decoders, typed errors, tests
