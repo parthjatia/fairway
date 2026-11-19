@@ -19,7 +19,7 @@ All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = t
 - [x] 1. Onchain launch fee schedule (per-pool launch params, tier × time decay, tests: decay math, window boundary, fresh wallet at block 0, wrong-signer attack)
 - [x] 2. Onchain pool TWAP for tokens without an oracle (price accumulator, settle via TWAP, tests, RISKS.md §1d)
 - [x] 3. Launch simulation (default /backtest view): packages/sim/src/launch.ts, out/launch.json, LaunchExplorer tab, docs/charts/launch-*.svg
-- [ ] 4. Launch flow and UI (/launch, /launch/[id], landing, nav)
+- [x] 4. Launch flow and UI: /launch wizard (mock + live via SDK, verified on a local validator), /launch/[id] (playback, buyers with tier + score source, sniper-share meter, same-buy-two-wallets), landing reframed, nav launches-first (liquid pair secondary), seed:local adds a launch pool
 - [ ] 5. Streams: Pump.fun sniper scoring
 - [ ] 6. Docs
 - [ ] 7. Final check

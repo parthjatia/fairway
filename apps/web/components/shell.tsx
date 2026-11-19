@@ -18,12 +18,16 @@ export function Logo({ className = '' }: { className?: string }) {
   );
 }
 
+/** Launches first; the liquid-pair (SOL/USDC) swap and pool are secondary evidence that the engine generalises. */
 const LINKS = [
-  { href: '/swap', label: 'Swap' },
-  { href: '/wallet', label: 'Wallets' },
-  { href: '/pool', label: 'Pool' },
+  { href: '/launch', label: 'Launch' },
   { href: '/backtest', label: 'Backtest' },
+  { href: '/wallet', label: 'Wallets' },
   { href: '/how-it-works', label: 'How it works' },
+];
+const SECONDARY = [
+  { href: '/swap', label: 'Swap' },
+  { href: '/pool', label: 'Pool' },
 ];
 
 function PersonaSwitcher() {
@@ -97,6 +101,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 {l.label}
               </Link>
             ))}
+            <span className="ml-2 border-l border-line pl-3 text-[11px] font-medium uppercase tracking-wide text-muted">Liquid pair</span>
+            {SECONDARY.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className={`rounded-lg px-2.5 py-1.5 text-[12px] font-medium ${path.startsWith(l.href) ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink'}`}
+              >
+                {l.label}
+              </Link>
+            ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {MODE === 'mock' ? <PersonaSwitcher /> : <WalletButton />}
@@ -115,13 +129,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 {l.label}
               </Link>
             ))}
+            <div className="mt-1 border-t border-line px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted">Liquid pair (SOL/USDC)</div>
+            {SECONDARY.map((l) => (
+              <Link key={l.href} href={l.href} className="block rounded-lg px-3 py-2 text-sm text-ink-2 hover:bg-surface-2 hover:text-ink">
+                {l.label}
+              </Link>
+            ))}
           </nav>
         )}
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">{children}</main>
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-[12px] text-muted sm:px-6">
-          <span>Fairway — toxicity-tiered fees for Solana AMMs. Hackathon prototype, unaudited.</span>
+          <span>Fairway Launch — fair token launches on Solana: known snipers pay more, humans pay less. Hackathon prototype, unaudited.</span>
           <span>Data: QuickNode Streams (live) · deterministic fixtures + agent-based simulation (mock)</span>
         </div>
       </footer>

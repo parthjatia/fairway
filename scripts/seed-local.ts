@@ -22,6 +22,7 @@ import {
   TIER,
   setPoolOracleIx,
   treasuryPda,
+  configureLaunchIx,
 } from '@fairway/sdk';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -88,6 +89,12 @@ async function main() {
   // oracle: it trades and charges tiers from keeper scores, but builds no onchain evidence.
   const bonk = await createMint(conn, admin, admin.publicKey, null, 5);
   await createPoolAndSeed(bonk, quote, 50_000_000_000n * 10n ** 5n, 1_000_000n * 10n ** 6n);
+  // Third pool: a fair launch (FROG test mint, 6 decimals, no oracle → scored against the pool TWAP). Configured before any
+  // swap; trading opens now, default 750-slot window and fee curve. The admin creates it, so no launch fee is charged.
+  const frog = await createMint(conn, admin, admin.publicKey, null, 6);
+  await createPoolAndSeed(frog, quote, 800_000_000n * 10n ** 6n, 24_000n * 10n ** 6n);
+  await send([configureLaunchIx({ authority: admin.publicKey, baseMint: frog, quoteMint: quote, launchSlot: 0, windowSlots: 750 })], [admin]);
+  console.log(`launch configured: /launch/${frog.toBase58()}`);
   await send(
     [setScoresBatchIx({ authority: authority.publicKey, entries: [
       { trader: rita.publicKey, tier: TIER.RETAIL, scoreBps: 0, trades: 40 },
@@ -102,8 +109,8 @@ async function main() {
     await mintTo(conn, admin, base, b.address, admin, 100n * 10n ** 9n);
     await mintTo(conn, admin, quote, q.address, admin, 20_000n * 10n ** 6n);
   }
-  writeFileSync(join(root, 'apps', 'web', '.env.local'), `NEXT_PUBLIC_MODE=live\nNEXT_PUBLIC_RPC_URL=${rpc}\nNEXT_PUBLIC_BASE_MINT=${base.toBase58()}\nNEXT_PUBLIC_QUOTE_MINT=${quote.toBase58()}\n`);
-  console.log(JSON.stringify({ base: base.toBase58(), quote: quote.toBase58(), rita: rita.publicKey.toBase58(), bot7: bot.publicKey.toBase58(), demo: demo.publicKey.toBase58() }, null, 2));
+  writeFileSync(join(root, 'apps', 'web', '.env.local'), `NEXT_PUBLIC_MODE=live\nNEXT_PUBLIC_RPC_URL=${rpc}\nNEXT_PUBLIC_BASE_MINT=${base.toBase58()}\nNEXT_PUBLIC_QUOTE_MINT=${quote.toBase58()}\nNEXT_PUBLIC_LAUNCH_MINT=${frog.toBase58()}\n`);
+  console.log(JSON.stringify({ base: base.toBase58(), quote: quote.toBase58(), launch: frog.toBase58(), rita: rita.publicKey.toBase58(), bot7: bot.publicKey.toBase58(), demo: demo.publicKey.toBase58() }, null, 2));
   console.log('Seeded. Import .keys/demo-*.json into your wallet (solana-keygen pubkey) to try tiers. Wrote apps/web/.env.local');
 }
 main().catch((e) => {
