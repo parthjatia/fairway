@@ -2,6 +2,8 @@
 
 **The program is unaudited and was only tested with LiteSVM and unit tests. Do not use real funds.**
 
+Launch-specific risks (M16) are in [§1d TWAP manipulation](#1d-pool-twap-as-the-markout-price-launch-tokens-m16) and [§10](#10-launch-specific-risks-m16): fresh-wallet Sybils, bundlers, unverified Pump.fun program IDs, false TOXIC labels, memecoin perception and launch configuration.
+
 ## 1. Score-oracle trust
 The `score_authority` (a keeper key) writes the **bootstrap** fields of `TraderScore` accounts. A compromised or malicious keeper could mark bots RETAIL (LPs lose fees) or retail TOXIC (users pay more), **but only for wallets without enough onchain evidence**.
 - **Onchain verified scores (M13).** The program scores Fairway trades itself: `swap` queues each trade, and a permissionless `settle_markout` marks it out against Pyth after 75 slots. Once a wallet has ≥ 1,000 USDC (`onchain_min_notional`) of settled notional and ≥ 5 settled trades, the onchain tier is used and keeper writes cannot change that wallet's fee. The keeper also cannot close an account that holds onchain evidence (tested), so it cannot wipe a verified score and replace it.
@@ -68,3 +70,25 @@ Unaudited. Known simplifications: `MIN_LIQUIDITY` is tracked as virtual supply, 
 
 ## 9. Operational
 The ingest webhook must be reachable. Stream retries and the `(sig, pool)` idempotency cover short outages. The keeper defaults to dry-run and refuses devnet mode without `RPC_URL` and `KEEPER_KEYPAIR`.
+
+## 10. Launch-specific risks (M16)
+
+### 10a. Fresh-wallet Sybils at launch
+A sniper who has never sniped before, or who uses a new wallet for every launch, has no score. It pays the **STANDARD curve (300 → 30 bps)**, which is exactly the time-decay anti-sniper fee used today. Fairway is therefore never worse than time-decay against unknown snipers, but it is not better either. In the simulation's worst case (every sniper on a fresh wallet), snipers take the same 49% of the window supply as under time-decay. Humans with history still pay 94 bps instead of 200.
+- *Why rotation is costly at launch:* the snipers that matter are repeat players who need fast, funded, pre-positioned wallets. Rotating means funding a new wallet for every launch from somewhere, and that funding trail is public (see 10b).
+- *Why fresh wallets can't get a discount:* RETAIL needs ≥ 5 scored trades with near-zero markout and ≥ 3 days of history. Building that on many wallets costs time and real trading losses (spread and fees) per wallet.
+
+### 10b. Bundlers
+A bundler buys the first slots through several fresh wallets in one bundle (in the sim: ~$6k over 3–8 wallets in half the launches). Each wallet is new, so each pays STANDARD. **Not detected today.** The sniper scorer looks at each wallet's history across launches, not at who funded it. Future work: funding-graph features (wallets funded from one source shortly before a launch inherit that source's tier), a per-launch cap on STANDARD-tier buys in the first N slots, and Jito-bundle awareness. The fee payer is the trader in our parser, so a bundle with one fee payer for many buyers is attributed to that payer.
+
+### 10c. Unverified program IDs and account layout
+`streams/pumpfun-filter.js` matches Pump.fun (`6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`) and PumpSwap (`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`). **Both are marked VERIFY: they were written from memory and have not been checked onchain in this repo.** The filter also assumes the account layout: Pump.fun keeps SOL as lamports in the bonding-curve account, and PumpSwap pools hold WSOL in a token account. It was tested on synthetic blocks only. If a program ID is wrong, the filter matches nothing (fail-closed: no false TOXIC labels). If the layout differs, trades may be mis-sized. Checking steps are in `streams/STREAM_CONFIG.md` §Pump.fun. Run the dashboard's "Run test" on a known Pump.fun slot before trusting the scores.
+
+### 10d. False TOXIC labels on humans
+A human who happens to buy early in three or more launches that then pump could be labelled TOXIC. Mitigations: the ≥ 3 distinct launches rule, a 500 bps shrunk-score threshold with K = 5 SOL of prior notional (small early buys barely move it), the keeper's TTL (a label expires unless refreshed), and onchain-verified scores taking over once a wallet has settled flow on Fairway. The damage is bounded: a higher fee during the launch window, never lost funds.
+
+### 10e. Memecoin perception and launch abuse
+Launches are mostly memecoins, and some are scams (rug pulls, honeypots). Fairway changes **who pays the launch fee**. It does not vet tokens, and a fair distribution does not make a token a good investment. The UI and docs should say so. The 0.05 SOL launch fee adds a small cost to spam launches. A creator can also be the sniper (buying through fresh wallets): that is the 10a/10b case, and the creator's own wallet pays its tier like anyone else.
+
+### 10f. Launch configuration
+`configure_launch` can only run before the first swap, and only by the pool creator or the admin. The window is capped (216,000 slots ≈ 1 day), and curves are validated (`valid_launch_curve`: start ≥ end per tier, every fee ≤ 1,000 bps, and RETAIL ≤ STANDARD ≤ TOXIC at both ends). A creator could still choose a hostile curve within those bounds (for example 1,000 bps for every tier). The fee schedule is public in the pool account and shown in the UI before anyone buys, and the launch view shows the current fee per tier.

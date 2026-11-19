@@ -12,6 +12,16 @@ const STEPS = [
   ['Swap', 'tiered fee'],
 ];
 
+const LAUNCH_STEPS = [
+  ['Stream L', 'Pump.fun + PumpSwap blocks'],
+  ['pumpfun-filter.js', 'create / buy / sell per mint'],
+  ['Sniper scores', 'early buys across ≥ 3 launches'],
+  ['Keeper', 'TOXIC before slot 0'],
+  ['configure_launch', 'tier × time fee curve'],
+  ['Launch swap', 'known sniper 1000 bps, human 30'],
+  ['Pool TWAP', 'scores trades after launch'],
+];
+
 const ONCHAIN_STEPS = [
   ['Swap', 'queues {price, slot, side, notional} in the signer’s PDA'],
   ['~75 slots later', 'the 30 s markout horizon passes'],
@@ -27,6 +37,24 @@ export default function HowItWorks() {
         Public onchain history tells us who trades on information. Fairway turns that into a fee schedule an AMM can enforce.
       </PageHeader>
       <div className="space-y-6">
+        <Card title="Fair launches" subtitle="Known snipers are found in Pump.fun history before a token exists, and pay a steeper launch curve. Fresh wallets pay today's time-decay fee; proven humans pay almost nothing.">
+          <ol className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center">
+            {LAUNCH_STEPS.map(([t, d], i) => (
+              <li key={t} className="flex flex-1 items-center gap-2">
+                <div className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-3 text-center">
+                  <div className="text-[13px] font-semibold text-ink">{t}</div>
+                  <div className="text-[11px] text-ink-2">{d}</div>
+                </div>
+                {i < LAUNCH_STEPS.length - 1 && <span className="hidden text-muted lg:block" aria-hidden>→</span>}
+              </li>
+            ))}
+          </ol>
+          <p className="mt-4 text-[13px] leading-relaxed text-ink-2">
+            Inside the launch window each tier&apos;s fee decays linearly: TOXIC 1000 → 80 bps, STANDARD 300 → 30 (the same as a time-decay launch), RETAIL 30 → 5. A new token has no oracle, so after launch
+            the program marks every trade against the pool&apos;s own 25-slot TWAP, 75 slots later, measured from the post-trade price so a buyer&apos;s own impact never counts as information. Limits: snipers on
+            fresh wallets pay the time-decay fee, and bundlers are not detected yet.
+          </p>
+        </Card>
         <Card title="Pipeline" subtitle="Each arrow is a component in this repo; the Stream and the keeper's devnet mode are the parts that need your accounts.">
           <ol className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center">
             {STEPS.map(([t, d], i) => (

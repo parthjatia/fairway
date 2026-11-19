@@ -1,56 +1,124 @@
-# Fairway
+# Fairway Launch
 
-**A Solana DEX where bots pay more and humans never pay more than in a normal pool.**
+**Fair token launches on Solana. Known snipers pay more, humans pay less.**
 
-> **Headline (synthetic backtest, 16 paired seeds, $3M pool).** Fairway **cuts what bots extract from LPs (LVR) by 73%**. **Retail never pays more than a normal 30 bps pool** (−1.0 ± 0.7 bps), and part of the bot tax comes back to proven retail wallets as a **bot-tax rebate**. **LPs: +$15 ± 33/day vs a flat 30 bps pool before the protocol's share, −$56 ± 31/day after it** (the protocol keeps 15% of the toxic premium only). That is *not* a statistically proven LP gain: we looked for a setting that beats flat 30 beyond the noise band and there isn't one. Details: [Backtest results](#backtest-results-synthetic), [`docs/ECONOMICS.md`](docs/ECONOMICS.md).
+*Other launchpads tax everyone who's early. Fairway taxes snipers.*
 
-Fairway is a constant-product AMM whose swap fee depends on the trader's **toxicity tier**. The tier is read from an onchain `TraderScore` account. A keeper writes a **bootstrap** score from the wallet's public history on all venues (via **QuickNode Streams**). For trades on Fairway itself, the **program computes the score onchain** from the wallet's own swaps and a Pyth price, with no trusted oracle.
+> **Headline (synthetic launch simulation, 200 launches).** Compared with a time-decay launch fee that charges everyone the same (300 → 30 bps over 5 minutes), Fairway's **tier × time** fee cuts what **humans** pay in the launch window by **53%** (201 → 94 bps). **Known snipers** pay **1.5×** more per trade (245 → 371 bps), and almost all of them stay out: the **sniper share of window supply falls from 49% to 27%**. Honest limits: snipers on **fresh wallets** pay exactly the time-decay fee (Fairway can't tell them apart from new humans), and **creator fee income is lower** than under time-decay ($591 vs $1,399 per launch) because humans pay less. Details: [Launch economics](#launch-economics), [`docs/ECONOMICS.md`](docs/ECONOMICS.md#8-launch-economics-m16).
 
-> **Hackathon status, read this first.** Everything runs offline on **synthetic data** (a deterministic simulator and fixtures). The Anchor program is unaudited and has not been deployed to devnet yet. The Raydium SOL-USDC vault addresses in the Stream config were checked against mainnet, but no live Stream has run yet. See [What is simulated vs. live](#what-is-simulated-vs-live).
+A launch on Fairway is a normal Fairway pool with a **launch fee curve**. During the launch window (default 750 slots ≈ 5 minutes) each tier's fee decays linearly from a start fee to its normal fee: **TOXIC 1000 → 80 bps, STANDARD 300 → 30, RETAIL 30 → 5**. The tier comes from the signer's onchain `TraderScore` PDA. Wallets that have sniped **Pump.fun** launches before are found through a **QuickNode Stream** and scored TOXIC **before the token exists**. A fresh wallet always pays the STANDARD curve. After the window, the pool keeps scoring trades **onchain against its own TWAP**, because a new token has no oracle.
+
+The same engine also runs a liquid SOL/USDC pool (markouts against Pyth, a bot-tax rebate, a protocol share). Those results are now the **secondary evidence**: [Liquid-pair results](#liquid-pair-results-solusdc-secondary-evidence-synthetic).
+
+> **Hackathon status, read this first.** Everything runs offline on **synthetic data** (a deterministic simulator and fixtures). The Anchor program is unaudited and **not deployed to devnet yet**. No live Stream has run yet. The **Pump.fun and PumpSwap program IDs in the launch filter are marked VERIFY**: they were written from memory and are not checked onchain ([how to check](streams/STREAM_CONFIG.md#program-ids-verify-before-going-live)). The Raydium SOL-USDC vault addresses were checked against mainnet. See [What is simulated vs. live](#what-is-simulated-vs-live).
 
 **Fairway is bot-friendly: good bots pay less, extractive flow pays its fair share.** The fee follows measured behaviour (markout), not whether the signer is a human or a program.
 
+![Launch fee by participant and regime](docs/charts/launch-fees.png)
+
 ## For judges
 
-**In three lines.** (1) A Solana AMM whose swap fee depends on the signer's measured toxicity tier: retail and standard pay 30 bps, proven-toxic bots pay 80, and 10% of that bot premium is rebated to proven-retail wallets (hard-capped by the premium collected). (2) Scores come from two sources: a keeper that backfills history through a QuickNode Stream, and the program itself, which marks every Fairway swap against Pyth and scores it onchain with no oracle operator. (3) A backtest on synthetic data shows who pays and who gains, including where it does not work: LPs are within noise of a flat 30 bps pool before the protocol share and slightly behind after it (see [Backtest results](#backtest-results-synthetic)).
+**In three lines.** (1) A Solana launch pool whose fee depends on **who** is buying and **when**: the per-tier fee decays over a 5-minute window, so a known sniper pays 10% at slot 0, a fresh wallet 3% and a proven human 0.3%. (2) "Known sniper" comes from a QuickNode Stream over Pump.fun / PumpSwap history (wallets that buy in the first seconds of launch after launch and profit right after), written onchain by a keeper. After launch, the program scores every trade **itself** against the pool's own TWAP, with no oracle operator. (3) A 200-launch simulation shows who pays and who gains, including where it does not work: fresh-wallet snipers, and lower creator income than time-decay (see [Launch economics](#launch-economics)).
 
 | Criterion | What to look at | Proof |
 |---|---|---|
-| Technical execution | Anchor program with PDAs, SPL vaults, checked integer math, a permissionless oracle-based settlement, a permissionless epoch-rolled bot-tax rebate with a hard budget cap, a protocol treasury, rent sponsorship; 37 LiteSVM tests including the wrong-signer attack and the rebate cap/floor/epoch roll | [`programs/fairway/src/`](programs/fairway/src) ([`swap.rs`](programs/fairway/src/instructions/swap.rs), [`settle.rs`](programs/fairway/src/instructions/settle.rs), [`treasury.rs`](programs/fairway/src/instructions/treasury.rs)), [`tests/fairway.rs`](programs/fairway/tests/fairway.rs), [`crates/fairway-math/`](crates/fairway-math), shared Rust/TS test vectors [`vectors/onchain.json`](crates/fairway-math/vectors/onchain.json) |
-| Product & UX | Swap page with a "same trade, two wallets" panel, wallet score explorer with "Onchain verified" and "Verified fair flow" badges, LP dashboard with protocol revenue and "extra fees from bots", interactive backtest, two pools (SOL/USDC, BONK-test/USDC), dark mode, mock mode needs no wallet | [`apps/web/app/`](apps/web/app), [`swap-panel.tsx`](apps/web/components/swap-panel.tsx), [`two-wallets.tsx`](apps/web/components/two-wallets.tsx), [`wallet-detail.tsx`](apps/web/components/wallet-detail.tsx) |
-| Innovation | Fee keyed on a wallet's own measured markout (information content), scored trustlessly onchain; STANDARD floor makes wallet rotation useless; any DEX can read the score | [Scoring and trust model](#scoring-and-trust-model), [`docs/ECONOMICS.md`](docs/ECONOMICS.md), [`getFeeTier`](packages/sdk/src/feetier.ts) |
-| Impact & potential | LVR down 73% in the backtest, retail never above a normal pool (−1.0 bps) plus a bot-tax rebate, a revenue model (15% of the toxic premium, score licensing), honest limits: LPs are not proven ahead of flat 30 | [Business model](#business-model), [Backtest](#backtest-results-synthetic), [`docs/RISKS.md`](docs/RISKS.md) |
-| Demo | `pnpm demo` runs everything offline in one command; a 2–3 minute shot list | [Quick start](#quick-start), [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`docs/PITCH.md`](docs/PITCH.md) (5-minute script, 15 Q&As) |
+| Technical execution | Anchor program: a per-tier launch fee curve on slots (`configure_launch`), an onchain price-time TWAP accumulator in the pool account, permissionless TWAP markout settlement, signer-derived score PDAs, plus the liquid-pair machinery (Pyth settlement, bot-tax rebate, treasury, rent sponsorship). **46 LiteSVM tests**, including the wrong-signer attack during a launch, swaps before the launch slot, fee decay and TWAP scoring | [`instructions/launch.rs`](programs/fairway/src/instructions/launch.rs), [`swap.rs`](programs/fairway/src/instructions/swap.rs), [`settle.rs`](programs/fairway/src/instructions/settle.rs), [`fairway-math/launch.rs`](crates/fairway-math/src/launch.rs), [`twap.rs`](crates/fairway-math/src/twap.rs), [`tests/fairway.rs`](programs/fairway/tests/fairway.rs) |
+| Product & UX | `/launch` create wizard (mock, and live against a local validator), `/launch/[id]` launch replay with a buyers list (tier, fee paid, onchain-verified vs bootstrap score; the score source is illustrative in mock mode), a sniper-share meter and a **"Same buy, two wallets"** panel; launch backtest as the default `/backtest` view; dark mode; mock mode needs no wallet | [`launch-wizard.tsx`](apps/web/components/launch-wizard.tsx), [`launch-view.tsx`](apps/web/components/launch-view.tsx), [`launch-explorer.tsx`](apps/web/components/launch-explorer.tsx) |
+| Innovation | The launch tax keys on the **wallet's history across past launches**, not only on time. A fresh wallet can never pay less than STANDARD, so rotation removes the surcharge but never earns a discount. Oracle-less tokens are scored onchain against the pool's own TWAP | [How a Fairway launch works](#how-a-fairway-launch-works), [`packages/scoring/src/sniper.ts`](packages/scoring/src/sniper.ts), [`docs/ECONOMICS.md`](docs/ECONOMICS.md#8-launch-economics-m16) |
+| Impact & potential | Humans pay 53% less in the launch window than under time-decay, the sniper share of early supply nearly halves, and the revenue model is a launch fee plus a share of the toxic premium. Honest limits are stated: fresh-wallet snipers, lower creator fees | [Launch economics](#launch-economics), [`docs/RISKS.md`](docs/RISKS.md) |
+| Demo | `pnpm demo` runs everything offline in one command; a shot-by-shot 2–3 minute script built around a launch | [Quick start](#quick-start), [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`docs/PITCH.md`](docs/PITCH.md) (5-minute script + Q&A) |
 
 **Per-prize requirements**
 
 - **DeFi track**
-  - [x] A new AMM fee primitive: tier-by-markout fees, [`swap.rs`](programs/fairway/src/instructions/swap.rs), [`fairway-math`](crates/fairway-math/src/tier.rs)
-  - [x] Economic design: [Economic design](#economic-design) and [`docs/ECONOMICS.md`](docs/ECONOMICS.md)
-  - [x] Risk assumptions: [Risk assumptions](#risk-assumptions) and [`docs/RISKS.md`](docs/RISKS.md)
+  - [x] A new fee primitive: launch fee = f(trader tier, slots since launch), [`configure_launch`](programs/fairway/src/instructions/launch.rs), [`swap.rs`](programs/fairway/src/instructions/swap.rs), [`fairway-math/launch.rs`](crates/fairway-math/src/launch.rs)
+  - [x] Price discovery without arbitrage: an onchain pool TWAP as the markout reference, [`twap.rs`](crates/fairway-math/src/twap.rs), [`settle.rs`](programs/fairway/src/instructions/settle.rs)
+  - [x] Economic design: [Launch economics](#launch-economics), [Economic design](#economic-design), [`docs/ECONOMICS.md`](docs/ECONOMICS.md)
+  - [x] Risk assumptions: [Risk assumptions](#risk-assumptions), [`docs/RISKS.md`](docs/RISKS.md) (TWAP manipulation, launch Sybils, bundlers)
   - [x] Program addresses: [Program IDs](#program-ids) (localnet ID; devnet is **not deployed yet**)
-  - [x] Simulation evidence, with limits stated: [`packages/sim/`](packages/sim), [`packages/sim/out/`](packages/sim/out)
+  - [x] Simulation evidence, with limits stated: [`packages/sim/src/launch.ts`](packages/sim/src/launch.ts), [`packages/sim/out/launch.json`](packages/sim/out/launch.json)
 - **Best use of Solana**
   - [x] Anchor program, PDAs (`config`, `pool`, `vault`, `lp_mint`, `score`, `treasury`), SPL Token vaults and LP mint: [`state.rs`](programs/fairway/src/state.rs), [`pool.rs`](programs/fairway/src/instructions/pool.rs)
+  - [x] Slot-native design: the launch curve and the TWAP run on slots (400 ms), the TWAP lives in the pool account (64 observations, updated in place under the 4 KB SBF stack)
   - [x] Program IDs and a Solana-usage explanation: [Program IDs](#program-ids), [How we use Solana](#how-we-use-solana)
-  - [x] Solana-native data: v0 transactions with lookup tables, token-balance deltas, Anchor events: [`packages/parser/`](packages/parser/src/core.ts)
-  - [x] Onchain oracle use (Pyth `PriceUpdateV2`) and slot-based timing: [`settle.rs`](programs/fairway/src/instructions/settle.rs)
+  - [x] Solana-native data: v0 transactions with lookup tables, token-balance and lamport deltas, Anchor events: [`packages/parser/`](packages/parser/src)
   - [ ] Devnet deployment: not done (needs the human steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md))
 - **QuickNode Streams bounty**
-  - [x] A Stream with a server-side filter and a webhook destination, config documented (network, dataset, filter logic, destination, why): [`streams/STREAM_CONFIG.md`](streams/STREAM_CONFIG.md), [QuickNode Stream configuration](#quicknode-stream-configuration)
-  - [x] The filter itself, standalone and tested against `getBlock`-shaped fixtures: [`streams/filter.js`](streams/filter.js), [`streams/filter.test.ts`](streams/filter.test.ts), shared logic in [`packages/parser/`](packages/parser/src/core.ts)
-  - [x] Webhook receiver with signature check, idempotent storage, scoring: [`services/ingest/`](services/ingest/src/app.ts)
-  - [ ] A live Stream running: not yet created (needs a QuickNode account; steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md))
-
-![LP and retail outcomes by fee regime](docs/charts/regimes.png)
+  - [x] **Stream L, launches:** Solana mainnet, Block dataset, filter [`streams/pumpfun-filter.js`](streams/pumpfun-filter.js) (Pump.fun + PumpSwap create/buy/sell), webhook `POST /streams/pumpfun` → cross-launch sniper scores. Config, filter logic and why: [`STREAM_CONFIG.md` §Stream L](streams/STREAM_CONFIG.md#stream-l-pumpfun--pumpswap-launches--known-sniper-scores-m16)
+  - [x] **Stream A, liquid pairs:** [`streams/filter.js`](streams/filter.js) (vault-delta swap extraction) → `POST /streams/solana`
+  - [x] Both filters are standalone, generated from the parser code the ingest service runs, and tested against `getBlock`-shaped fixtures: [`streams/pumpfun-filter.test.ts`](streams/pumpfun-filter.test.ts), [`streams/filter.test.ts`](streams/filter.test.ts)
+  - [x] Webhook receiver with signature check, idempotent storage and scoring: [`services/ingest/`](services/ingest/src/app.ts), [`launches.ts`](services/ingest/src/launches.ts)
+  - [ ] A live Stream running: not yet created (needs a QuickNode account). The Pump.fun program IDs are **unverified** ([how to check](streams/STREAM_CONFIG.md#program-ids-verify-before-going-live))
 
 ## The problem
 
-- When the price moves on a centralized exchange, arbitrage bots hit the AMM at the stale price first. LPs lose that gap. This is **LVR** (loss-versus-rebalancing).
-- Every trader pays the same fee, so a retail swap pays the same as a bot that is trading on information.
-- A flat fee has to be high enough to protect LPs, which overcharges retail. Or it is low enough for retail, and LPs bleed.
+- **Launches are won by snipers.** On a new token, bots buy in the first seconds, before any human can react, and sell into the crowd that follows. In our flat-fee simulation they take **54% of the supply** sold in the first 5 minutes.
+- **Today's fix taxes everyone.** Launchpads and pools use a time-decaying "anti-sniper" fee: high at the start, falling to normal. It hits the sniper and the human who bought one second later in the same way, so humans pay ~200 bps in the window to stop bots that just pay it too.
+- **The information exists.** Snipers are repeat players. The same wallets snipe launch after launch on Pump.fun, and that history is public onchain.
+- (Liquid pairs have the same shape: arbitrage bots trade against stale AMM prices and LPs lose it (LVR), while every trader pays the same fee. That is the [secondary evidence](#liquid-pair-results-solusdc-secondary-evidence-synthetic).)
 
-## How it works
+## How a Fairway launch works
+
+1. **Create.** The creator mints the token, creates a Fairway pool and adds liquidity (the first deposit locks 1,000 LP units). Then they call **`configure_launch(launch_slot, window_slots, curve)`**: launch slot (0 = now), window (default 750 slots ≈ 5 min, max 216,000) and an optional custom curve. It only works **before the first swap**. A non-admin creator pays a **0.05 SOL launch fee** to the protocol treasury. `/launch` does all of this in three transactions.
+2. **Before the launch slot,** swaps are refused (`LaunchNotStarted`), so a creator can schedule the opening and nobody trades before it. From the launch slot on, the first buyers face the highest fees.
+3. **During the window,** each tier's fee decays linearly: `fee = end + ⌈(start − end) × (window − elapsed) / window⌉`.
+
+   | Tier | Who | Slot 0 | Halfway | Last window slot | After the window (`Config` fee) |
+   |---|---|---:|---:|---:|---:|
+   | TOXIC | **known snipers** (keeper, from Pump.fun history) or proven-toxic flow | 1000 bps | 540 | 82 | 80 |
+   | STANDARD | every wallet without a score, **including every fresh wallet** | 300 bps | 165 | 31 | 30 |
+   | RETAIL | wallets with proven uninformed history | 30 bps | 18 | 6 | 30 minus the bot-tax rebate |
+
+   The tier is read from the `TraderScore` PDA derived from the **signer**, so nobody can borrow someone else's RETAIL score (tested during a launch: `wrong_signer_attack_is_still_blocked_during_a_launch`). There is no bot-tax rebate inside the window.
+4. **Known snipers come from QuickNode Streams.** Stream L runs [`pumpfun-filter.js`](streams/pumpfun-filter.js) over Solana mainnet blocks and extracts every Pump.fun / PumpSwap create, buy and sell. [`scoreSnipers`](packages/scoring/src/sniper.ts) marks each **early buy** (within 25 slots of the create) against the token's price 75 slots later. A wallet that sniped **≥ 3 different launches** with a shrunk score **≥ 500 bps** is TOXIC. One lucky early buy never qualifies. The keeper writes these tiers onchain with `set_scores_batch` (dry-run by default).
+5. **After launch, the program scores trades itself.** A new token has no Pyth feed, so `configure_launch` turns on **TWAP scoring**: every swap and liquidity change records a price × slots observation in the pool account (64 observations, ≥ 8 slots apart). `settle_markout` marks each queued trade against the **25-slot TWAP ending 75 slots after the trade**. The reference price is the pool's post-trade spot, so a trader's own price impact never counts as "information". Wallets build onchain-verified scores on the token they launched into, with no oracle operator.
+
+```mermaid
+flowchart LR
+  PF[Solana mainnet<br/>Pump.fun · PumpSwap] --> SL[QuickNode Stream L<br/>Block · pumpfun-filter.js]
+  SL -->|webhook /streams/pumpfun| I[services/ingest<br/>launch trades · SQLite]
+  RA[Solana mainnet<br/>Raydium SOL-USDC] --> SA[QuickNode Stream A<br/>Block · filter.js]
+  SA -->|webhook /streams/solana| I
+  I --> SN[sniper scores<br/>cross-launch markout]
+  I --> SC[markout scores<br/>shrinkage · tiers]
+  SN --> K[services/keeper<br/>set_scores_batch]
+  SC --> K
+  K -->|TOXIC before slot 0| P[(Fairway program<br/>TraderScore PDAs)]
+  C[creator: configure_launch] --> L[launch pool<br/>tier × time fee]
+  P --> L
+  L -->|price × slots| T[pool TWAP]
+  T --> ST[settle_markout<br/>permissionless]
+  ST -->|onchain tier| P
+  I --> W[apps/web]
+  SIM[packages/sim<br/>launch + LP backtests] --> W
+```
+
+## Launch economics
+
+200 simulated launches (seeded, `packages/sim/src/launch.ts`): 15 minutes each, $10k–40k of initial liquidity, 2–8 snipers per launch (75% of them **known** from past launches, so TOXIC from slot 0; the rest on fresh wallets, so STANDARD), in half the launches a **bundler** splitting ~$6k across 3–8 fresh wallets (STANDARD), about 160 human buys of ~$80 (60% of humans have RETAIL history, the rest are new wallets), and a few uninformed bots. Snipers buy when their expected profit beats the fee, and the hype-driven human crowd arrives over the first minutes. Means per launch:
+
+| Regime (5-minute window) | Human fee | Known-sniper fee | Sniper share of window supply | Human entry vs listing price | Sniper profit | Creator (LP) fees | Protocol |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Flat 30 bps (no protection) | 30 bps | 30 bps | 54% | +163% | $6,918 | $220 | $7.50 |
+| Time-decay 300 → 30, everyone | 200 bps | 245 bps | 49% | +160% | $5,325 | $1,399 | $7.50 |
+| Aggressive time-decay 1000 → 30, everyone | **641 bps** | 314 bps | 1% | +117% | $71 | $1,458 | $7.50 |
+| **Fairway, tier × time** | **94 bps** | **371 bps** | **27%** | **+129%** | **$2,432** | $591 | $8.59 |
+| Fairway worst case: every sniper on a fresh wallet | 94 bps | 246 bps | 49% | +158% | $5,346 | $1,156 | $7.50 |
+
+What it shows, honestly:
+
+- **Humans pay 53% less than under time-decay** (paired across the same 200 launches), in every launch.
+- **Known snipers mostly stay out.** At 1000 bps they rarely buy at all: their notional falls from $25k to under $300 per launch, so the 371 bps is paid on a small volume. Total sniper profit falls 54% vs time-decay.
+- **Pooled over all snipers, the fee per trade is about the same as time-decay (1.01× paired).** The snipers that still trade are the fresh-wallet ones, and they pay the STANDARD curve, which *is* the time-decay curve. Fairway removes known snipers. It cannot price snipers it has never seen.
+- **Wallet rotation is the floor, not a failure.** If every sniper uses a fresh wallet, they pay exactly the time-decay fee and take the same share as under time-decay, and humans with history still pay 94 bps.
+- **Creators earn less fee income than under time-decay** ($591 vs $1,399), because the time-decay income is mostly paid by humans. Creators get a fairer distribution and a lower human entry price instead. An aggressive time-decay curve also stops snipers, but it charges humans 641 bps.
+- **Protocol:** the 0.05 SOL launch fee (~$7.50) plus 15% of the toxic premium (~$1 per launch here).
+
+Chart of the curves: [`docs/charts/launch-schedule.png`](docs/charts/launch-schedule.png). Regenerate: `pnpm --filter @fairway/sim launch` then `pnpm charts`. More detail, including who benefits: [`docs/ECONOMICS.md` §8](docs/ECONOMICS.md#8-launch-economics-m16).
+
+## The engine: markout scores
+
+Launch pools and liquid pairs share one scoring engine. A launch uses it in two places: the known-sniper bootstrap (step 6) and onchain TWAP scoring after the launch (step 5).
 
 1. **Markout.** For each past trade we ask: did the price move in the trader's favor shortly after? `markout_bps = side × (mid(t+h) − execPrice) / execPrice × 10,000`, with `side = +1` for a buy and `−1` for a sell. We use the pre-fee price, because we measure information, not cost. The primary horizon is 30 s (5 s and 60 s are also stored).
 2. **Score.** `score = Σ(notional × markout) / (Σ notional + K)`, with `K = 2,000` quote units. The shrinkage toward 0 means one lucky trade cannot move a wallet far.
@@ -63,23 +131,8 @@ Fairway is a constant-product AMM whose swap fee depends on the trader's **toxic
    | `STANDARD` | everyone else, **including every new wallet** | 30 bps |
 
 4. **Onchain lookup.** The `swap` instruction derives the `TraderScore` PDA from the **signer** (`["score", trader]`). If it is missing, stale (older than `score_ttl_slots`) or malformed, the swap pays STANDARD. A bot cannot pass someone else's RETAIL account, because the seeds check fails.
-5. **Onchain verified scoring.** Every Fairway swap is queued in the signer's `TraderScore` (a 4-entry buffer of `{pool, exec_price, slot, side, notional}`; the PDA is created on the first swap, with the rent sponsored by the protocol treasury when it can, else paid by the trader). After `markout_slots` (default 75 slots, about 30 s) **anyone** can call `settle_markout(trader)` for a pool. It reads that pool's Pyth price account, applies the same markout formula, shrinkage `K` and tier thresholds as `packages/scoring`, and updates the wallet's onchain tier. See [Scoring and trust model](#scoring-and-trust-model).
-6. **Data layer.** A QuickNode Stream filters Solana blocks down to swaps on chosen pools. Backfill scores wallets from day one using their activity on other DEXs (Raydium SOL-USDC is configured; Orca and Meteora only need their vault addresses added), and the live stream keeps scores fresh.
-
-```mermaid
-flowchart LR
-  S[QuickNode Stream<br/>Solana · Block dataset] -->|server-side JS filter| F[filter.js<br/>swap records]
-  F -->|webhook| I[services/ingest<br/>Fastify + SQLite]
-  I --> SC[packages/scoring<br/>markout · shrinkage · tiers]
-  SC --> K[services/keeper<br/>set_scores_batch]
-  K -->|bootstrap tier| P[(Fairway program<br/>TraderScore PDAs)]
-  P --> SW[swap: fee by tier]
-  SW -->|queue trade| P
-  PY[Pyth base/USD<br/>per pool] --> ST[settle_markout<br/>permissionless crank]
-  ST -->|onchain tier| P
-  I --> W[apps/web]
-  SIM[packages/sim<br/>agent-based backtest] --> W
-```
+5. **Onchain verified scoring.** Every Fairway swap is queued in the signer's `TraderScore` (a 4-entry buffer of `{pool, exec_price, slot, side, notional}`; the PDA is created on the first swap, with the rent sponsored by the protocol treasury when it can, else paid by the trader). After `markout_slots` (default 75 slots, about 30 s) **anyone** can call `settle_markout(trader)` for a pool. It reads that pool's Pyth price account (or, on a launch pool without an oracle, the pool's own TWAP), applies the same markout formula, shrinkage `K` and tier thresholds as `packages/scoring`, and updates the wallet's onchain tier. See [Scoring and trust model](#scoring-and-trust-model).
+6. **Data layer.** QuickNode Streams filter Solana blocks server-side. Stream L extracts Pump.fun / PumpSwap launch trades for the sniper scores. Stream A extracts swaps on chosen liquid pools, so backfill scores wallets from day one using their activity on other DEXs (Raydium SOL-USDC is configured; Orca and Meteora only need their vault addresses added). The live streams keep scores fresh.
 
 ## Scoring and trust model
 
@@ -109,15 +162,16 @@ Details that keep it hard to game:
 
 ## Business model
 
-Bots pay a premium; part of it goes back to retail, a small part to the protocol, the rest stays with LPs, and the scores themselves can be licensed.
+Snipers and bots pay a premium; part of it goes back to retail, a small part to the protocol, the rest stays with LPs (on a launch pool, usually the creator), and the scores themselves can be licensed.
 
 | Who | What they get | Where it shows |
 |---|---|---|
+| **Creators** | A launch where humans pay ~94 bps instead of ~200 in the window and known snipers take half the early supply they otherwise would. All swap fees as the pool's LP. Less fee income than a time-decay launch ($591 vs $1,399 per simulated launch): that is the cost of not taxing their own buyers | `/launch`, `/launch/[id]` |
 | **Retail** | Never more than a normal 30 bps pool, and a **bot-tax rebate** (RETAIL tier pays 30 bps minus a rebate funded by 10% of the previous epoch's toxic premium, floor 5 bps) once their own trades show no informed edge | `/swap`, "Same trade, two wallets" |
 | **Good bots** | The same fee as retail if their flow is uninformed (market makers, hedgers, rebalancers). "Verified fair flow" is earned from measured behaviour, not from being human | `/wallet/[address]` badge |
 | **Extractive flow** | Pays its fair share: TOXIC tier (80 bps) for arbitrage and sniping. Wallet rotation gets STANDARD (30), never the rebate | `/pool` headline "Extra fees earned from bots" |
-| **LPs** | Every fee except the protocol's premium share, plus 73% less LVR in the sim. **Not** proven better than a flat 30 bps pool: +$15 ± 33/day before the protocol share, −$56 ± 31/day after it. See the [verdict](#backtest-results-synthetic) | `/pool`, `/backtest` |
-| **Protocol** | `Config.protocol_fee_bps` = **15% of the toxic premium only** (the toxic fee above the STANDARD fee; max 50%), about $72/day on the simulated $3M pool. Accrued per pool and claimed into the treasury PDA by anyone. It takes nothing from retail or standard fees | `/pool` "Protocol revenue" |
+| **LPs** | Every fee except the protocol's premium share, plus 73% less LVR in the sim (LP-neutral within noise). **Not** proven better than a flat 30 bps pool: +$15 ± 33/day before the protocol share, −$56 ± 31/day after it. See the [verdict](#liquid-pair-results-solusdc-secondary-evidence-synthetic) | `/pool`, `/backtest` |
+| **Protocol** | A **0.05 SOL launch fee** per launch (`Config.launch.launch_fee_lamports`, paid to the treasury PDA by non-admin creators in `configure_launch`), plus `Config.protocol_fee_bps` = **15% of the toxic premium only** (the toxic fee above the STANDARD fee; max 50%), about $72/day on the simulated $3M pool. Accrued per pool and claimed into the treasury PDA by anyone. It takes nothing from retail or standard fees | `/pool` "Protocol revenue" |
 | **Other DEXes** | Read a wallet's score with one call and price flow with it. Licensing the scores (an access API and SLA, or a revenue share when another DEX routes by Fairway tiers) is the next revenue line, not built yet | [Any Solana DEX can read Fairway scores](#any-solana-dex-can-read-fairway-scores) |
 
 **Rebate mechanics.** `update_retail_fee` (permissionless, once per `rebate.epoch_slots`, default 9,000 slots ≈ 1 h) reads the pool's epoch counters (toxic premium, RETAIL-tier volume) and sets `rebate = min(share × premium ÷ retail_volume, retail_fee − floor)` and a budget of `share × premium` for the next epoch. `swap` never gives a RETAIL wallet more than the epoch rate, more than the budget left, or a fee below the floor, so the rebate can never exceed the premium collected. Zero toxic flow in an epoch means zero rebate.
@@ -149,13 +203,18 @@ const t = await getFeeTier(new Connection(rpcUrl), new PublicKey(wallet));
 
 ## What makes it unique
 
+- **The launch tax keys on who, not only when.** Time-decay anti-sniper fees charge the first human the same as the sniper. Fairway's curve is per tier, so a known sniper pays 1000 bps at slot 0 and a proven human 30.
+- **Sniper history exists before the token does.** Snipers are repeat players across Pump.fun launches, and Streams turns that public history into TOXIC scores before slot 0.
+- **Price discovery without arbitrage.** A new token has no oracle and no CEX, so the program marks trades against the pool's own TWAP, measured after the trade's own impact.
 - The fee is keyed on **measured information content of a wallet's past flow**, not on market volatility (dynamic-fee AMMs) or on a single block's behavior. Retail is rewarded for being provably uninformed.
 - **A fresh wallet can never pay less than STANDARD (30 bps).** Wallet rotation therefore gives bots no discount. We simulate that worst case explicitly.
 - **Cross-venue history.** Streams lets us score a wallet from its trades on other venues (Raydium today, and any AMM whose vaults are added to the config) before it ever touches Fairway.
 - **Transparent inputs.** Every score is reproducible from public swaps (the wallet explorer shows how).
 - **Trustless for Fairway's own flow.** The program computes markouts onchain against Pyth, so active wallets are scored with no oracle operator (the wallet page shows "Onchain verified" vs "Bootstrap score").
 
-## Backtest results (synthetic)
+## Liquid-pair results (SOL/USDC, secondary evidence, synthetic)
+
+The same engine on a liquid SOL/USDC pool, where bots are arbitrageurs instead of snipers. In short: **LVR −73%, LP-neutral within noise**, and retail never pays more than a normal pool.
 
 ### LP-first default (retail = standard = 30, toxic 80, 10% rebate, protocol 15% of the premium)
 
@@ -163,7 +222,7 @@ Agent-based simulation: 24 h, 60% annualized volatility with jumps, 400 ms steps
 
 | Metric vs flat 30 bps pool | Default | Notes |
 |---|---:|---|
-| LVR (arbitrage profit) | **−73%** ($132 → $35/day) | the part that is clearly good |
+| LVR (arbitrage profit) | **−73%** ($132 → $35/day), **LP-neutral within noise** | the part that is clearly good; LP PnL is within noise of flat 30 (next rows) |
 | Retail cost | **−1.0 ± 0.7 bps** | never higher; without the rebate it is +0.4 ± 0.6 |
 | LP PnL, before the protocol share | +$15 ± 33 | within noise |
 | LP PnL, after the protocol keeps 15% of the toxic premium | **−$56 ± 31** | a small, measurable cost (≈0.7% APR on $3M) |
@@ -194,7 +253,7 @@ Agent-based simulation: 24 h, 60% annualized volatility, 400 ms steps, 10,000 SO
 
 **Verdict on "do LPs earn more than a flat 30 bps pool, while retail pays less?" (checked 2026-11-19): not unconditionally. Read this before quoting a number.**
 
-- **Retail pays less and bots pay more: yes.** At 5/30/80, retail saves **18 bps** (34.8 → 16.7) and arbitrage profit falls 73%. Bots pay about **$475/day** more in fees than they would at the STANDARD fee on the same volume.
+- **Retail pays less and bots pay more: yes.** At 5/30/80, retail saves **18 bps** (34.8 → 16.7) and arbitrage profit falls 73% (LVR −73%, but LP PnL is not neutral here: see the next bullet). Bots pay about **$475/day** more in fees than they would at the STANDARD fee on the same volume.
 - **LPs vs flat 30 depends on the schedule.** At the demo schedule 5/30/80, LPs earn **$453/day less** than in a flat-30 pool (±66). The retail discount is paid by LPs: each bp of retail saving costs roughly $20/day on this $3M pool.
 - **Sweep pick 20/30/200** (best LP result after the protocol share among settings that save retail ≥ 5 bps): retail saves **7.1 bps**, arbitrage profit falls 90% (LVR check), and LP PnL is **+$74/day vs flat 30 before the protocol share (±214, not statistically different from zero) and −$155/day after the 15% share**. It needs a 200 bps toxic fee, which pushes p95 pool-vs-CEX deviation to 196 bps (flat 30: 32).
 - **With the protocol's 15% share, LPs beat flat 30 only under assumptions**: retail volume rising with lower fees (elasticity ≥ 1 in the sweep below), or a retail fee close to 30. These are labeled results, not measurements.
@@ -221,12 +280,17 @@ Fee tiers, shrinkage, the anti-gaming argument and how the recommended parameter
 
 - Fees are charged on the input, stay in the vaults (k grows), and are tracked per tier on the `Pool` account.
 - Tier fees (`[retail, standard, toxic]`) live in `Config` and can be updated by the admin. The oracle can only choose the tier, never the fee.
+- **Launch pools** add a per-tier time curve on top (`Pool.launch`), with no rebate inside the window and the post-window fees from `Config`. See [Launch economics](#launch-economics).
 - Faking a RETAIL history means trading with near-zero or negative markout for at least 3 days and at least 5 trades, which is the opposite of what an arbitrageur does.
 
 ## Risk assumptions
 
 Full list in [`docs/RISKS.md`](docs/RISKS.md). The main ones:
 
+- **Fresh-wallet snipers at launch.** A sniper with no history pays the STANDARD curve, the same as time-decay. Known-sniper detection only covers wallets that sniped before. Bundlers that fund many fresh wallets from one source are not detected (funding-graph analysis is future work).
+- **TWAP manipulation.** A launch pool's markout reference is its own TWAP, which a large trader can push. Mitigations: a 25-slot average measured 75 slots after the trade, post-trade reference prices, and observations at least 8 slots apart. Moving it costs real price impact against everyone else.
+- **Unverified program IDs.** The Pump.fun and PumpSwap IDs in the launch filter are marked VERIFY and have not been checked onchain.
+- **Memecoin perception.** Launches are associated with memecoins. Fairway's pitch is a fairer distribution, not endorsement of any token.
 - **Oracle trust.** The `score_authority` can mislabel wallets that have little Fairway history. Mitigations: a TTL, public inputs, the fact that it cannot set fees or touch funds, and the onchain verified score, which overrides it after 1,000 USDC and 5 trades of settled Fairway flow. The remaining trust for active wallets is in Pyth (validated feed id, staleness, confidence).
 - **Settlement liveness.** `settle_markout` is a permissionless crank with no reward yet. Unsettled trades expire after 450 slots and are not scored.
 - **Wallet rotation / Sybil.** Handled by the STANDARD floor, but it also means fresh-wallet bots keep STANDARD pricing (see the results above).
@@ -236,11 +300,14 @@ Full list in [`docs/RISKS.md`](docs/RISKS.md). The main ones:
 
 ## How we use Solana
 
+- **A launch curve on slots.** `configure_launch` stores `launch_slot`, `window_slots` and a per-tier `[start, end]` curve in the `Pool` account. `swap` computes the decayed fee from `Clock::slot` with integer math (`fairway_math::launch`). Slots (400 ms) give a precise, manipulation-free clock for "the first seconds of a launch".
+- **An onchain TWAP in the pool account.** A Uniswap-v2-style cumulative price × slots accumulator with 64 observations, updated in place (the 4 KB SBF stack does not allow copying it), so oracle-less tokens can still be scored trustlessly.
 - **Anchor program** with PDAs for `Config`, `Pool`, vault token accounts, the LP mint and per-trader `TraderScore`. The score PDA is derived from the **signer**, which is the core security property.
 - **SPL Token** vaults and LP mint. No floats onchain (u128 checked math, rounding in the pool's favor).
 - **`set_scores_batch`** via `remaining_accounts` (up to 10 wallets per transaction) keeps oracle writes cheap thanks to Solana's low fees and fast finality.
 - **Onchain markout scoring.** Slots give a precise clock for the 30 s horizon (75 slots). Pyth pull-oracle `PriceUpdateV2` accounts provide the mid. The program parses and validates them without extra dependencies. The score PDA is created on the first swap, paid by the trader (about 0.003 SOL rent, refundable by closing).
-- **Anchor events** (`SwapExecuted`) let indexers and the Stream filter decode Fairway swaps exactly.
+- **Native launch data.** The Pump.fun filter reads lamport deltas of the bonding-curve account, WSOL token-account deltas of PumpSwap pools, and ALT-loaded curve accounts.
+- **Anchor events** (`SwapExecuted`, `LaunchConfigured`) let indexers and the Stream filter decode Fairway swaps exactly.
 - **Solana-native data.** The parser handles v0 transactions with address lookup tables (`loadedAddresses`), pre/post token balances and failed transactions.
 - Solana's 400 ms slots are why LVR is a real problem: stale-price windows are short but frequent. The simulator uses 400 ms steps.
 
@@ -262,13 +329,15 @@ Full dashboard steps are in [`streams/STREAM_CONFIG.md`](streams/STREAM_CONFIG.m
 
 | Setting | Value | Why |
 |---|---|---|
+| Streams | **L: launches** (`pumpfun-filter.js` → `/streams/pumpfun`), **A: liquid-pair history** (`filter.js` → `/streams/solana`), **B: the Fairway pool on devnet** | L finds known snipers before a token exists. A scores wallets from their trading on other DEXs. |
 | Network | Solana **mainnet** (history and scores) and **devnet** (Fairway pool) | Scores need real, deep history. The Fairway pool lives on devnet during the hackathon. |
 | Dataset | **Block** | We need full transactions with `meta` (token balances, loaded addresses, logs). The matching is by vault token accounts, so it works for any AMM and for aggregator-routed swaps. |
-| Filter | `streams/filter.js`: for each successful tx, build the full account list (including ALT-loaded addresses), compute vault deltas for configured pools, classify buy/sell, and emit compact swap records. Returns `null` if nothing matched. | Server-side filtering means the webhook only receives swaps (KBs), not blocks (MBs). |
+| Filter L | `streams/pumpfun-filter.js`: transactions that invoke Pump.fun or PumpSwap (IDs marked VERIFY) → per mint, the trader's token delta vs the curve's opposite move, the SOL leg from the curve's lamport or WSOL delta, plus `create` records. Returns `{launchTrades}` or `null`. | Launches can't be configured in advance, so it matches on program IDs, not on pool accounts. |
+| Filter A | `streams/filter.js`: for each successful tx, build the full account list (including ALT-loaded addresses), compute vault deltas for configured pools, classify buy/sell, and emit compact swap records. Returns `null` if nothing matched. | Server-side filtering means the webhook only receives swaps (KBs), not blocks (MBs). |
 | Destination | **Webhook** → `https://<host>/streams/solana`, HMAC-verified (`QN_STREAM_TOKEN`) | The ingest service is idempotent on `(sig, pool)`, so retries and reorgs are safe. |
-| Start | Backfill 3–7 days, then live | The RETAIL rule requires ≥ 3 days of history. |
+| Start | A: backfill 3–7 days, L: 1–3 days, then live | The RETAIL rule requires ≥ 3 days of history. Pump.fun has thousands of launches a day, so a short backfill already finds the repeat snipers. |
 
-The filter is generated from the same TypeScript the ingest service uses (`packages/parser`), and a test fails if they drift.
+Both filters are generated from the same TypeScript the ingest service uses (`packages/parser`), and tests fail if they drift.
 
 ## Quick start
 
@@ -279,7 +348,7 @@ pnpm demo            # offline: fixtures → sim → ingest (fixture mode) → w
 # open http://localhost:3000
 ```
 
-Pages: `/` landing · `/swap` (persona switcher: Retail Rita, New wallet, Arb Bot 7) · `/wallet/[address]` · `/pool` · `/backtest` (interactive sweep) · `/how-it-works`.
+Pages: `/` landing · **`/launch`** (create wizard + demo launches) · **`/launch/frog`**, `/launch/sols`, `/launch/pie` (launch replays) · `/backtest` (launch study by default, liquid-pair sweep in the second tab) · `/wallet/[address]` · `/how-it-works` · liquid pair: `/swap` (persona switcher: Retail Rita, New wallet, Arb Bot 7) and `/pool`.
 
 Other commands:
 
@@ -294,12 +363,15 @@ pnpm seed:devnet    # create the pool on devnet (needs funded throwaway keys; se
 pnpm --filter @fairway/sim replay -- --input swaps.jsonl   # historical replay on exported swaps
 ```
 
-The program's tests use LiteSVM: `anchor build && cargo test -p fairway`. The wrong-signer test is `wrong_signer_cannot_use_someone_elses_retail_score` in `programs/fairway/tests/fairway.rs`. Onchain scoring tests: `markout_sign_buy_and_sell`, `shrinkage_tier_transitions_and_blend_with_keeper`, `uninformed_flow_earns_retail_onchain`, `stale_and_invalid_oracle_rejected`, `settle_before_markout_slots_does_nothing`, `wrong_trader_account_rejected`, `ring_buffer_full_drops_trade_and_removes_discount`, `unsettled_trades_expire`, `few_large_trades_do_not_override_a_toxic_keeper_score`, `authority_cannot_close_a_score_with_onchain_evidence`. Shared TS/Rust vectors: `cargo test -p fairway-math --test onchain_vectors` and `packages/scoring/test/onchain.test.ts`.
+The program's tests use LiteSVM: `anchor build && cargo test -p fairway` (46 tests). Launch tests: `launch_defaults_are_configured_and_copied_to_the_pool`, `block_zero_fees_per_tier_and_a_fresh_wallet_pays_standard_curve`, `launch_fee_decays_linearly_and_reverts_to_tier_fees_after_the_window`, `swaps_before_the_launch_slot_are_refused`, `wrong_signer_attack_is_still_blocked_during_a_launch`, `configure_launch_auth_validation_and_launch_fee`, `pool_twap_accumulates_price_times_slots`, `launch_pool_without_oracle_scores_against_its_twap`, `twap_scoring_of_a_price_that_did_not_move_is_zero`. The wrong-signer test is `wrong_signer_cannot_use_someone_elses_retail_score` in `programs/fairway/tests/fairway.rs`. Onchain scoring tests: `markout_sign_buy_and_sell`, `shrinkage_tier_transitions_and_blend_with_keeper`, `uninformed_flow_earns_retail_onchain`, `stale_and_invalid_oracle_rejected`, `settle_before_markout_slots_does_nothing`, `wrong_trader_account_rejected`, `ring_buffer_full_drops_trade_and_removes_discount`, `unsettled_trades_expire`, `few_large_trades_do_not_override_a_toxic_keeper_score`, `authority_cannot_close_a_score_with_onchain_evidence`. Shared TS/Rust vectors: `cargo test -p fairway-math --test onchain_vectors` and `packages/scoring/test/onchain.test.ts`.
 
 ## What is simulated vs. live
 
 | Component | Status |
 |---|---|
+| Launch simulation (`/backtest` default, `/launch/[id]` replays) | **Synthetic.** 200 seeded launches from `packages/sim/src/launch.ts`. A launch page replays one seeded scenario in the browser. Buyer addresses are fake, and the "Score" column (onchain verified / bootstrap / none) is assigned for illustration. Launches you create in mock mode are stored in your browser (localStorage). |
+| Live launch creation (`/launch` with `NEXT_PUBLIC_MODE=live`) | **Real transactions** against a local validator: mint + supply, pool + liquidity, `configure_launch`. Verified end to end with a script on `solana-test-validator`. The wallet-adapter clicks were not tested in a browser. No Metaplex metadata, so the name and symbol are not onchain. |
+| Pump.fun Stream L and sniper scores | **Filter and scorer are real code, tested on synthetic `getBlock`-shaped Pump.fun blocks** (`packages/fixtures/data/pumpfun.json`). Not run on real blocks. **Program IDs unverified (VERIFY).** |
 | Backtest, sweep, charts, fixtures | **Synthetic.** Generated from a seeded simulator. The UI shows a "Simulated data" badge in mock mode. |
 | Frontend (default) | **Mock mode**: reads fixtures and sim outputs. No wallet or RPC. |
 | Frontend (live mode) | Real wallet adapter + SDK against a local validator (`pnpm demo:local`). Devnet is untested until the human deploys. |
@@ -318,7 +390,7 @@ The program's tests use LiteSVM: `anchor build && cargo test -p fairway`. The wr
 programs/fairway/     Anchor program (+ LiteSVM tests)       crates/fairway-math/   pure Rust AMM + LP math
 packages/scoring/     markout, shrinkage, tiers (+ onchain.ts) packages/sim/          agent-based sim, sweep, replay
 packages/parser/      block → swap records                    packages/fixtures/     deterministic synthetic data
-packages/sdk/         TS client (PDAs, ixs, decoders)         streams/               filter.js + STREAM_CONFIG.md
+packages/sdk/         TS client (PDAs, ixs, decoders)         streams/               filter.js, pumpfun-filter.js, STREAM_CONFIG.md
 services/ingest/      Streams webhook → SQLite (Postgres-compatible SQL)
 services/keeper/      DB tiers → set_scores_batch (dry-run/local/devnet)
 apps/web/             Next.js frontend                        scripts/               demo, seed, charts
@@ -331,7 +403,7 @@ Storage is SQLite (`better-sqlite3`). The SQL uses `ON CONFLICT` upserts and sta
 
 | Layer | Tools |
 |---|---|
-| **Sponsor: QuickNode** | **Streams** (Solana, Block dataset, server-side JS filter `streams/filter.js`, webhook destination with HMAC verification). It is the only onchain data source, used for backfill, live scoring and replay. |
+| **Sponsor: QuickNode** | **Streams** (Solana, Block dataset, server-side JS filters `streams/pumpfun-filter.js` for launches and `streams/filter.js` for liquid pairs, webhook destinations with HMAC verification). It is the only onchain data source, used for known-sniper scores, backfill, live scoring and replay. |
 | **Sponsor: Solana** | Anchor 1.2 program (PDAs, SPL Token vaults and LP mint, Anchor events, `remaining_accounts` batching), LiteSVM tests, `@solana/web3.js` 1.99, Solana wallet adapter (Wallet Standard) |
 | Onchain math | Pure Rust crate `fairway-math` (u128 checked math, property-style tests) |
 | Data and services | TypeScript (strict), Fastify 5, better-sqlite3, esbuild (inlines the parser into the Stream filter), vitest |
@@ -340,10 +412,12 @@ Storage is SQLite (`better-sqlite3`). The SQL uses `ON CONFLICT` upserts and sta
 
 ## What's next
 
-1. **Go live on devnet:** deploy the program, run the mainnet backfill Stream on Raydium SOL-USDC, and let the keeper write real tiers (steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md)).
-2. **More venues:** add Orca Whirlpool and Meteora DLMM vaults to the Stream config. The filter matches vaults, so no code change is needed.
-3. **Better mids:** replace the pool-implied mid with Pyth (`PythMidPrice` is already behind the same interface) for cleaner markouts on real data.
-4. **Trust-minimized bootstrap:** onchain scoring already covers Fairway's own flow. For cross-venue history: multiple score authorities with a quorum, a bonded oracle, and eventually ZK proofs of the score computation over a committed swap history ([`docs/RISKS.md`](docs/RISKS.md)). Also a small crank reward for `settle_markout`, paid from protocol fees.
-5. **Sleeper defenses:** per-wallet notional caps on the RETAIL fee, and faster downgrades.
-6. **Close the LP gap vs. flat 30 bps:** explore a dynamic STANDARD fee and volatility-scaled toxic fees in the simulator, with fee-elastic retail calibrated on real data.
-7. **Audit and fuzzing** before any mainnet deployment.
+1. **Go live:** deploy to devnet, verify the Pump.fun / PumpSwap program IDs, run Stream L over a few days of Pump.fun history and let the keeper write the first real known-sniper scores (steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md)).
+2. **Oracle-anchored pricing for liquid pairs:** the pool re-centres on Pyth, so arbitrageurs no longer capture the stale-price gap at all (today the fee only taxes it). That attacks LVR directly instead of pricing it.
+3. **Jupiter integration:** quoting needs the trader's tier, so a router must read the signer's `TraderScore` (one account read, [`getFeeTier`](packages/sdk/src/feetier.ts)) before quoting a Fairway pool.
+4. **Launchpad partnerships:** graduating tokens (for example from a bonding curve) land in Fairway pools with a launch curve, so the fair-launch window continues after graduation.
+5. **Scores as a service:** any DEX, launchpad or wallet reads a wallet's tier with `getFeeTier`. A hosted API, SLA and revenue share are the licensing line of the business model.
+6. **ZK proofs of trading history:** a wallet proves its markout history (or that it is not in the sniper set) without trusting our keeper, which replaces the bootstrap trust.
+7. **A sponsorship cap for the treasury that pays first-swap rent:** per-epoch and per-pool caps, so a Sybil wave of first swaps cannot drain the treasury (today it falls back to trader-pays when empty).
+8. **Bundler detection:** funding-graph features (wallets funded from one source just before a launch) in the sniper score.
+9. **Audit and fuzzing** before any mainnet deployment.

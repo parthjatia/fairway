@@ -4,6 +4,7 @@ STATUS: DONE
 # PROGRESS.md
 
 ## Current state / next step
+M16 launch pivot complete (2026-11-19): launch fee curve + pool TWAP onchain (46 LiteSVM tests), launch sim (default /backtest), /launch wizard + /launch/[id], Pump.fun Stream L filter + sniper scores, docs reframed around launches. `pnpm test`, `pnpm build`, `pnpm lint` pass; every page returns 200 in mock mode. Human TODOs added: verify Pump.fun/PumpSwap program IDs, create Stream L (docs/SETUP_REMAINING.md §5).
 All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = trustless onchain markout scoring, 2026-11-19; devnet Pyth account still to verify, SETUP_REMAINING §4b). Fresh-clone install/build/test verified (TS 8 packages + Rust 22 math + 37 LiteSVM tests after M15); every page returns 200 in mock mode. Remaining human steps: docs/SETUP_REMAINING.md. Judge audit (AUDIT.md) low-risk items #1–#7 done 2026-11-19; #8–#10 are human/out of scope.
 
 ## Audit fixes (2026-11-19, see AUDIT.md)
@@ -21,8 +22,8 @@ All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = t
 - [x] 3. Launch simulation (default /backtest view): packages/sim/src/launch.ts, out/launch.json, LaunchExplorer tab, docs/charts/launch-*.svg
 - [x] 4. Launch flow and UI: /launch wizard (mock + live via SDK, verified on a local validator), /launch/[id] (playback, buyers with tier + score source, sniper-share meter, same-buy-two-wallets), landing reframed, nav launches-first (liquid pair secondary), seed:local adds a launch pool
 - [x] 5. Streams: Pump.fun sniper scoring: streams/pumpfun-filter.js (generated from packages/parser/src/pumpfun.ts, program ids marked VERIFY), new fixture data/pumpfun.json (8 launches, edge cases; existing fixtures untouched), cross-launch sniper scorer (packages/scoring/src/sniper.ts), ingest POST /streams/pumpfun + GET /snipers, keeper merges sniper TOXIC, STREAM_CONFIG.md Stream L
-- [ ] 6. Docs
-- [ ] 7. Final check
+- [x] 6. Docs: README (Fairway Launch headline, For judges criteria + per-prize checklists, launch economics, Solana, Streams L/A/B, What's next with the 6 required items, "LP-neutral within noise" next to LVR −73%), ECONOMICS §8, RISKS §10, PITCH (launch script + 14 launch Q&As), DEMO_SCRIPT (live launch), SETUP_REMAINING (Stream L, VERIFY ids), ARCHITECTURE, /how-it-works launch card
+- [x] 7. Final check: pnpm test (TS 8 suites + cargo incl. 46 LiteSVM), pnpm build, pnpm lint all pass; all pages 200 in mock mode (/, /launch, /launch/{frog,sols,pie}, /backtest, /swap, /wallet, /wallet/[addr], /pool, /how-it-works); README links and anchors checked, overclaims reviewed
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example

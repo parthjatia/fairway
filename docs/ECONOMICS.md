@@ -2,6 +2,8 @@
 
 All numbers below come from the **synthetic** agent-based simulation in `packages/sim` (24 h, 60% vol, $3M TVL; 8 seeds for the original backtest, 16 paired seeds for the LP-first analysis). Regenerate with `pnpm sim` (everything) or `pnpm --filter @fairway/sim lpfirst` (LP-first only, writes `out/lpfirst.json`). They show the mechanism's trade-offs, not a forecast for mainnet.
 
+**Since M16 the headline is launches:** [§8 Launch economics](#8-launch-economics-m16) covers the tier × time launch fee, its results over 200 simulated launches and who benefits. Sections 1–7 are the liquid-pair (SOL/USDC) evidence: the same engine, secondary.
+
 **Since M15 the default is LP-first**: retail = standard = 30 bps, toxic 80 bps, and 10% of the toxic premium is rebated to proven-retail wallets. The earlier 5 / 30 / 80 design is kept as the "max retail discount" variant (§4b). Section 4 is the LP-first evidence, including the result that does **not** hold: no setting beats a flat 30 bps pool for LPs beyond the noise band.
 
 ## 1. Fee tiers
@@ -186,3 +188,62 @@ The `/backtest` page lets you move both sliders and see every regime, including 
 - Retail is price-insensitive by default. Real retail can route to other venues, and aggregators would pick Fairway only when it is the best price.
 - Arbitrageurs and snipers are simple. Real searchers use priority fees and Jito bundles.
 - Markout horizons are fixed (30 s primary). Real toxic flow may have longer or shorter horizons.
+
+## 8. Launch economics (M16)
+
+Fairway Launch puts the engine where informed flow is most extreme: the first minutes of a new token. Simulation: `packages/sim/src/launch.ts`, 200 seeded launches, output `packages/sim/out/launch.json`, regenerate with `pnpm --filter @fairway/sim launch`. **Synthetic.**
+
+### 8.1 The fee
+
+A launch pool stores a per-tier curve `[start, end]` and a window (default 750 slots ≈ 5 min). In the window, `fee(tier, elapsed) = end + ⌈(start − end) × (window − elapsed) / window⌉`, rounded up so the pool never undercharges. After the window it reverts to the `Config` tier fees.
+
+| Tier | Start | End | Rationale |
+|---|---:|---:|---|
+| TOXIC (known snipers) | 1000 bps | 80 | High enough that a sniper's expected edge in the first seconds (in the sim, a 30–100% take-profit target, accepting at most 150–700 bps of fee) is mostly gone. |
+| STANDARD (no history, fresh wallets) | 300 bps | 30 | **Equal to the time-decay baseline.** A fresh wallet must never beat the incumbent anti-sniper design, so wallet rotation can only remove the surcharge. |
+| RETAIL (proven uninformed history) | 30 bps | 5 | Humans who have traded before should not be taxed for being early. |
+
+Other choices: no bot-tax rebate inside the window (the premium stays with the creator's pool), swaps refused before `launch_slot`, `configure_launch` only before the first swap (a creator can't change the rules mid-launch), and a 0.05 SOL launch fee for non-admin creators.
+
+### 8.2 Agents
+
+Per launch: $10k–40k of initial liquidity at a fixed listing price; **snipers** (2–8, 75% known from past launches → TOXIC from slot 0, 25% on fresh wallets → STANDARD), who buy in the first slots only if their expected profit beats the fee and take profit 30–100% higher or after a holding limit; in half the launches a **bundler** splitting ~$6k over 3–8 fresh wallets in the first 20 slots; **humans** (~160 buys, median $80, a hype-driven arrival rate that decays over ~2 minutes; 60% have RETAIL history, 40% are new wallets); and a few **good bots** (small DCA buys, RETAIL history). The price is the constant-product pool itself: there is no arbitrage and no outside market.
+
+### 8.3 Results (means over 200 launches)
+
+| Regime | Human fee | Humans paying ≥ 100 bps | Known-sniper fee | All-sniper fee | Sniper share of window supply | Human entry vs listing | Sniper profit | Creator fees | Protocol |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Flat 30 | 30 | 0% | 30 | 30 | 54% | +163% | $6,918 | $220 | $7.50 |
+| Time-decay 300 → 30 | 200 | 84% | 245 | 241 | 49% | +160% | $5,325 | $1,399 | $7.50 |
+| Time-decay 1000 → 30 | 641 | 90% | 314 | 319 | 1% | +117% | $71 | $1,458 | $7.50 |
+| **Fairway** | **94** | **34%** | **371** | 250 | **27%** | **+129%** | **$2,432** | $591 | $8.59 |
+| Fairway, all snipers rotate | 94 | 34% | 246 | 241 | 49% | +158% | $5,346 | $1,156 | $7.50 |
+
+Fees in bps, per trade in the window. Paired across identical launches: **humans pay 53% less than under time-decay, in every launch**. Known snipers pay 1.46× more per trade. The pooled sniper fee is 1.01× time-decay. Known snipers mostly don't buy at all: only 36% of all snipers trade under Fairway, vs 81% under time-decay, and known-sniper notional falls from $25k to under $300 per launch.
+
+How to read it:
+
+- **Fairway beats both time-decay curves for humans.** The 300 → 30 curve lets snipers take half the window supply and still charges humans 200 bps. The 1000 → 30 curve stops snipers, but charges humans 641 bps. Fairway gets most of the 1000-curve's deterrence on known snipers at a third of the 300-curve's cost to humans.
+- **It does not beat time-decay on snipers it has never seen.** Fresh-wallet snipers and bundlers pay the STANDARD curve, which is the time-decay curve. The rotation row shows the floor: identical sniper outcomes to time-decay, and humans with history still better off. Funding-graph bundler detection is future work.
+- **Price discovery.** Because known snipers stay out, the first human buyers enter closer to the listing price (+129% vs +160% on average over listing).
+
+### 8.4 Who benefits
+
+| Who | Gets | Gives up |
+|---|---|---|
+| **Creators** | A fairer distribution (sniper share 27% vs 49%), buyers who are actual holders, a launch story ("snipers pay 10%") | **Fee income:** $591 vs $1,399 per launch under time-decay, because time-decay income comes mostly from humans. Still 2.7× a flat-30 pool. The creator chooses the curve (`configure_launch` accepts a custom one), so a creator who wants more income can raise the STANDARD start. |
+| **Retail (humans)** | 94 bps instead of ~200 in the window; only a third of human buys pay ≥ 100 bps (vs 84%); a lower average entry price | Nothing vs time-decay. New wallets pay the time-decay curve, exactly as today. |
+| **LPs / creators** | On a launch pool the creator is usually the only LP, so LP income = creator fees above. Later LPs get all swap fees except the protocol's premium share, and a pool whose early price was not set by snipers | The same trade-off as the creator. |
+| **Protocol** | The **0.05 SOL launch fee** (~$7.50) on every non-admin launch, plus **15% of the toxic premium** (the TOXIC fee above STANDARD) on launch and liquid pools: $8.59 per simulated launch in total | Rent sponsorship for first swaps (about 0.0023 SOL per new wallet) when the treasury can afford it. |
+| **Known snipers** | — | Most of their edge: profit falls 54% vs time-decay. |
+
+### 8.5 After the window: scoring without an oracle
+
+A new token has no Pyth feed, so `configure_launch` enables **TWAP scoring**. The pool keeps a cumulative price × slots accumulator (64 observations ≥ 8 slots apart), updated after every swap and liquidity change. A trade's markout reference is the **25-slot TWAP ending 75 slots after the trade**, and its execution reference is the **post-trade spot price**. A buyer's own price impact is therefore not counted as "the price moved in my favour", and a trade into a pool that does not move afterwards scores 0 (tested: `twap_scoring_of_a_price_that_did_not_move_is_zero`). Wallets thus build onchain-verified scores on the very token they launched into. Manipulation risks are in [`RISKS.md` §1d](RISKS.md).
+
+### 8.6 Limits
+
+- Synthetic agents with simple rules. Real snipers adapt: they may rotate more once Fairway exists, which pushes outcomes toward the rotation row.
+- Known-sniper detection is assumed at 75% coverage. The real coverage depends on Stream L's backfill and on how many snipers reuse wallets. That is not measured yet.
+- Humans are not fee-elastic in the launch sim. In reality lower fees may bring more buyers, which would raise creator fees.
+- No outside market or arbitrage: the pool is the only venue.

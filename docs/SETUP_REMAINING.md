@@ -69,8 +69,11 @@ For a local validator, clone the account from devnet so local settles work: `sol
 2. **Streams → Create Stream.** Follow `streams/STREAM_CONFIG.md` exactly:
    - Stream A: Solana **mainnet**, dataset **Block**, start 3–7 days back (backfill), filter = contents of `streams/filter.js`.
    - Stream B: Solana **devnet**, dataset **Block**, start at the latest block.
+   - **Stream L (launches, the headline):** Solana **mainnet**, dataset **Block**, start 1–3 days back, filter = contents of `streams/pumpfun-filter.js`, destination `https://<tunnel-host>/streams/pumpfun` (same token). See STREAM_CONFIG.md §Stream L.
 3. The Raydium vaults in `pools.config.json` were checked on mainnet on 2026-11-19 (see "Filling in real pool addresses" in STREAM_CONFIG.md). Fill the Orca entry if you want it.
 4. Use the dashboard's **Run test** on a slot that contains a SOL-USDC swap.
+5. **TODO: verify the Pump.fun / PumpSwap program IDs** (marked VERIFY in `packages/parser/src/pumpfun.ts` and at the top of `streams/pumpfun-filter.js`; they were written from memory). Open a recent pump.fun token on Solscan → a "Buy" transaction → the invoked program should be `6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`. For a graduated token's swap it should be `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`. Or run `solana account <id> --url mainnet-beta` (should say `Executable: true`). If either differs, fix `PUMP_PROGRAMS`, run `pnpm --filter @fairway/streams build:filter` and `pnpm test`, and paste the new filter.
+6. In the Stream L editor, **Run test** on a slot with a Pump.fun buy. Expect `{"launchTrades":[...]}` with non-zero `solAmount`. If `solAmount` is 0 or missing, the account layout assumption (SOL as lamports on the bonding curve) needs a look: `parsePumpTransaction` in `packages/parser/src/pumpfun.ts`.
 
 ## 6. Expose ingest and set the webhook
 ```bash
@@ -79,14 +82,14 @@ DATA_MODE=live pnpm --filter @fairway/ingest start
 # in another terminal, any tunnel works, e.g.:
 cloudflared tunnel --url http://localhost:8787      # or: ngrok http 8787
 ```
-Set the Stream destination to `https://<tunnel-host>/streams/solana`, paste the token, and start the stream. The ingest log should print `stored N swaps`. After the backfill finishes: `curl -X POST localhost:8787/recompute`.
+Set the Stream destination to `https://<tunnel-host>/streams/solana`, paste the token, and start the stream. The ingest log should print `stored N swaps`. After the backfill finishes: `curl -X POST localhost:8787/recompute`. For Stream L the sniper scores recompute on every delivery: `curl -s localhost:8787/snipers?tier=TOXIC`.
 
 ## 7. Run the keeper
 ```bash
 KEEPER_MODE=dry-run pnpm --filter @fairway/keeper start    # inspect services/keeper/out/ first
 KEEPER_MODE=devnet RPC_URL=https://api.devnet.solana.com KEEPER_KEYPAIR=.keys/score-authority.json pnpm --filter @fairway/keeper start
 ```
-The `score_authority` must match the one set by `seed:devnet`.
+The `score_authority` must match the one set by `seed:devnet`. The keeper writes markout tiers **and** launch-sniper TOXIC tiers (`desiredScores` in `services/ingest/src/launches.ts`).
 
 ## 8. Frontend
 For the recorded demo, mock mode is the safest (`pnpm demo`). To show live mode: `NEXT_PUBLIC_MODE=live` with the `.env.local` from step 4, then connect a Wallet Standard wallet on devnet.
@@ -96,9 +99,9 @@ Follow `docs/DEMO_SCRIPT.md` (2–3 minutes). Keep the "Simulated data" badge vi
 
 ## 10. Devpost
 - Tracks: **DeFi**, **Best use of Solana**, **QuickNode Streams bounty**.
-- Paste the sections from the README: problem, how it works, what's unique, what's next, tech, program IDs, Stream config.
+- Paste the sections from the README: headline (Fairway Launch), problem, how a launch works, launch economics, what's unique, what's next, tech, program IDs, Stream config (Stream L first).
 - Link the video and the repo. Be explicit about what's simulated. The README table already says so.
 - Push the repo to GitHub yourself (the agent never pushes): `git remote add origin <url> && git push -u origin master`.
 
 ## 11. Saturday
-Attend in person. Use `docs/PITCH.md` (5 min script and 15 Q&As). Have `pnpm demo` running locally as a fallback.
+Attend in person. Use `docs/PITCH.md` (5 min launch script, 14 launch Q&As plus the engine/liquid-pair Q&As). Have `pnpm demo` running locally as a fallback.
