@@ -1,7 +1,9 @@
 # PROGRESS.md
 
+STATUS: DONE
+
 ## Current state / next step
-M0–M11 done. Next: M12 hardening (full test/build/lint, fresh-clone check, UI review, README accuracy).
+All milestones M0–M12 complete. Fresh-clone install/build/test verified (TS 8 packages + Rust 12 math + 9 LiteSVM tests); every page returns 200 in mock mode. Remaining human steps: docs/SETUP_REMAINING.md.
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
@@ -16,20 +18,20 @@ M0–M11 done. Next: M12 hardening (full test/build/lint, fresh-clone check, UI 
 - [x] **M9 Frontend:** all pages, mock mode, persona switcher, backtest interactivity, polished design
 - [x] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
 - [x] **M11 Docs:** README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts embedded
-- [ ] **M12 Hardening pass:** full test, build and lint; fresh-clone check; fix everything; final UI review; README accuracy check
+- [x] **M12 Hardening pass:** full test, build and lint; fresh-clone check; fix everything; final UI review; README accuracy check
 
 ## Definition of Done (Section 12)
-- [ ] `pnpm i && pnpm test && pnpm build` pass from a fresh clone
-- [ ] `pnpm demo` runs the full product offline with simulated data
-- [ ] Anchor program compiles and its tests pass (or documented fallback)
-- [ ] The wrong-signer score test exists and passes
-- [ ] Backtest shows all regimes incl. wallet-rotation worst case, charts in README
-- [ ] `streams/filter.js` standalone, tested, documented in STREAM_CONFIG.md
-- [ ] Ingest + scoring + keeper work end to end in fixture/dry-run mode
-- [ ] Every frontend page works in mock mode, "Simulated data" badge, responsive polished UI
-- [ ] README covers all required sections
-- [ ] PITCH.md (15 Q&As), DEMO_SCRIPT.md, SETUP_REMAINING.md complete
-- [ ] All work committed locally; no secrets in git
+- [x] `pnpm i && pnpm test && pnpm build` pass from a fresh clone
+- [x] `pnpm demo` runs the full product offline with simulated data
+- [x] Anchor program compiles and its tests pass (or documented fallback)
+- [x] The wrong-signer score test exists and passes
+- [x] Backtest shows all regimes incl. wallet-rotation worst case, charts in README
+- [x] `streams/filter.js` standalone, tested, documented in STREAM_CONFIG.md
+- [x] Ingest + scoring + keeper work end to end in fixture/dry-run mode
+- [x] Every frontend page works in mock mode, "Simulated data" badge, responsive polished UI
+- [x] README covers all required sections
+- [x] PITCH.md (15 Q&As), DEMO_SCRIPT.md, SETUP_REMAINING.md complete
+- [x] All work committed locally; no secrets in git
 
 ## Toolchain (detected/installed 2026-11-19)
 - node v24.22.3, pnpm 12.21.0, typescript 6.0.3
