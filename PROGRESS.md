@@ -1,7 +1,7 @@
 # PROGRESS.md
 
 ## Current state / next step
-M0–M6 done. Next: M7 ingest service. TODO referenced in STREAM_CONFIG: `pnpm seed:devnet`, GET /export.jsonl, sim replay CLI (--input).
+M0–M7 done. Next: M8 keeper. TODO referenced in STREAM_CONFIG: `pnpm seed:devnet`, GET /export.jsonl, sim replay CLI (--input).
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
@@ -11,7 +11,7 @@ M0–M6 done. Next: M7 ingest service. TODO referenced in STREAM_CONFIG: `pnpm s
 - [x] **M4 Math crate and Anchor program:** accounts, instructions, events, security checks, tests green (or the Section 5.6 fallback)
 - [x] **M5 SDK:** PDAs, instruction builders, account decoders, typed errors, tests
 - [x] **M6 Parser and Streams filter:** shared logic, filter.js, tests against fixtures, STREAM_CONFIG.md
-- [ ] **M7 Ingest service:** webhook, SQLite, recompute, read APIs, fixture mode, tests
+- [x] **M7 Ingest service:** webhook, SQLite, recompute, read APIs, fixture mode, tests
 - [ ] **M8 Keeper:** diffing, batching, dry-run/local/devnet modes, tests
 - [ ] **M9 Frontend:** all pages, mock mode, persona switcher, backtest interactivity, polished design
 - [x] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
