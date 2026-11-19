@@ -15,7 +15,11 @@ solana --version && anchor --version
 ```
 
 ## 2. Program keypair and build
-Fresh clones don't have `.keys/` (gitignored). Create throwaway keys. **Never use a real wallet.**
+**On the machine that built the project, skip the keygen and `anchor keys sync` lines.** `.keys/` (deployer, score-authority, program keypair) and `target/deploy/fairway-keypair.json` already exist, and they match the program ID `8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk` in the README, `Anchor.toml`, `declare_id!` and the SDK. Running `anchor keys sync` with a new keypair would change the ID everywhere. Check with:
+```bash
+solana-keygen pubkey target/deploy/fairway-keypair.json   # must print 8jo3xry2…XPXk
+```
+Only on a **fresh clone**, which has no `.keys/` (gitignored), create throwaway keys. **Never use a real wallet.**
 ```bash
 mkdir -p .keys
 solana-keygen new --no-bip39-passphrase -o .keys/deployer.json
