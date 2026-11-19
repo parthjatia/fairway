@@ -27,7 +27,7 @@ Fairway is a constant-product AMM whose swap fee depends on the trader's **toxic
    | `STANDARD` | everyone else, **including every new wallet** | 30 bps |
 
 4. **Onchain.** The `swap` instruction derives the `TraderScore` PDA from the **signer** (`["score", trader]`). If it is missing, stale (older than `score_ttl_slots`) or malformed, the swap pays STANDARD. A bot cannot pass someone else's RETAIL account, because the seeds check fails.
-5. **Data layer.** A QuickNode Stream filters Solana blocks down to swaps on chosen pools. Backfill scores wallets from day one using their activity on Raydium, Orca and Meteora, and the live stream keeps scores fresh.
+5. **Data layer.** A QuickNode Stream filters Solana blocks down to swaps on chosen pools. Backfill scores wallets from day one using their activity on other DEXs (Raydium SOL-USDC is configured; Orca and Meteora only need their vault addresses added), and the live stream keeps scores fresh.
 
 ```mermaid
 flowchart LR
@@ -45,7 +45,7 @@ flowchart LR
 
 - The fee is keyed on **measured information content of a wallet's past flow**, not on market volatility (dynamic-fee AMMs) or on a single block's behavior. Retail is rewarded for being provably uninformed.
 - **A fresh wallet can never pay less than STANDARD (30 bps).** Wallet rotation therefore gives bots no discount. We simulate that worst case explicitly.
-- **Cross-venue history.** Streams lets us score a wallet from its Raydium/Orca/Meteora trades before it ever touches Fairway.
+- **Cross-venue history.** Streams lets us score a wallet from its trades on other venues (Raydium today, and any AMM whose vaults are added to the config) before it ever touches Fairway.
 - **Transparent inputs.** Every score is reproducible from public swaps (the wallet explorer shows how).
 
 ## Backtest results (synthetic)

@@ -100,7 +100,7 @@ export default function Home() {
         </Card>
         <div className="space-y-3">
           {[
-            [Radio, 'QuickNode Streams', 'A Solana block stream with a server-side filter extracts every swap on Raydium, Orca and Fairway pools. It backfills history and keeps it live.'],
+            [Radio, 'QuickNode Streams', 'A Solana block stream with a server-side filter extracts every swap on the configured pools (Raydium SOL-USDC today; Orca, Meteora and Fairway by adding their vaults). It backfills history and keeps it live.'],
             [Gauge, 'Markout scoring', 'Per-wallet notional-weighted markout at 5/30/60 s with Bayesian shrinkage gives a tier.'],
             [ShieldCheck, 'Onchain tiers', 'A keeper writes TraderScore PDAs. The Anchor program reads the PDA derived from the swap signer, so nobody can borrow someone else’s score.'],
             [Repeat, 'Tiered swap', 'Constant-product swap with the fee taken on input: 5 / 30 / 80 bps. Missing or stale score → STANDARD.'],
