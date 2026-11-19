@@ -284,6 +284,25 @@ importers:
         specifier: ^9.6.0
         version: 9.6.0
 
+  services/keeper:
+    dependencies:
+      '@fairway/ingest':
+        specifier: workspace:*
+        version: link:../ingest
+      '@fairway/scoring':
+        specifier: workspace:*
+        version: link:../../packages/scoring
+      '@fairway/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@solana/web3.js':
+        specifier: ^1.99.0
+        version: 1.99.0(bufferutil@4.2.0)(typescript@6.0.3)
+    devDependencies:
+      '@fairway/fixtures':
+        specifier: workspace:*
+        version: link:../../packages/fixtures
+
   streams:
     devDependencies:
       '@fairway/fixtures':

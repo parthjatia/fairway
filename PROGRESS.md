@@ -1,7 +1,7 @@
 # PROGRESS.md
 
 ## Current state / next step
-M0–M7 done. Next: M8 keeper. TODO referenced in STREAM_CONFIG: `pnpm seed:devnet`, GET /export.jsonl, sim replay CLI (--input).
+M0–M8 done. Next: M9 frontend. TODO referenced in STREAM_CONFIG: `pnpm seed:devnet`, GET /export.jsonl, sim replay CLI (--input).
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
@@ -12,7 +12,7 @@ M0–M7 done. Next: M8 keeper. TODO referenced in STREAM_CONFIG: `pnpm seed:devn
 - [x] **M5 SDK:** PDAs, instruction builders, account decoders, typed errors, tests
 - [x] **M6 Parser and Streams filter:** shared logic, filter.js, tests against fixtures, STREAM_CONFIG.md
 - [x] **M7 Ingest service:** webhook, SQLite, recompute, read APIs, fixture mode, tests
-- [ ] **M8 Keeper:** diffing, batching, dry-run/local/devnet modes, tests
+- [x] **M8 Keeper:** diffing, batching, dry-run/local/devnet modes, tests
 - [ ] **M9 Frontend:** all pages, mock mode, persona switcher, backtest interactivity, polished design
 - [x] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
 - [x] **M11 Docs:** README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts embedded
