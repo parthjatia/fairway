@@ -74,7 +74,7 @@ After editing `streams/pools.config.json`, run `pnpm --filter @fairway/streams b
 2. Keep only the Raydium pool in the CONFIG block for a cheap first run.
 3. Point the destination at your tunnel (see `docs/SETUP_REMAINING.md`) and start the stream. The ingest log prints `stored N swaps` per delivery.
 4. When it finishes, call `POST /recompute`. Scores now cover every wallet that traded the pool in that window. `GET /wallet/<address>` shows one wallet.
-5. Optionally export the stored swaps (`GET /export.jsonl`) and run the historical replay: `pnpm --filter @fairway/sim replay -- --input swaps.jsonl`.
+5. Optionally export the stored swaps (`GET /export.jsonl`) and run the historical replay: `pnpm --filter @fairway/sim replay -- --input swaps.jsonl --live`.
 
 For **markouts on real data**, the ingest service uses the `PoolImpliedMidPrice` provider: the mid at `t + h` comes from the stream itself (last trade / reserve ratio). `PythMidPrice` is stubbed for a later upgrade.
 
