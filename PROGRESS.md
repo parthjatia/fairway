@@ -1,6 +1,6 @@
-# PROGRESS.md
-
 STATUS: DONE
+
+# PROGRESS.md
 
 ## Current state / next step
 All milestones M0–M12 complete. Fresh-clone install/build/test verified (TS 8 packages + Rust 12 math + 9 LiteSVM tests); every page returns 200 in mock mode. Remaining human steps: docs/SETUP_REMAINING.md.
