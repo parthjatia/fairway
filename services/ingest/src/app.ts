@@ -1,10 +1,10 @@
 import { gunzipSync } from 'node:zlib';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { explainTier, makeConfig, type ScoringConfig, type Swap, type Tier } from '@fairway/scoring';
-import { parsePayload, parsePumpPayload, type LaunchTradeRecord, type ParserPool } from '@fairway/parser';
+import { parseFundingPayload, parsePayload, parsePumpPayload, type FundingRecord, type LaunchTradeRecord, type ParserPool } from '@fairway/parser';
 import { verifyDelivery } from './auth';
 import { allSwaps, countSwaps, getScore, lastDeliveries, listScores, logDelivery, maxTs, swapsOfPool, tierCounts, upsertSwaps, validSwap, type Db } from './db';
-import { getSniper, listSnipers, recomputeSnipers, upsertLaunchTrades, validLaunchTrade } from './launches';
+import { getSniper, listBundleFlags, listBundleFunders, listSnipers, recomputeBundles, recomputeSnipers, upsertFundings, upsertLaunchTrades, validFunding, validLaunchTrade } from './launches';
 import { recompute, tierTimeline, tradesWithMarkouts, type MidSource } from './recompute';
 
 export type AppOptions = {
@@ -89,19 +89,27 @@ export function buildApp(o: AppOptions): FastifyInstance {
     return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, recomputed };
   });
 
-  /** QuickNode Streams webhook for launches: streams/pumpfun-filter.js output `{launchTrades:[...]}` or raw blocks. */
+  /** QuickNode Streams webhook for launches: streams/pumpfun-filter.js output `{launchTrades:[...], fundings:[...]}` or raw blocks. */
   app.post('/streams/pumpfun', async (req, reply) => {
     const auth = verifyDelivery(o.token, req.headers, req.rawBody ?? '');
     if (!auth.ok) return reply.code(401).send({ error: auth.reason });
     const body = req.body as any;
     const kind = body && Array.isArray(body.launchTrades) ? 'filtered' : 'raw-blocks';
     const incoming: LaunchTradeRecord[] = kind === 'filtered' ? body.launchTrades : parsePumpPayload(body);
+    const fundingsIn: FundingRecord[] = kind === 'filtered' ? (Array.isArray(body.fundings) ? body.fundings : []) : parseFundingPayload(body);
     const valid = incoming.filter(validLaunchTrade);
+    const validFundings = fundingsIn.filter(validFunding);
     const stored = upsertLaunchTrades(o.db, valid);
-    logDelivery(o.db, `launch-${kind}`, incoming.length, stored);
+    const storedFundings = upsertFundings(o.db, validFundings);
+    logDelivery(o.db, `launch-${kind}`, incoming.length + fundingsIn.length, stored + storedFundings);
     const snipers = stored ? recomputeSnipers(o.db) : null;
-    return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, snipers };
+    const b = stored || storedFundings ? recomputeBundles(o.db) : null;
+    const bundles = b ? { bundles: b.bundles, flagged: b.flagged, knownBundlers: b.knownBundlers } : null;
+    return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, fundings: { received: fundingsIn.length, stored: storedFundings }, snipers, bundles };
   });
+
+  /** Bundle detection: wallets funded by one source shortly before a launch (and new wallets of known bundlers). */
+  app.get('/bundles', async () => ({ flags: listBundleFlags(o.db), funders: listBundleFunders(o.db) }));
 
   /** Cross-launch sniper scores (bootstrap TOXIC from Pump.fun history). */
   app.get('/snipers', async (req) => {

@@ -128,6 +128,41 @@ describe('launches: POST /streams/pumpfun + GET /snipers (M16)', () => {
     expect(d.map((x) => x.trader).sort()).toEqual([...pf.meta.snipers].sort());
     expect(d.every((x) => x.tier === 'TOXIC')).toBe(true);
   });
+  it('bundle detection: stores fundings from the filter, flags bundles, raises tiers only (M16 step 11)', async () => {
+    const { loadBundles } = await import('@fairway/fixtures/node');
+    const { parseLaunchStream } = await import('@fairway/parser');
+    const { desiredScores } = await import('../src');
+    const bx = loadBundles();
+    const { db, app } = fresh();
+    const out = parseLaunchStream(bx.blocks)!;
+    const send = (body: unknown) => app.inject({ method: 'POST', url: '/streams/pumpfun', payload: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+    const r1 = (await send(out)).json();
+    expect(r1).toMatchObject({ kind: 'filtered', fundings: { received: bx.expectedFundings.length, stored: bx.expectedFundings.length }, bundles: { bundles: 3, knownBundlers: 1 } });
+    expect((await send(out)).json().fundings.stored).toBe(0); // idempotent
+    expect((await send(bx.blocks)).json()).toMatchObject({ kind: 'raw-blocks', fundings: { stored: 0 } });
+    const b = (await app.inject({ url: '/bundles' })).json() as { flags: { wallet: string; reason: string; funderKnownBundler: boolean }[]; funders: { funder: string; knownBundler: boolean }[] };
+    const flagged = new Set(b.flags.map((f) => f.wallet));
+    for (const x of bx.meta.bundles) for (const w of x.wallets) expect(flagged.has(w)).toBe(true);
+    for (const w of bx.meta.notFlagged) expect(flagged.has(w)).toBe(false);
+    expect(b.funders.filter((f) => f.knownBundler).map((f) => f.funder)).toEqual([bx.meta.bundler]);
+    // the funder is a known bundler, so every flagged wallet is written TOXIC
+    const d = desiredScores(db).filter((x) => x.source === 'bundle');
+    expect(new Set(d.map((x) => x.trader))).toEqual(flagged);
+    expect(d.every((x) => x.tier === 'TOXIC')).toBe(true);
+    // a flagged wallet with a RETAIL markout score is raised to STANDARD, never lowered; a fresh flagged wallet with an
+    // unknown funder needs no account (STANDARD is the default)
+    upsertSwaps(db, ds.swaps);
+    recompute(db, mids);
+    const retail = (await app.inject({ url: '/wallets?tier=RETAIL' })).json() as Array<{ trader: string }>;
+    expect(retail.length).toBeGreaterThan(0);
+    const rita = retail[0]!.trader;
+    db.prepare("INSERT INTO bundle_funders (funder, launches, wallets, known_bundler) VALUES ('X', 1, 2, 0)").run();
+    db.prepare('INSERT INTO bundle_flags (wallet, funder, reason, mint, slot) VALUES (?, ?, ?, ?, ?)').run(rita, 'X', 'bundle', 'm', 1);
+    db.prepare('INSERT INTO bundle_flags (wallet, funder, reason, mint, slot) VALUES (?, ?, ?, ?, ?)').run('w-fresh', 'X', 'bundle', 'm', 1);
+    const ds2 = desiredScores(db);
+    expect(ds2.find((x) => x.trader === rita)).toMatchObject({ tier: 'STANDARD', source: 'bundle' });
+    expect(ds2.find((x) => x.trader === 'w-fresh')).toBeUndefined();
+  });
   it('requires the token when configured', async () => {
     const { app } = fresh('s3cret');
     const r = await app.inject({ method: 'POST', url: '/streams/pumpfun', payload: '{"launchTrades":[]}', headers: { 'content-type': 'application/json' } });

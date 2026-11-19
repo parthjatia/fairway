@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixtureMids } from '@fairway/fixtures';
-import { loadDataset, loadPumpfun } from '@fairway/fixtures/node';
-import { recomputeSnipers, upsertLaunchTrades } from './launches';
-import { parsePumpPayload } from '@fairway/parser';
+import { loadBundles, loadDataset, loadPumpfun } from '@fairway/fixtures/node';
+import { recomputeBundles, recomputeSnipers, upsertFundings, upsertLaunchTrades } from './launches';
+import { parseFundingPayload, parsePumpPayload } from '@fairway/parser';
 import { toParserPools, type ParserPool } from '@fairway/parser';
 import { countSwaps, openDb, upsertSwaps, type Db } from './db';
 import { poolImpliedSource, recompute, type MidSource } from './recompute';
@@ -52,6 +52,11 @@ export function createContext(env: ContextEnv = process.env): IngestContext {
     recompute(db, mids);
     upsertLaunchTrades(db, parsePumpPayload(loadPumpfun().blocks));
     recomputeSnipers(db);
+    const bx = loadBundles().blocks;
+    upsertLaunchTrades(db, parsePumpPayload(bx));
+    upsertFundings(db, parseFundingPayload(bx));
+    recomputeSnipers(db);
+    recomputeBundles(db);
   }
   const labels: Record<string, string> = {};
   for (const p of ds.meta.personas) labels[p.address] = p.name;

@@ -8,9 +8,9 @@ Fairway uses **QuickNode Streams as its only onchain data source**, with two fil
 The ingest service stores the records and recomputes scores, and the keeper writes tiers onchain.
 
 ```
-Solana mainnet ──► Stream L (Block) ──► pumpfun-filter.js ──► webhook POST /streams/pumpfun ──► sniper scores ─┐
-Solana mainnet ──► Stream A (Block) ──► filter.js ─────────► webhook POST /streams/solana ──► markout scores ──┼─► keeper ──► TraderScore PDAs
-Solana devnet  ──► Stream B (Block) ──► filter.js ─────────► webhook POST /streams/solana ──────────────────────┘
+Solana mainnet ──► Stream L (Block) ──► pumpfun-filter.js ──► webhook POST /streams/pumpfun ──► sniper scores + bundle flags ─┐
+Solana mainnet ──► Stream A (Block) ──► filter.js ─────────► webhook POST /streams/solana ──► markout scores ─────────────────┼─► keeper ──► TraderScore PDAs
+Solana devnet  ──► Stream B (Block) ──► filter.js ─────────► webhook POST /streams/solana ────────────────────────────────────┘
 ```
 
 ## Why Streams (vs. polling RPC)
@@ -68,7 +68,8 @@ If either ever changes (for example a program upgrade to a new address), edit th
 3. **Trader** = fee payer. For each mint whose trader balance changed, the **curve** is the other owner whose balance moved the opposite way (the bonding-curve PDA or the PumpSwap pool). Trader ↑ = buy, ↓ = sell.
 4. **SOL leg** = the curve's WSOL token-account delta if it has one (PumpSwap), else the curve account's lamport delta (Pump.fun holds SOL as lamports). Platform fees go to a separate fee recipient, so this is the **pre-fee** amount. `price = SOL / tokens`.
 5. A log line `Program log: Instruction: Create` adds a `create` record: the launch slot for that mint.
-6. Returns `{ launchTrades: [{ sig, slot, ts, mint, venue, trader, kind, tokenAmount, solAmount, price }] }`, or `null`.
+6. Wallet fundings (bundle detection, below) are extracted from the same block.
+7. Returns `{ launchTrades: [{ sig, slot, ts, mint, venue, trader, kind, tokenAmount, solAmount, price }], fundings: [{ sig, slot, ts, funder, wallet, sol }] }`, or `null` when both are empty.
 
 Known approximations: a transaction that buys several Pump tokens at once is split per mint, but its SOL legs are attributed per curve, which is correct. Bundled multi-signer transactions credit the fee payer (bundlers usually pay with the sniping wallet anyway). Platform-fee schedule changes do not matter, because the price is taken on the curve side.
 
@@ -80,11 +81,36 @@ Per wallet, across launches: `score = Σ(SOL × markout) / (Σ SOL + 5 SOL)`. Th
 
 **Tested on synthetic fixtures only** (`packages/fixtures/data/pumpfun.json`: 8 launches, 4 recurring snipers, 30 retail wallets, one lucky early buyer, plus a failed tx, an ALT-loaded curve, a create without a dev buy, PumpSwap trades and a non-Pump transfer). `streams/pumpfun-filter.test.ts` checks the filter against the parser block by block, and checks that the filter → scorer pipeline flags exactly the 4 snipers. It has **not** been run against real Pump.fun blocks. Run the dashboard's "Run test" on a recent slot with a Pump.fun buy to confirm the account layout first.
 
+### Bundle detection: wallet fundings in the same Stream (M16 step 11)
+
+**Why:** a bundler doesn't reuse wallets. It funds 3–8 brand-new wallets from one source a few minutes before a launch, and each of them buys in the first slots. Per wallet there is no history, so every one of them pays STANDARD. The **funding** is the link: it is a plain SOL transfer that happens before the launch, and it is in the same Block dataset Stream L already reads. So the same filter extracts it, with no second Stream and no extra RPC.
+
+**What the filter emits** (`packages/parser/src/funding.ts`, bundled into `pumpfun-filter.js`):
+
+1. Only successful transactions whose top-level instructions are **all System Program or Compute Budget** (a plain transfer or `createAccount`). Anything that also calls another program (a swap, a token transfer, a CPI) is skipped.
+2. For each account other than the fee payer that had **0 lamports before** and ≥ `MIN_FUNDING_SOL` (default **0.05 SOL**, set at the top of the filter) after, the filter emits `{ funder: fee payer, wallet, sol }`. ALT-loaded recipients count (the full account-key list is used).
+3. The fee payer's balance must have dropped by at least the total sent, so SOL that didn't come from the fee payer is not attributed to it.
+
+**Volume note:** every SOL transfer to a brand-new wallet on mainnet matches, including exchange withdrawals. That is still small records (about 150 bytes each), far less than full blocks. Raise `MIN_FUNDING_SOL` to cut volume, or move fundings into a separate Stream with the same filter if one webhook gets too busy.
+
+**From fundings to flags** (`packages/scoring/src/bundle.ts`, run by ingest after every delivery):
+
+| Rule | Default | Why |
+|---|---|---|
+| A wallet is in a **bundle** when it bought within 25 slots of a launch, was funded as a new wallet by source F within **1,500 slots (~10 min) before the launch slot** (at the latest in the slot of its first buy), and **≥ 2** early buyers of that launch share F. | `lookbackSlots 1500`, `earlyWindowSlots 25`, `minWallets 2` | Bundles are funded just before the launch. One funded wallet is not a bundle (it is a normal new user). Funding from weeks ago is not evidence. |
+| F is a **known bundler** after bundles in **≥ 2 different launches**. Every brand-new wallet it funds afterwards is flagged **pre-emptively**, before it buys anything. | `knownFunderMinLaunches 2` | The pre-emptive flag is what lets the keeper write the TOXIC score **before** the next launch. On Fairway the launch slot is scheduled in `configure_launch`, so "funded N slots before" is checkable in advance. |
+| **Tier:** a flagged wallet pays **at least STANDARD** (never RETAIL, e.g. for a bought aged wallet), and **TOXIC** when F is a known bundler or a TOXIC sniper. Flags only ever raise a tier. | `bundleTier` | Being funded by a bundler is evidence about who controls the wallet, not about its markout, so it never lowers a tier. |
+
+Ingest stores fundings idempotently on `(sig, wallet)` (`fundings` table), recomputes `bundle_flags` / `bundle_funders`, serves them at `GET /bundles`, and `desiredScores` merges them for the keeper (source `bundle`). A flagged fresh wallet that stays STANDARD needs no account, because unknown wallets already pay STANDARD.
+
+**Tested on synthetic fixtures only** (`packages/fixtures/data/bundles.json`, a new file with its own seed: 4 launches, one funder bundling 3 of them, 2 pre-emptively flagged wallets, and edge cases: funded too early, funded after the buy, a single funded wallet, top-ups of existing wallets, a funding that also calls another program, a failed transfer, dust, one funder whose wallets buy different launches, an ALT-loaded recipient, compute budget). `streams/pumpfun-filter.test.ts` checks the filter's `fundings` against the parser block by block and end to end through `detectBundles`. **Limits:** funding through an exchange withdrawal or an intermediate hop gives each wallet a different funder, so it is not linked (`docs/RISKS.md` §10b).
+
 ### Try it locally
 
 ```bash
 pnpm --filter @fairway/ingest dev            # fixture mode seeds launch trades too
 curl -s localhost:8787/snipers?tier=TOXIC | jq '.[0]'
+curl -s localhost:8787/bundles | jq '.funders'   # fixture mode also seeds data/bundles.json
 curl -s -XPOST localhost:8787/streams/pumpfun -H 'content-type: application/json' -d '{"launchTrades":[]}'
 ```
 

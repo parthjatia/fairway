@@ -224,7 +224,7 @@ Fees in bps, per trade in the window. Paired across identical launches: **humans
 How to read it:
 
 - **Fairway beats both time-decay curves for humans.** The 300 → 30 curve lets snipers take half the window supply and still charges humans 200 bps. The 1000 → 30 curve stops snipers, but charges humans 641 bps. Fairway gets most of the 1000-curve's deterrence on known snipers at a third of the 300-curve's cost to humans.
-- **It does not beat time-decay on snipers it has never seen.** Fresh-wallet snipers and bundlers pay the STANDARD curve, which is the time-decay curve. The rotation row shows the floor: identical sniper outcomes to time-decay, and humans with history still better off. Funding-graph bundler detection is future work.
+- **It does not beat time-decay on snipers it has never seen.** Fresh-wallet snipers and bundlers pay the STANDARD curve, which is the time-decay curve. The rotation row shows the floor: identical sniper outcomes to time-decay, and humans with history still better off. Bundles are handled by the funding check (§8.5b).
 - **Price discovery.** Because known snipers stay out, the first human buyers enter closer to the listing price (+129% vs +160% on average over listing).
 
 ### 8.4 Who benefits
@@ -262,6 +262,25 @@ The trade-off, stated plainly:
 ### 8.5 After the window: scoring without an oracle
 
 A new token has no Pyth feed, so `configure_launch` enables **TWAP scoring**. The pool keeps a cumulative price × slots accumulator (64 observations ≥ 8 slots apart), updated after every swap and liquidity change. A trade's markout reference is the **25-slot TWAP ending 75 slots after the trade**, and its execution reference is the **post-trade spot price**. A buyer's own price impact is therefore not counted as "the price moved in my favour", and a trade into a pool that does not move afterwards scores 0 (tested: `twap_scoring_of_a_price_that_did_not_move_is_zero`). Wallets thus build onchain-verified scores on the very token they launched into. Manipulation risks are in [`RISKS.md` §1d](RISKS.md).
+
+### 8.5b Bundle detection (Stream L funding check)
+
+**Mechanism** (`streams/STREAM_CONFIG.md` §Bundle detection): Stream L also extracts SOL fundings of brand-new wallets. Two or more early buyers of one launch funded by the same source within 1,500 slots before it form a bundle, and those wallets pay **at least STANDARD**. A funder seen in ≥ 2 bundled launches is a **known bundler**: every new wallet it funds afterwards is flagged before it buys, and pays **TOXIC**.
+
+**Sim regime "Fairway + bundle detection"**: identical to Fairway, except that the bundle wallets pay the TOXIC curve when their funder is a known bundler. We **assume** that holds for 60% of bundles (`bundler.detectShare`; drawn from its own RNG stream, so every other regime is unchanged). Over the 100 launches that have a bundle:
+
+| Regime | Bundle share of early supply | Snipers + bundles share | Bundle wallets' fee (pooled) |
+|---|---:|---:|---:|
+| Time-decay 300 → 30 | 10.5% | 56% | 204 bps |
+| Fairway | 20.3% | 39% | 227 bps |
+| **Fairway + bundle detection** | **7.5%** | **27%** | 228 bps |
+
+Over all 200 launches the sniper + bundle share falls from 27% to 21%, and humans pay the same 94 bps. How to read it:
+
+- **Without detection, Fairway helps bundles.** Keeping known snipers out leaves the early supply to fresh wallets, so the bundle share doubles vs time-decay. Detection is what closes that gap, so it belongs in the design, not on the wish list.
+- **The bundle fee barely moves (227 → 228 bps)** for the same reason as with snipers: detected bundles face 1000 bps and mostly skip. The bundles that still buy are the undetected ones, which pay STANDARD.
+- **Creators lose a bit more fee income** ($591 → $494 per launch), because the deterred bundles paid fees too. Same trade-off as §8.4b.
+- **Limits:** the 60% is an assumption, not a measurement. One hop only: funding through an exchange or a fresh intermediate wallet is not linked. Flags that arrive after a wallet's first buy only help with the next launch. See [`RISKS.md` §10b](RISKS.md).
 
 ### 8.6 Limits
 

@@ -7,4 +7,5 @@ export * from './event';
 export * from './dataset';
 export * from './memecoin';
 export * from './pumpfun';
+export * from './bundles';
 export type { RpcBlock, RpcTransaction, TokenBalance, UiTokenAmount, ParsedAccountKey, BlocksFixture, EdgeCaseKind } from './blocks';

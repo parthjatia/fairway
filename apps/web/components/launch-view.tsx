@@ -43,7 +43,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
   const [slot, setSlot] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(25);
-  const [compare, setCompare] = useState<'fairway' | 'decay'>('fairway');
+  const [compare, setCompare] = useState<Compare>('fairway');
   const [buyUsd, setBuyUsd] = useState(200);
   useEffect(() => {
     if (!playing) return;
@@ -54,10 +54,11 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
     if (slot >= end) setPlaying(false);
   }, [slot, end]);
 
-  const run = compare === 'fairway' ? v.fairway : v.decay;
+  const run = compare === 'fairway' ? v.fairway : compare === 'bundle' ? v.bundle : v.decay;
   const buyers = useMemo(() => buyersAt(v, run, slot), [v, run, slot]);
   const shareFw = sniperShareAt(v.fairway, Math.min(slot, W - 1), W);
   const shareDc = sniperShareAt(v.decay, Math.min(slot, W - 1), W);
+  const shareBd = sniperShareAt(v.bundle, Math.min(slot, W - 1), W);
   const price = priceAt(run, slot, v.listingPrice);
   const inWindow = slot < W;
   const fees = { RETAIL: feeNow(v, 0, slot), STANDARD: feeNow(v, 1, slot), TOXIC: feeNow(v, 2, slot) };
@@ -116,12 +117,13 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         <Stat label="Fee now: RETAIL" value={`${fees.RETAIL} bps`} tone="good" hint="proven humans, from block 0" />
         <Stat label="Fee now: fresh wallet" value={`${fees.STANDARD} bps`} hint={`time-decay-only charges everyone ${decayFee} bps`} />
         <Stat label="Fee now: known sniper" value={`${fees.TOXIC} bps`} tone="bad" hint="TOXIC curve" />
-        <Stat label="Price vs listing" value={`${(price / v.listingPrice).toFixed(2)}×`} hint={`${fmtPrice(price)} ${compare === 'decay' ? '(time-decay run)' : ''}`} />
+        <Stat label="Price vs listing" value={`${(price / v.listingPrice).toFixed(2)}×`} hint={`${fmtPrice(price)} ${compare === 'decay' ? '(time-decay run)' : compare === 'bundle' ? '(bundle-detection run)' : ''}`} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.25fr_1fr]">
         <Card title="Sniper share of supply" subtitle="Tokens bought by snipers and bundle wallets during the launch window, as a share of all tokens bought so far.">
           <Meter label="Fairway (tier × time)" value={shareFw} tone="accent" />
+          {v.hasBundle && <Meter label="Fairway + bundle detection" value={shareBd} tone="bundle" />}
           <Meter label="Same launch, time-decay only" value={shareDc} tone="muted" />
           <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
             {kept.length > 0 ? (
@@ -139,7 +141,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
 
       <CreatorRevenue v={v} slot={slot} />
 
-      <Card title="Price since launch" subtitle={`Pool price ÷ listing price (${compare === 'fairway' ? 'Fairway' : 'time-decay-only'} run). The dashed line is the end of the launch window.`}>
+      <Card title="Price since launch" subtitle={`Pool price ÷ listing price (${COMPARE_LABEL[compare]} run). The dashed line is the end of the launch window.`}>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={chart} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid vertical={false} />
@@ -157,9 +159,9 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         subtitle={`Humans have paid ${usd(humanFee, 2)} in fees so far.`}
         action={
           <div className="flex rounded-xl border border-line p-0.5 text-[12px]" role="tablist" aria-label="Fee model">
-            {(['fairway', 'decay'] as const).map((c) => (
+            {(['fairway', 'bundle', 'decay'] as const).map((c) => (
               <button key={c} role="tab" aria-selected={c === compare} onClick={() => setCompare(c)} className={`rounded-lg px-2.5 py-1.5 font-semibold ${c === compare ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
-                {c === 'fairway' ? 'Fairway' : 'Time-decay only'}
+                {COMPARE_LABEL[c]}
               </button>
             ))}
           </div>
@@ -186,6 +188,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
                     <td className="py-2 pr-3 font-mono text-ink-2 tnum">{clock(b.slot)}</td>
                     <td className="py-2 pr-3">
                       <span className="font-mono text-ink">{short(b.wallet)}</span> <span className="text-[12px] text-muted">{b.label}{b.sold ? ' · sold' : ''}</span>
+                      {b.bundle && <BundleBadge charged={b.tier} />}
                     </td>
                     <td className="py-2 pr-3"><TierBadge tier={b.tier} /></td>
                     <td className="hidden py-2 pr-3 md:table-cell"><ScoreSourceBadge source={srcBadge(b.source)} /></td>
@@ -201,7 +204,8 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         )}
         <p className="mt-3 text-[12px] leading-relaxed text-muted">
           Onchain verified: the tier comes from the wallet’s own settled Fairway trades (Pyth or pool TWAP markouts). Bootstrap score: from history the keeper scored with QuickNode Streams (Pump.fun, Raydium). No score yet: a fresh
-          wallet, which pays STANDARD. Simulated wallets and trades.
+          wallet, which pays STANDARD. Bundle: funded by the same source as other early buyers shortly before the launch (Streams funding check); it pays at least STANDARD, and TOXIC under
+          bundle detection when the funder is a known bundler{v.hasBundle ? (v.bundleFunderKnown ? ' (this launch: known funder)' : ' (this launch: first-time funder, so STANDARD)') : ''}. Simulated wallets and trades.
         </p>
       </Card>
     </div>
@@ -235,7 +239,21 @@ function CreatorRevenue({ v, slot }: { v: LaunchSimView; slot: number }) {
   );
 }
 
-function Meter({ label, value, tone }: { label: string; value: number; tone: 'accent' | 'muted' }) {
+type Compare = 'fairway' | 'bundle' | 'decay';
+const COMPARE_LABEL: Record<Compare, string> = { fairway: 'Fairway', bundle: '+ bundle detection', decay: 'Time-decay only' };
+
+function BundleBadge({ charged }: { charged: string }) {
+  return (
+    <span
+      title={`Bundle: funded by the same source wallet as other early buyers within the lookback before the launch. Pays at least STANDARD; charged ${charged} here.`}
+      className="ml-1.5 inline-flex items-center rounded-full border border-[color:var(--s-bundle)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--s-bundle)]"
+    >
+      bundle
+    </span>
+  );
+}
+
+function Meter({ label, value, tone }: { label: string; value: number; tone: 'accent' | 'muted' | 'bundle' }) {
   return (
     <div className="mt-3">
       <div className="mb-1 flex justify-between text-[13px]">
@@ -243,7 +261,7 @@ function Meter({ label, value, tone }: { label: string; value: number; tone: 'ac
         <span className="font-semibold text-ink tnum">{(value * 100).toFixed(0)}%</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-surface-2" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} aria-label={label}>
-        <div className={`h-full rounded-full ${tone === 'accent' ? 'bg-accent' : 'bg-muted'}`} style={{ width: `${Math.min(100, value * 100)}%`, transition: 'width 120ms linear' }} />
+        <div className={`h-full rounded-full ${tone === 'accent' ? 'bg-accent' : tone === 'bundle' ? 'bg-[color:var(--s-bundle)]' : 'bg-muted'}`} style={{ width: `${Math.min(100, value * 100)}%`, transition: 'width 120ms linear' }} />
       </div>
     </div>
   );

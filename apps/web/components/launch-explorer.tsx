@@ -5,13 +5,14 @@ import type { LaunchStudy } from '@fairway/sim';
 import { Card, Stat } from './ui';
 import { usd } from '@/lib/format';
 
-export type LaunchStudyData = Pick<LaunchStudy, 'regimes' | 'keyChart' | 'paired' | 'schedules' | 'launches' | 'creatorShare'> & { windowSlots: number; knownShare: number; historyShare: number };
+export type LaunchStudyData = Pick<LaunchStudy, 'regimes' | 'keyChart' | 'paired' | 'schedules' | 'launches' | 'creatorShare' | 'bundleDetection'> & { windowSlots: number; knownShare: number; historyShare: number };
 
 export const LAUNCH_COLOR: Record<string, string> = {
   flat: 'var(--s-flat5)',
   decay: 'var(--s-flat30)',
   decayHigh: 'var(--s-flat80)',
   fairway: 'var(--s-fairway)',
+  fairwayBundle: 'var(--s-bundle)',
   fairwayRotation: 'var(--s-rotation)',
 };
 
@@ -117,6 +118,40 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
         </p>
       </Card>
 
+      <Card
+        title="Bundle detection (Streams funding check)"
+        subtitle={`The ${data.bundleDetection.launchesWithBundle} launches with a bundle: one entity funding 3–8 fresh wallets shortly before the launch. Assumption: ${pct(data.bundleDetection.detectShare)} of bundles come from a funder already known as a bundler, detected in time to write TOXIC scores before the launch.`}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-left text-[13px]">
+            <thead className="text-[11px] uppercase tracking-wide text-muted">
+              <tr>
+                <th className="py-2 pr-3 font-medium">Regime</th>
+                <th className="py-2 pr-3 text-right font-medium">Bundle share of early supply</th>
+                <th className="py-2 pr-3 text-right font-medium">Snipers + bundles share</th>
+                <th className="py-2 pr-3 text-right font-medium">Bundle wallets&apos; fee</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(['decay', 'fairway', 'fairwayBundle'] as const).map((id) => (
+                <tr key={id} className={`border-t border-line ${id === 'fairwayBundle' ? 'font-semibold text-ink' : 'text-ink-2'}`}>
+                  <td className="py-2 pr-3">{by(id).short}</td>
+                  <td className="py-2 pr-3 text-right tnum">{pct(data.bundleDetection.bundlerShare[id], 1)}</td>
+                  <td className="py-2 pr-3 text-right tnum">{pct(data.bundleDetection.sniperShare[id])}</td>
+                  <td className="py-2 pr-3 text-right tnum">{b0(data.bundleDetection.bundlerFeeBps[id])}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+          Honest read: without detection, Fairway gives bundles <em>more</em> of the early supply than time-decay ({pct(data.bundleDetection.bundlerShare.fairway)} vs {pct(data.bundleDetection.bundlerShare.decay)}),
+          because the known snipers it keeps out leave room for fresh wallets. Flagged bundle wallets always pay at least STANDARD. When the funder is a known bundler they pay the TOXIC curve, and most of them then skip the
+          launch, like known snipers. The bundle fee barely moves because the ones that still buy are the undetected ones. Humans pay the same ({b0(by('fairwayBundle').metrics.humanFeeBps.mean)}). A bundler who funds through an
+          exchange or a fresh hop each time is not linked.
+        </p>
+      </Card>
+
       <Card title="Creator revenue: the share of the sniper premium" subtitle={`Per launch, Fairway regime, mean of ${data.launches} launches. Default: ${data.creatorShare.defaultBps / 100}% of the TOXIC premium goes to the creator, 15% to the protocol, the rest stays with LPs.`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[480px] text-left text-[13px]">
@@ -170,7 +205,10 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
       <Card title="Assumptions (synthetic)" subtitle="What the simulation models, and what it does not.">
         <ul className="list-disc space-y-1.5 pl-5 text-[13px] leading-relaxed text-ink-2">
           <li>{data.launches} launches, 15 minutes each. Snipers arrive at block 0, and {pct(data.knownShare)} of them are already known TOXIC (scored from Pump.fun history). A sniper buys only when the fee is below its expected edge (150–700 bps), and waits at most 30–300 slots.</li>
-          <li>Bundlers: one entity funding 3–8 fresh wallets (in 50% of launches). Fresh wallets pay STANDARD, so Fairway charges bundlers the same as time-decay. Funding-graph detection is not built.</li>
+          <li>
+            Bundlers: one entity funding 3–8 fresh wallets (in 50% of launches). Fresh wallets pay STANDARD, so plain Fairway charges bundlers the same curve as time-decay. &quot;Fairway + bundle detection&quot; adds the Streams funding check:
+            the wallets of a known bundler ({pct(data.bundleDetection.detectShare)} of bundles, an assumption) pay TOXIC.
+          </li>
           <li>Retail: front-loaded Poisson arrivals, median $80. {pct(data.historyShare)} have a RETAIL history; the rest are fresh wallets that pay the STANDARD curve, exactly as under time-decay.</li>
           <li>Retail buyers do not react to fees. If they avoided high early fees, time-decay would lose even more human volume.</li>
         </ul>

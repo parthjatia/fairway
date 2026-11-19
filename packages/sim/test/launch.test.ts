@@ -71,6 +71,29 @@ describe('launch simulation', () => {
     const trades = st.example.fairway.trades;
     expect(trades.filter((t) => t.premiumUsd > 0).every((t) => t.tier === 2)).toBe(true);
   });
+  it('bundle detection: known-bundler wallets pay TOXIC, the bundle share of supply falls, nothing else changes', () => {
+    const bd = st.bundleDetection;
+    expect(bd.launchesWithBundle).toBeGreaterThan(10);
+    expect(bd.bundlerShare.fairwayBundle).toBeLessThan(bd.bundlerShare.fairway * 0.8);
+    expect(bd.bundlerFeeBps.fairwayBundle).toBeGreaterThan(bd.bundlerFeeBps.fairway);
+    // without detection, bundle wallets are fresh → STANDARD, the time-decay curve slot by slot (averages differ only
+    // because the price path, and so their exit timing, differs once known snipers stay out)
+    // humans are unaffected by bundle detection (their tier does not change)
+    expect(key('fairwayBundle').humanFeeBps).toBeCloseTo(key('fairway').humanFeeBps, 0);
+    expect(reg('fairwayBundle').sniperShareOfWindowSupply.mean).toBeLessThan(reg('fairway').sniperShareOfWindowSupply.mean);
+    // snipers' own outcomes are identical: only bundle wallets change tier
+    expect(reg('fairwayBundle').knownSniperFeeBps.mean).toBeCloseTo(reg('fairway').knownSniperFeeBps.mean, 0);
+  });
+  it('bundle wallets are flagged (STANDARD at least) in every Fairway regime, TOXIC only with a known funder', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const sc = makeLaunchScenario(C, seed);
+      const bundle = sc.bots.filter((b) => b.kind === 'bundler');
+      if (!bundle.length) continue;
+      const tr = runLaunch(C, sc, 'fairwayBundle', { recordTrades: true }).trades.filter((t) => t.agent === 'bundler');
+      for (const t of tr) expect(t.tier).toBe(bundle[0]!.funderKnown ? 2 : 1);
+      for (const t of runLaunch(C, sc, 'fairway', { recordTrades: true }).trades.filter((t) => t.agent === 'bundler')) expect(t.tier).toBe(1);
+    }
+  });
   it('exports an example launch with trades under Fairway and time-decay', () => {
     expect(st.example.fairway.trades.length).toBeGreaterThan(20);
     expect(st.example.fairway.trades.some((t) => t.agent === 'sniper' || t.agent === 'bundler')).toBe(true);

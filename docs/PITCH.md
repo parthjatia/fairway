@@ -30,7 +30,7 @@
 
 4. **Why would anyone launch here instead of Pump.fun?** Creators who want holders, not bots: a fairer distribution (sniper share 27% vs 49%), a lower entry price for their community, and a launch story ("snipers pay 10%, you pay 0.3%"). The honest cost: less fee income than a time-decay launch. The bigger path is not competing with Pump.fun but partnering: graduating tokens land in a Fairway pool with a launch curve (see "What's next").
 
-5. **Can snipers just use fresh wallets?** Yes, and then they pay the STANDARD curve, which is exactly today's time-decay fee. Rotation removes the surcharge but can never earn a discount, because RETAIL needs ≥ 5 scored trades, ≥ 3 days of history and near-zero markout. Our worst-case simulation, where every sniper rotates, gives the same sniper outcome as time-decay, and humans with history still pay 94 instead of 200 bps. Fresh wallets also leave a funding trail. Bundler detection from the funding graph is future work.
+5. **Can snipers just use fresh wallets?** Yes, and then they pay the STANDARD curve, which is exactly today's time-decay fee. Rotation removes the surcharge but can never earn a discount, because RETAIL needs ≥ 5 scored trades, ≥ 3 days of history and near-zero markout. Our worst-case simulation, where every sniper rotates, gives the same sniper outcome as time-decay, and humans with history still pay 94 instead of 200 bps. Fresh wallets also leave a funding trail: the Stream's funding check flags wallets funded by one source just before a launch (Q13).
 
 6. **Why won't bots just go to other DEXes?** For a launch they can't: the token only trades in its launch pool for the first minutes, and that pool is ours. On liquid pairs, some will route elsewhere, and that's fine: the bots that leave are the flow that was costing LPs. The retail flow that stays pays a fair price.
 
@@ -46,7 +46,7 @@
 
 12. **Doesn't this help memecoin scams?** Fairway changes who pays the launch fee. It doesn't vet tokens, and a fair distribution doesn't make a token a good investment. A creator who snipes their own launch from fresh wallets pays the STANDARD curve like any other fresh wallet.
 
-13. **What about bundlers?** In half the simulated launches, a bundler splits ~$6k across 3–8 fresh wallets. Each pays STANDARD (= time-decay), so Fairway does no worse than today, but no better on those wallets. Funding-graph detection and a per-launch cap on STANDARD buys in the first slots are next.
+13. **What about bundlers?** A bundler funds 3–8 fresh wallets from one source just before the launch. The same QuickNode Stream that reads Pump.fun trades also extracts those fundings. Two or more early buyers funded by one source within ~10 minutes before the launch are a bundle, and their wallets pay at least STANDARD. A funder that does it in two launches is a known bundler: every new wallet it funds afterwards is flagged before it buys and pays the TOXIC curve. In the sim (assuming 60% of bundles come from a known bundler), the bundle share of early supply falls from 20% to 7.5%. Honest limits: one hop only (an exchange withdrawal breaks the link), and without detection Fairway actually leaves *more* room for bundles than time-decay, because known snipers stay out.
 
 14. **Why Solana?** 400 ms slots give a precise clock for "the first seconds" and for the fee curve. Fast cheap transactions make per-launch scoring and batched score writes (10 per tx) practical. Pump.fun makes Solana the place where launch sniping happens, so the history we need is onchain there.
 

@@ -3,14 +3,15 @@
  *   - flat 30 bps for everyone,
  *   - time-decay-only anti-sniper fee (what other launchpads do: everyone pays the same decaying fee),
  *   - Fairway: fee = f(tier, slots since launch), the same curve the program enforces (programs/fairway, launch.rs),
- *   - Fairway worst case: every sniper uses a fresh wallet (STANDARD tier).
+ *   - Fairway worst case: every sniper uses a fresh wallet (STANDARD tier),
+ *   - Fairway + bundle detection: bundle wallets whose funder is a known bundler (Streams funding check) pay TOXIC.
  * Deterministic per seed. Common random numbers: the same launch (agents, budgets, arrival times) is replayed under every
  * regime, and agents react to the fees they face (snipers wait or skip when the fee is above what their edge pays for).
  * Everything here is SYNTHETIC. Agent parameters are assumptions; see docs/ECONOMICS.md ("Launch economics").
  */
 import { Rng } from '@fairway/fixtures';
 
-export type LaunchRegime = 'flat' | 'decay' | 'decayHigh' | 'fairway' | 'fairwayRotation';
+export type LaunchRegime = 'flat' | 'decay' | 'decayHigh' | 'fairway' | 'fairwayBundle' | 'fairwayRotation';
 export type LaunchAgent = 'retail' | 'goodbot' | 'sniper' | 'bundler';
 /** 0 RETAIL, 1 STANDARD, 2 TOXIC (same indices as the program) */
 export type TierIdx = 0 | 1 | 2;
@@ -48,7 +49,19 @@ export type LaunchSimConfig = {
     takeProfit: [number, number];
     maxHoldSlots: [number, number];
   };
-  bundler: { prob: number; wallets: [number, number]; medianUsd: number; maxFeeBps: [number, number]; patienceSlots: [number, number] };
+  bundler: {
+    prob: number;
+    wallets: [number, number];
+    medianUsd: number;
+    maxFeeBps: [number, number];
+    patienceSlots: [number, number];
+    /**
+     * 'Fairway + bundle detection' only: share of bundles whose funding wallet is a KNOWN bundler (bundled ≥ 2 earlier
+     * launches, packages/scoring/src/bundle.ts) and funded the fresh wallets early enough for the keeper to write their
+     * TOXIC scores before the launch. The rest are flagged at best after the fact and pay STANDARD. An assumption.
+     */
+    detectShare: number;
+  };
   /** human buys at or above this fee count as "paid the high early fee" */
   highFeeBps: number;
   /** protocol: launch fee (USD) + share of the TOXIC premium (fee above the STANDARD fee), as onchain */
@@ -71,7 +84,7 @@ export const DEFAULT_LAUNCH_CONFIG: LaunchSimConfig = {
   retail: { medianCount: 160, countSigma: 0.5, medianUsd: 80, sizeSigma: 0.9, maxUsd: 2_000, hypeTauSlots: 300, historyShare: 0.6 },
   goodbots: { max: 3, usd: 40, everySlots: 40 },
   sniper: { min: 2, max: 8, knownShare: 0.75, medianUsd: 2_500, maxFeeBps: [150, 700], patienceSlots: [30, 300], takeProfit: [0.3, 1.0], maxHoldSlots: [300, 1_200] },
-  bundler: { prob: 0.5, wallets: [3, 8], medianUsd: 6_000, maxFeeBps: [200, 700], patienceSlots: [0, 20] },
+  bundler: { prob: 0.5, wallets: [3, 8], medianUsd: 6_000, maxFeeBps: [200, 700], patienceSlots: [0, 20], detectShare: 0.6 },
   highFeeBps: 100,
   launchFeeUsd: 7.5,
   protocolPremiumShareBps: 1_500,
@@ -83,6 +96,7 @@ export const LAUNCH_REGIMES: { id: LaunchRegime; label: string; short: string }[
   { id: 'decay', label: 'Time-decay only, 300→30 bps for everyone', short: 'Time-decay' },
   { id: 'decayHigh', label: 'Aggressive time-decay, 1000→30 bps for everyone', short: 'Decay 1000' },
   { id: 'fairway', label: 'Fairway: tier × time (1000→80 / 300→30 / 30→5)', short: 'Fairway' },
+  { id: 'fairwayBundle', label: 'Fairway + bundle detection: wallets funded by a known bundler pay TOXIC', short: 'Fairway + bundles' },
   { id: 'fairwayRotation', label: 'Fairway worst case: every sniper uses a fresh wallet', short: 'Fairway (rotation)' },
 ];
 
@@ -113,6 +127,8 @@ type Bot = {
   kind: 'sniper' | 'bundler';
   entity: string;
   known: boolean;
+  /** bundle wallets: the funder is a known bundler, detected in time ('Fairway + bundle detection' charges TOXIC) */
+  funderKnown: boolean;
   usd: number;
   maxFeeBps: number;
   patience: number;
@@ -146,6 +162,7 @@ export function makeLaunchScenario(cfg: LaunchSimConfig, seed: number): LaunchSc
       kind: 'sniper',
       entity: `sniper-${i}`,
       known: r.bool(cfg.sniper.knownShare),
+      funderKnown: false,
       usd: r.lognormal(cfg.sniper.medianUsd, 0.6),
       maxFeeBps: uni(r, cfg.sniper.maxFeeBps),
       patience: Math.round(uni(r, cfg.sniper.patienceSlots)),
@@ -160,9 +177,11 @@ export function makeLaunchScenario(cfg: LaunchSimConfig, seed: number): LaunchSc
     const patience = Math.round(uni(r, cfg.bundler.patienceSlots));
     const tp = uni(r, cfg.sniper.takeProfit);
     const hold = Math.round(uni(r, cfg.sniper.maxHoldSlots));
+    // separate stream so the draw never shifts the main scenario (every other regime's numbers stay identical)
+    const funderKnown = new Rng(0xb0d1e + seed * 104_729).bool(cfg.bundler.detectShare);
     for (let i = 0; i < n; i++) {
-      // fresh wallets funded by one entity: never known, so STANDARD in every Fairway regime
-      bots.push({ id: `bundle-${i}`, kind: 'bundler', entity: 'bundler', known: false, usd: (total / n) * (0.7 + 0.6 * r.next()), maxFeeBps: maxFee, patience, takeProfit: tp, maxHold: hold });
+      // fresh wallets funded by one entity: never individually known (STANDARD), unless the funder is a known bundler
+      bots.push({ id: `bundle-${i}`, kind: 'bundler', entity: 'bundler', known: false, funderKnown, usd: (total / n) * (0.7 + 0.6 * r.next()), maxFeeBps: maxFee, patience, takeProfit: tp, maxHold: hold });
     }
   }
   const goodbots = Array.from({ length: r.int(cfg.goodbots.max + 1) }, (_, i) => `dca-${i}`);
@@ -192,6 +211,12 @@ export type LaunchTrade = {
 export type LaunchMetrics = {
   /** tokens bought by snipers + bundlers inside the launch window ÷ all tokens bought in the window */
   sniperShareOfWindowSupply: number;
+  /** the bundler's wallets only (0 in launches without a bundle) */
+  bundlerShareOfWindowSupply: number;
+  /** volume-weighted fee paid by bundle wallets (bps); NaN when no bundle wallet traded */
+  bundlerFeeBps: number;
+  bundlerNotionalUsd: number;
+  bundlerFeesUsd: number;
   /** retail average entry price (incl. fee) ÷ listing price − 1 */
   retailEntryPremiumPct: number;
   /** volume-weighted fee paid by retail buyers (bps); NaN when there were none (excluded from averages) */
@@ -231,6 +256,7 @@ export type LaunchRun = { metrics: LaunchMetrics; trades: LaunchTrade[]; listing
 
 function botTier(regime: LaunchRegime, b: Bot): TierIdx {
   if (regime === 'fairwayRotation') return 1;
+  if (b.kind === 'bundler') return regime === 'fairwayBundle' && b.funderKnown ? 2 : 1;
   return b.known ? 2 : 1;
 }
 
@@ -244,6 +270,9 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
   const m = {
     winTok: 0,
     winBotTok: 0,
+    winBundleTok: 0,
+    bdFeeUsd: 0,
+    bdNotional: 0,
     rUsd: 0,
     rTok: 0,
     rFeeUsd: 0,
@@ -277,6 +306,7 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
     if (slot < cfg.windowSlots) {
       m.winTok += out;
       if (agent === 'sniper' || agent === 'bundler') m.winBotTok += out;
+      if (agent === 'bundler') m.winBundleTok += out;
     }
     if (agent === 'retail') {
       m.rUsd += spendUsd;
@@ -291,6 +321,10 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
     } else {
       m.bFeeUsd += feeUsd;
       m.bNotional += spendUsd;
+      if (agent === 'bundler') {
+        m.bdFeeUsd += feeUsd;
+        m.bdNotional += spendUsd;
+      }
       if (known.has(wallet)) {
         m.kFeeUsd += feeUsd;
         m.kNotional += spendUsd;
@@ -313,6 +347,10 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
     m.premiumUsd += premiumUsd;
     m.bFeeUsd += feeUsd;
     m.bNotional += tokens * p;
+    if (agent === 'bundler') {
+      m.bdFeeUsd += feeUsd;
+      m.bdNotional += tokens * p;
+    }
     if (known.has(wallet)) {
       m.kFeeUsd += feeUsd;
       m.kNotional += tokens * p;
@@ -363,6 +401,10 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
   const creatorPremiumUsd = Math.min((m.premiumUsd * cfg.creatorPremiumShareBps) / 10_000, m.premiumUsd - protocolCut);
   const metrics: LaunchMetrics = {
     sniperShareOfWindowSupply: m.winTok > 0 ? m.winBotTok / m.winTok : 0,
+    bundlerShareOfWindowSupply: m.winTok > 0 ? m.winBundleTok / m.winTok : 0,
+    bundlerFeeBps: m.bdNotional > 0 ? (m.bdFeeUsd / m.bdNotional) * 10_000 : NaN,
+    bundlerNotionalUsd: m.bdNotional,
+    bundlerFeesUsd: m.bdFeeUsd,
     retailEntryPremiumPct: m.rTok > 0 ? (m.rUsd / m.rTok / listingPrice - 1) * 100 : 0,
     humanFeeBps: m.rNotional > 0 ? (m.rFeeUsd / m.rNotional) * 10_000 : NaN,
     sniperFeeBps: m.bNotional > 0 ? (m.bFeeUsd / m.bNotional) * 10_000 : NaN,
@@ -423,6 +465,18 @@ export type LaunchStudy = {
     /** time-decay-only: no premium exists, so a creator with locked liquidity gets nothing */
     decayCreatorIfSoleLpUsd: number;
   };
+  /**
+   * Bundle detection (M16 step 11), over the launches that HAVE a bundle: bundle wallets' share of the window supply and
+   * pooled fee, under time-decay-only, Fairway (bundle wallets are fresh → STANDARD) and Fairway + bundle detection.
+   */
+  bundleDetection: {
+    detectShare: number;
+    launchesWithBundle: number;
+    bundlerShare: Record<'decay' | 'fairway' | 'fairwayBundle', number>;
+    bundlerFeeBps: Record<'decay' | 'fairway' | 'fairwayBundle', number>;
+    sniperShare: Record<'decay' | 'fairway' | 'fairwayBundle', number>;
+    humanFeeBps: Record<'fairway' | 'fairwayBundle', number>;
+  };
   /** one representative launch, traded under Fairway and under time-decay-only (for the UI's launch view) */
   example: { seed: number; listingPrice: number; liquidityUsd: number; fairway: LaunchRun; decay: LaunchRun };
 };
@@ -442,7 +496,7 @@ export function pickExampleSeed(cfg: LaunchSimConfig, from = 1, to = 200): numbe
 }
 
 export function runLaunchStudy(cfg: LaunchSimConfig = DEFAULT_LAUNCH_CONFIG, seeds: number[] = Array.from({ length: 200 }, (_, i) => i + 1), exampleSeed = pickExampleSeed(cfg)): LaunchStudy {
-  const per: Record<LaunchRegime, LaunchMetrics[]> = { flat: [], decay: [], decayHigh: [], fairway: [], fairwayRotation: [] };
+  const per: Record<LaunchRegime, LaunchMetrics[]> = { flat: [], decay: [], decayHigh: [], fairway: [], fairwayBundle: [], fairwayRotation: [] };
   for (const seed of seeds) {
     const sc = makeLaunchScenario(cfg, seed);
     for (const { id } of LAUNCH_REGIMES) per[id].push(runLaunch(cfg, sc, id).metrics);
@@ -492,6 +546,21 @@ export function runLaunchStudy(cfg: LaunchSimConfig = DEFAULT_LAUNCH_CONFIG, see
     }),
     decayCreatorIfSoleLpUsd: mean(dc.map((x) => x.creatorFeesUsd)),
   };
+  const withBundle = per.fairway.map((_, i) => i).filter((i) => makeLaunchScenario(cfg, seeds[i]!).bots.some((b) => b.kind === 'bundler'));
+  const over = (id: LaunchRegime, f: (x: LaunchMetrics) => number) => mean(withBundle.map((i) => f(per[id][i]!)));
+  const pooledBundle = (id: LaunchRegime) => {
+    const xs = withBundle.map((i) => per[id][i]!);
+    return (xs.reduce((a, x) => a + x.bundlerFeesUsd, 0) / Math.max(1e-9, xs.reduce((a, x) => a + x.bundlerNotionalUsd, 0))) * 10_000;
+  };
+  const three = (f: (id: LaunchRegime) => number) => ({ decay: f('decay'), fairway: f('fairway'), fairwayBundle: f('fairwayBundle') });
+  const bundleDetection = {
+    detectShare: cfg.bundler.detectShare,
+    launchesWithBundle: withBundle.length,
+    bundlerShare: three((id) => over(id, (x) => x.bundlerShareOfWindowSupply)),
+    bundlerFeeBps: three(pooledBundle),
+    sniperShare: three((id) => over(id, (x) => x.sniperShareOfWindowSupply)),
+    humanFeeBps: { fairway: pooled('fairway', 'human'), fairwayBundle: pooled('fairwayBundle', 'human') },
+  };
   const exSc = makeLaunchScenario(cfg, exampleSeed);
   const example = {
     seed: exampleSeed,
@@ -500,5 +569,5 @@ export function runLaunchStudy(cfg: LaunchSimConfig = DEFAULT_LAUNCH_CONFIG, see
     fairway: runLaunch(cfg, exSc, 'fairway', { recordTrades: true }),
     decay: runLaunch(cfg, exSc, 'decay', { recordTrades: true }),
   };
-  return { synthetic: true, config: cfg, launches: seeds.length, regimes, keyChart, paired, schedules, creatorShare, example };
+  return { synthetic: true, config: cfg, launches: seeds.length, regimes, keyChart, paired, schedules, creatorShare, bundleDetection, example };
 }

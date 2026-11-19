@@ -12,6 +12,7 @@ import type { Swap } from '@fairway/scoring';
 import type { MemecoinMarket } from './memecoin';
 import { generateMemecoinMarket } from './memecoin';
 import { generatePumpfunFixture, type PumpFixture } from './pumpfun';
+import { generateBundleFixture, type BundleFixture } from './bundles';
 
 export { buildBlocks };
 
@@ -85,4 +86,17 @@ export function generatePumpfun(dir = FIXTURE_DIR): { blocks: number; trades: nu
 export function loadPumpfun(dir = FIXTURE_DIR): PumpFixture {
   if (!existsSync(join(dir, 'pumpfun.json'))) generatePumpfun(dir);
   return read<PumpFixture>(dir, 'pumpfun.json');
+}
+
+/** Writes data/bundles.json (M16 step 11: launches + fundings for bundle detection). Additive: no other fixture file is touched. */
+export function generateBundles(dir = FIXTURE_DIR): { blocks: number; fundings: number } {
+  const f = generateBundleFixture();
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'bundles.json'), JSON.stringify(f));
+  return { blocks: f.blocks.length, fundings: f.expectedFundings.length };
+}
+
+export function loadBundles(dir = FIXTURE_DIR): BundleFixture {
+  if (!existsSync(join(dir, 'bundles.json'))) generateBundles(dir);
+  return read<BundleFixture>(dir, 'bundles.json');
 }

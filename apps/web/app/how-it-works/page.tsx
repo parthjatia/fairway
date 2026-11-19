@@ -51,8 +51,8 @@ export default function HowItWorks() {
           </ol>
           <p className="mt-4 text-[13px] leading-relaxed text-ink-2">
             Inside the launch window each tier&apos;s fee decays linearly: TOXIC 1000 → 80 bps, STANDARD 300 → 30 (the same as a time-decay launch), RETAIL 30 → 5. A new token has no oracle, so after launch
-            the program marks every trade against the pool&apos;s own 25-slot TWAP, 75 slots later, measured from the post-trade price so a buyer&apos;s own impact never counts as information. Limits: snipers on
-            fresh wallets pay the time-decay fee, and bundlers are not detected yet.
+            the program marks every trade against the pool&apos;s own 25-slot TWAP, 75 slots later, measured from the post-trade price so a buyer&apos;s own impact never counts as information. Bundles (fresh wallets funded by one source just before the launch) are flagged by the same Stream: they pay at least STANDARD, and TOXIC when the funder is a known
+            bundler. Limits: snipers on fresh wallets pay the time-decay fee, and funding through an exchange or extra hops is not linked.
           </p>
         </Card>
         <Card title="Pipeline" subtitle="Each arrow is a component in this repo; the Stream and the keeper's devnet mode are the parts that need your accounts.">

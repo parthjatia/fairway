@@ -73,6 +73,8 @@ export type Buyer = {
   feeUsd: number;
   feeBps: number;
   sold: boolean;
+  /** funded by the same source as other early buyers shortly before the launch (Streams funding check) */
+  bundle: boolean;
 };
 
 export type LaunchSimView = {
@@ -80,6 +82,11 @@ export type LaunchSimView = {
   cfg: LaunchSimConfig;
   listingPrice: number;
   fairway: LaunchRun;
+  /** Fairway + bundle detection (bundle wallets funded by a known bundler pay TOXIC) */
+  bundle: LaunchRun;
+  /** this launch has a bundle, and its funder is a known bundler (so detection charges it TOXIC) */
+  hasBundle: boolean;
+  bundleFunderKnown: boolean;
   decay: LaunchRun;
   /** stable fake addresses for the sim's wallet ids */
   address: Record<string, string>;
@@ -106,9 +113,11 @@ export function simulateLaunch(spec: LaunchSpec): LaunchSimView {
   const sc = { ...makeLaunchScenario(cfg, spec.seed), liquidityUsd: spec.liquidityUsd };
   const fairway = runLaunch(cfg, sc, 'fairway', { recordTrades: true });
   const decay = runLaunch(cfg, sc, 'decay', { recordTrades: true });
+  const bundle = runLaunch(cfg, sc, 'fairwayBundle', { recordTrades: true });
+  const bundleBots = sc.bots.filter((b) => b.kind === 'bundler');
   const address: Record<string, string> = {};
   const source: Record<string, ScoreSource> = {};
-  for (const t of [...fairway.trades, ...decay.trades]) {
+  for (const t of [...fairway.trades, ...decay.trades, ...bundle.trades]) {
     address[t.wallet] ??= addr(spec, t.wallet);
     source[t.wallet] ??= sourceOf(spec, t.wallet, t.tier);
   }
@@ -117,7 +126,7 @@ export function simulateLaunch(spec: LaunchSpec): LaunchSimView {
     address[b.id] ??= addr(spec, b.id);
     source[b.id] ??= sourceOf(spec, b.id, b.known ? 2 : 1);
   }
-  return { spec, cfg, listingPrice: sc.liquidityUsd / cfg.poolTokens, fairway, decay, address, source };
+  return { spec, cfg, listingPrice: sc.liquidityUsd / cfg.poolTokens, fairway, bundle, hasBundle: bundleBots.length > 0, bundleFunderKnown: bundleBots.some((b) => b.funderKnown), decay, address, source };
 }
 
 const AGENT_LABEL: Record<LaunchAgent, string> = { retail: 'Human', goodbot: 'DCA bot', sniper: 'Sniper', bundler: 'Bundle wallet' };
@@ -140,13 +149,15 @@ export function buyersAt(v: LaunchSimView, run: LaunchRun, slot: number): Buyer[
           label: AGENT_LABEL[t.agent],
           agent: t.agent,
           tier: TIER_OF[t.tier],
-          source: v.source[t.wallet] ?? 'none',
+          // a bundle wallet charged TOXIC got its score from the keeper's funding check (bootstrap), not its own history
+          source: t.agent === 'bundler' && t.tier === 2 ? 'bootstrap' : (v.source[t.wallet] ?? 'none'),
           slot: t.slot,
           usd: t.usd,
           tokens: t.tokens,
           feeUsd: t.feeUsd,
           feeBps: t.feeBps,
           sold: false,
+          bundle: t.agent === 'bundler',
         });
     } else if (b) b.sold = true;
   }
