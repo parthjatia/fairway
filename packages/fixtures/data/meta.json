@@ -751,9 +751,9 @@
   ],
   "confusion": {
     "retail": {
-      "RETAIL": 108,
-      "STANDARD": 41,
-      "TOXIC": 1
+      "RETAIL": 98,
+      "STANDARD": 50,
+      "TOXIC": 2
     },
     "sniper": {
       "TOXIC": 2

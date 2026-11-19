@@ -13,6 +13,12 @@ export type ScoringConfig = {
   retailMinHistoryDays: number;
   /** seconds per "day" for the history requirement (fixtures may compress time) */
   secondsPerDay: number;
+  /**
+   * 'all-horizons' (default): TOXIC if ANY horizon's score ≥ toxic threshold, RETAIL only if EVERY horizon
+   * is ≤ retail threshold — so informed traders cannot hide by trading just beyond the primary horizon.
+   * 'primary': use the primary horizon only.
+   */
+  tierRule: 'all-horizons' | 'primary';
 };
 
 export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
@@ -25,6 +31,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   retailMinTrades: 5,
   retailMinHistoryDays: 3,
   secondsPerDay: 86_400,
+  tierRule: 'all-horizons',
 };
 
 export const makeConfig = (overrides: Partial<ScoringConfig> = {}): ScoringConfig => ({

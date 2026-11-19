@@ -48,5 +48,7 @@ export type WalletScore = {
   firstSeen: number;
   lastSeen: number;
   historyDays: number;
+  /** highest shrunk score across horizons (TOXIC trigger under the default 'all-horizons' rule) */
+  maxScoreBps: number;
   byHorizon: Record<number, HorizonScore>;
 };

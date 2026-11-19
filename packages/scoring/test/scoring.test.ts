@@ -211,3 +211,29 @@ describe('mid price providers', () => {
     expect(p.midAt(5)).toBe(150);
   });
 });
+
+describe('all-horizons tier rule', () => {
+  const base = { trades: 10, historyDays: 5, scoreBps: 0 };
+  it('flags informed flow that hides beyond the primary horizon', () => {
+    expect(assignTier({ ...base, maxScoreBps: 15 }, cfg)).toBe('TOXIC');
+    expect(assignTier({ ...base, maxScoreBps: 15 }, makeConfig({ tierRule: 'primary' }))).toBe('RETAIL');
+  });
+  it('RETAIL requires every horizon below the retail threshold', () => {
+    expect(assignTier({ ...base, maxScoreBps: 5 }, cfg)).toBe('STANDARD');
+    expect(assignTier({ ...base, maxScoreBps: 2 }, cfg)).toBe('RETAIL');
+  });
+  it('scoreWallet uses the 60s horizon when 30s looks clean', () => {
+    // price flat for 30s after each trade, then +30 bps by 60s
+    const pts: Array<[number, number]> = [];
+    const swaps: Swap[] = [];
+    for (let i = 0; i < 8; i++) {
+      const t = i * 1000;
+      pts.push([t, 100], [t + 59, 100.3], [t + 999, 100]);
+      swaps.push(swap({ trader: 'S', ts: t, execPrice: 100, quoteAmount: 10_000 }));
+    }
+    const w = scoreWallet('S', swaps, new SeriesMidPrice(pts), cfg);
+    expect(Math.abs(w.scoreBps)).toBeLessThan(1);
+    expect(w.maxScoreBps).toBeGreaterThan(20);
+    expect(w.tier).toBe('TOXIC');
+  });
+});

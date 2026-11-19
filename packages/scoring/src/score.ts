@@ -75,7 +75,10 @@ export class WalletAccumulator {
     const historyDays = this.trades > 0 ? Math.max(0, (end - this.firstSeen) / this.cfg.secondsPerDay) : 0;
     // tier uses trades that actually have a markout at the primary horizon
     const scoredTrades = primary ? primary.scoredTrades : 0;
-    const tier = this.trades === 0 ? 'STANDARD' : assignTier({ scoreBps, trades: scoredTrades, historyDays }, this.cfg);
+    // horizons with no scored trades carry no evidence
+    const informative = Object.values(byHorizon).filter((h) => h.scoredTrades > 0).map((h) => h.scoreBps);
+    const maxScoreBps = informative.length ? Math.max(...informative) : undefined;
+    const tier = this.trades === 0 ? 'STANDARD' : assignTier({ scoreBps, trades: scoredTrades, historyDays, maxScoreBps }, this.cfg);
     return {
       trader: this.trader,
       tier,
@@ -85,6 +88,7 @@ export class WalletAccumulator {
       firstSeen: this.trades > 0 ? this.firstSeen : 0,
       lastSeen: this.trades > 0 ? this.lastSeen : 0,
       historyDays,
+      maxScoreBps: maxScoreBps ?? scoreBps,
       byHorizon,
     };
   }
