@@ -27,7 +27,7 @@ All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = t
 
 ## M16 follow-up (steps 8-11)
 - [x] 8. Verified program IDs: Pyth SOL/USD devnet 7UVim…, Pump.fun 6EF8…, PumpSwap pAMM…, all used exactly; VERIFY labels removed; tests pin the literals; SETUP_REMAINING notes "verified 2026-11-19"
-- [ ] 9. Lead metrics: humans pay 53% less than time-decay-only; sniper share of early supply 49% → 27%; "same sniper fee" explained as deterrence
+- [x] 9. Lead metrics: humans pay 53% less than time-decay-only; sniper share of early supply 49% → 27%; "same sniper fee" explained as deterrence (landing hero stats, /backtest launch view stats + lead sentence, README headline bullets, PITCH lead line + hook + new Q2 "what is the point?")
 - [ ] 10. Creator share of the TOXIC premium (default 50%): sim, /launch/[id], ECONOMICS trade-off
 - [ ] 11. Bundler detection: Streams funding check, ≥ STANDARD + "bundle" badge, fixtures, tests, STREAM_CONFIG, sim regime
 

@@ -43,11 +43,17 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Human fee vs time-decay" value={`−${data.paired.humanFeeCutPct.toFixed(0)}%`} tone="good" hint={`${b0(key('fairway').humanFeeBps)} vs ${b0(key('decay').humanFeeBps)}, all ${data.launches} launches pooled`} />
-        <Stat label="Known snipers pay" value={`${data.paired.knownSniperFeeRatio.toFixed(2)}×`} tone="good" hint={`${b0(key('fairway').knownSniperFeeBps)} vs ${b0(key('decay').knownSniperFeeBps)} under time-decay`} />
-        <Stat label="Sniper share of supply" value={pct(fw.sniperShareOfWindowSupply.mean)} tone="good" hint={`vs ${pct(dc.sniperShareOfWindowSupply.mean)} time-decay, ${pct(by('flat').metrics.sniperShareOfWindowSupply.mean)} flat`} />
+        <Stat label="Humans pay vs time-decay-only" value={`−${data.paired.humanFeeCutPct.toFixed(0)}%`} tone="good" hint={`${b0(key('fairway').humanFeeBps)} vs ${b0(key('decay').humanFeeBps)}, all ${data.launches} launches pooled`} />
+        <Stat label="Sniper share of early supply" value={`${pct(dc.sniperShareOfWindowSupply.mean)} → ${pct(fw.sniperShareOfWindowSupply.mean)}`} tone="good" hint={`time-decay → Fairway (flat fee: ${pct(by('flat').metrics.sniperShareOfWindowSupply.mean)})`} />
+        <Stat label="Snipers' total fees (deterrence)" value={`${data.paired.sniperFeeRatio.toFixed(2)}×`} hint={`about the same: known snipers mostly skip the launch. Those who buy pay ${data.paired.knownSniperFeeRatio.toFixed(2)}× per dollar`} />
         <Stat label="Creator fees / launch" value={usd(fw.creatorFeesUsd.mean)} tone="bad" hint={`vs ${usd(dc.creatorFeesUsd.mean)} time-decay: humans pay less, so creators earn less in fees`} />
       </div>
+
+      <p className="text-[14px] leading-relaxed text-ink-2">
+        <strong className="text-ink">Humans pay {data.paired.humanFeeCutPct.toFixed(0)}% less than under a time-decay-only fee, and the sniper share of early supply falls from {pct(dc.sniperShareOfWindowSupply.mean)} to{' '}
+        {pct(fw.sniperShareOfWindowSupply.mean)}.</strong> Snipers pay about the same in total ({data.paired.sniperFeeRatio.toFixed(2)}×). That is deterrence, not a failure: a known sniper faces a 10% fee at block 0, so most
+        of them skip the launch, and the supply they would have taken goes to humans.
+      </p>
 
       <Card title="The key chart: who pays the launch fee" subtitle="Volume-weighted fee paid in the launch, pooled over every simulated launch. Humans = retail buyers. Snipers = snipers + bundlers. Known snipers = wallets already scored TOXIC.">
         <ResponsiveContainer width="100%" height={300}>

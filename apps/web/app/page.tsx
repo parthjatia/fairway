@@ -32,6 +32,22 @@ export default function Home() {
             Fair token launches on Solana. <strong className="text-ink">Other launchpads tax everyone who&apos;s early. Fairway taxes snipers.</strong> The launch fee depends on who you are and how early you are: wallets that
             keep buying in the first seconds and dumping on the crowd pay up to 10%. Fresh wallets pay 3%, so switching wallets gains nothing. Wallets with a clean history pay 0.3% from block 0.
           </p>
+          <div className="mt-6 grid max-w-xl grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-line bg-surface p-4">
+              <div className="text-3xl font-semibold tracking-tight text-retail tnum">−{L.paired.humanFeeCutPct.toFixed(0)}%</div>
+              <div className="mt-1 text-[13px] leading-snug text-ink-2">Humans pay {L.paired.humanFeeCutPct.toFixed(0)}% less than under a time-decay-only launch fee</div>
+            </div>
+            <div className="rounded-2xl border border-line bg-surface p-4">
+              <div className="text-3xl font-semibold tracking-tight text-ink tnum">
+                {(lr('decay').sniperShareOfWindowSupply.mean * 100).toFixed(0)}% → <span className="text-accent">{(lr('fairway').sniperShareOfWindowSupply.mean * 100).toFixed(0)}%</span>
+              </div>
+              <div className="mt-1 text-[13px] leading-snug text-ink-2">Sniper share of early supply (launch window), time-decay → Fairway</div>
+            </div>
+            <p className="col-span-2 text-[12px] leading-relaxed text-muted">
+              {L.launches} simulated launches. Snipers pay about the same in total ({L.paired.sniperFeeRatio.toFixed(2)}×) because this is deterrence: known snipers face a 10% fee and mostly skip the launch, which is why their
+              share of supply falls. The ones who still buy pay {L.paired.knownSniperFeeRatio.toFixed(2)}× per dollar. Simulated data.
+            </p>
+          </div>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link href="/launch" className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-ink hover:opacity-90">
               Launch a token <ArrowRight size={16} />
@@ -94,8 +110,8 @@ export default function Home() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Headline value={`−${L.paired.humanFeeCutPct.toFixed(0)}%`} label="Launch fee humans pay vs time-decay-only" sub={`${lk('fairway').humanFeeBps.toFixed(0)} vs ${lk('decay').humanFeeBps.toFixed(0)} bps, volume-weighted`} />
-          <Headline value={`${L.paired.knownSniperFeeRatio.toFixed(2)}×`} label="What known snipers pay per dollar vs time-decay-only" sub={`all snipers pooled: ${L.paired.sniperFeeRatio.toFixed(2)}× (most known snipers stay out)`} />
-          <Headline value={`${(lr('fairway').sniperShareOfWindowSupply.mean * 100).toFixed(0)}%`} label="Sniper + bundler share of launch-window supply" sub={`vs ${(lr('decay').sniperShareOfWindowSupply.mean * 100).toFixed(0)}% time-decay, ${(lr('flat').sniperShareOfWindowSupply.mean * 100).toFixed(0)}% flat fee`} />
+          <Headline value={`${(lr('decay').sniperShareOfWindowSupply.mean * 100).toFixed(0)}% → ${(lr('fairway').sniperShareOfWindowSupply.mean * 100).toFixed(0)}%`} label="Sniper + bundler share of early (launch-window) supply, time-decay → Fairway" sub={`${(lr('flat').sniperShareOfWindowSupply.mean * 100).toFixed(0)}% with a flat fee`} />
+          <Headline value={`${L.paired.sniperFeeRatio.toFixed(2)}×`} label="Snipers' total fees vs time-decay: about the same, because known snipers stay out (deterrence)" sub={`those who still buy pay ${L.paired.knownSniperFeeRatio.toFixed(2)}× per dollar`} />
           <Headline value={`${(lr('fairway').humanHighFeeShare.mean * 100).toFixed(0)}%`} label="Humans who paid a ≥ 1% fee" sub={`vs ${(lr('decay').humanHighFeeShare.mean * 100).toFixed(0)}% under time-decay-only`} />
         </div>
         <p className="mt-3 text-[12px] leading-relaxed text-muted">
