@@ -7,7 +7,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { BacktestOutput, SweepOutput } from '@fairway/sim';
+import type { BacktestOutput, LaunchStudy, SweepOutput } from '@fairway/sim';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = join(ROOT, 'packages/sim/out');
@@ -255,7 +255,78 @@ function frontier(bt: BacktestOutput, sw: SweepOutput): string {
   return svg(W, H, body, 'Retail cost vs LP PnL frontier');
 }
 
+/** M16 key chart: volume-weighted launch fee paid by humans vs snipers, per regime (grouped horizontal bars). */
+function launchKey(st: LaunchStudy): string {
+  const groups = [
+    { k: 'humanFeeBps' as const, label: 'Humans (retail buyers)', fill: '#1baf7a' },
+    { k: 'sniperFeeBps' as const, label: 'All snipers + bundlers', fill: '#eda100' },
+    { k: 'knownSniperFeeBps' as const, label: 'Known snipers (TOXIC)', fill: '#d6455d' },
+  ];
+  const W = 900;
+  const top = 92;
+  const barH = 14;
+  const rowH = 3 * (barH + 3) + 16;
+  const H = top + st.keyChart.length * rowH + 40;
+  const hi = Math.max(...st.keyChart.flatMap((r) => groups.map((g) => r[g.k])));
+  const plotL = 200;
+  const plotW = W - plotL - 90;
+  const sx = (v: number) => plotL + (v / (hi || 1)) * plotW;
+  let body = text(24, 32, 'Launch fees: who pays? (bps, volume-weighted)', { size: 17, fill: C.ink, weight: 600 });
+  body += text(24, 52, `${st.launches} simulated launches. Fairway cuts the human fee by ${st.paired.humanFeeCutPct.toFixed(0)}% vs time-decay-only; known snipers pay ${st.paired.knownSniperFeeRatio.toFixed(2)}×. Simulated data.`, { size: 12, fill: C.ink2 });
+  groups.forEach((g, i) => {
+    const lx = 24 + i * 230;
+    body += `<rect x="${lx}" y="64" width="10" height="10" rx="2" fill="${g.fill}"/>` + text(lx + 16, 73, g.label, { size: 11, fill: C.ink2 });
+  });
+  st.keyChart.forEach((r, ri) => {
+    const y0 = top + ri * rowH;
+    body += text(24, y0 + 1.5 * (barH + 3) + 4, r.short, { size: 12, fill: C.ink, weight: 600 });
+    groups.forEach((g, gi) => {
+      const y = y0 + gi * (barH + 3);
+      const v = r[g.k];
+      body += hbar(sx(0), sx(v), y, barH, g.fill, `${r.short} · ${g.label}: ${v.toFixed(0)} bps`);
+      body += text(sx(v) + 4, y + barH - 3, `${v.toFixed(0)}`, { size: 11, fill: C.ink });
+    });
+  });
+  body += `<line x1="${sx(0)}" x2="${sx(0)}" y1="${top - 4}" y2="${top + st.keyChart.length * rowH - 12}" stroke="${C.axis}"/>`;
+  body += text(24, H - 14, 'Rotation = worst case: every sniper uses a fresh wallet (STANDARD), so it pays exactly the time-decay fee.', { size: 11, fill: C.muted });
+  return svg(W, H, body, 'Launch fee paid by humans vs snipers');
+}
+
+/** M16 fee schedules: fee by slot since launch. */
+function launchSchedule(st: LaunchStudy): string {
+  const W = 820;
+  const H = 360;
+  const L = 60;
+  const R = 200;
+  const T = 70;
+  const B = 50;
+  const xs = st.schedules.map((r) => r.slot);
+  const xmax = Math.max(...xs);
+  const ymax = 1000;
+  const sx = (v: number) => L + (v / xmax) * (W - L - R);
+  const sy = (v: number) => T + (1 - v / ymax) * (H - T - B);
+  const lines = [
+    { k: 'decay' as const, label: 'Time-decay (everyone)', c: '#eb6834', dash: '' },
+    { k: 'fairwayToxic' as const, label: 'Fairway TOXIC', c: '#d6455d', dash: '' },
+    { k: 'fairwayStandard' as const, label: 'Fairway STANDARD (fresh)', c: '#eda100', dash: '6 3' },
+    { k: 'fairwayRetail' as const, label: 'Fairway RETAIL', c: '#1baf7a', dash: '' },
+  ];
+  let body = text(24, 32, 'Launch fee schedules', { size: 17, fill: C.ink, weight: 600 });
+  body += text(24, 52, `Fee (bps) by time since launch; window ${st.config.windowSlots} slots ≈ ${Math.round((st.config.windowSlots * 0.4) / 60)} min. Program defaults.`, { size: 12, fill: C.ink2 });
+  for (const t of ticks(0, ymax, 5)) body += `<line x1="${L}" x2="${W - R}" y1="${sy(t)}" y2="${sy(t)}" stroke="${C.grid}"/>` + text(L - 6, sy(t) + 4, `${t}`, { size: 11, anchor: 'end', fill: C.muted });
+  for (const t of ticks(0, xmax * 0.4, 6)) body += text(sx(t / 0.4), H - B + 18, `${t}s`, { size: 11, anchor: 'middle', fill: C.muted });
+  body += `<line x1="${sx(st.config.windowSlots)}" x2="${sx(st.config.windowSlots)}" y1="${T}" y2="${H - B}" stroke="${C.axis}" stroke-dasharray="4 4"/>`;
+  lines.forEach((l, i) => {
+    const d = st.schedules.map((r, j) => `${j ? 'L' : 'M'}${sx(r.slot).toFixed(1)},${sy(r[l.k]).toFixed(1)}`).join(' ');
+    body += `<path d="${d}" fill="none" stroke="${l.c}" stroke-width="2.2" ${l.dash ? `stroke-dasharray="${l.dash}"` : ''}><title>${esc(l.label)}</title></path>`;
+    const last = st.schedules[0]!;
+    body += text(W - R + 12, T + 14 + i * 20, `${l.label}: ${last[l.k]}→${st.schedules[st.schedules.length - 1]![l.k]} bps`, { size: 11, fill: l.c, weight: 600 });
+  });
+  return svg(W, H, body, 'Launch fee schedules');
+}
+
 const bt = JSON.parse(readFileSync(join(OUT_DIR, 'backtest.json'), 'utf8')) as BacktestOutput;
+const launch = JSON.parse(readFileSync(join(OUT_DIR, 'launch.json'), 'utf8')) as LaunchStudy;
 const sw = JSON.parse(readFileSync(join(OUT_DIR, 'sweep.json'), 'utf8')) as SweepOutput;
 mkdirSync(CHART_DIR, { recursive: true });
 const files: Record<string, string> = {
@@ -263,6 +334,8 @@ const files: Record<string, string> = {
   'lp-pnl.svg': lpLines(bt),
   'sweep.svg': sweepHeatmap(sw),
   'frontier.svg': frontier(bt, sw),
+  'launch-fees.svg': launchKey(launch),
+  'launch-schedule.svg': launchSchedule(launch),
 };
 for (const [f, s] of Object.entries(files)) writeFileSync(join(CHART_DIR, f), s);
 // PNG copies (for Devpost / slides). sharp is optional: skip quietly if it is not installed.

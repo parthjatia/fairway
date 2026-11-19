@@ -5,7 +5,8 @@ import { BacktestTabs } from '@/components/backtest-tabs';
 export const metadata = { title: 'Backtest — Fairway' };
 
 export default function BacktestPage() {
-  const { backtest, sweep, sensitivity, lpfirst } = simOutputs();
+  const { backtest, sweep, sensitivity, lpfirst, launch } = simOutputs();
+  const launchData = { regimes: launch.regimes, keyChart: launch.keyChart, paired: launch.paired, schedules: launch.schedules, launches: launch.launches, windowSlots: launch.config.windowSlots, knownShare: launch.config.sniper.knownShare, historyShare: launch.config.retail.historyShare };
   const maxDiscount = {
     sweep: { toxic: sweep.toxic, retail: sweep.retail, cells: sweep.cells, flatCurve: sweep.flatCurve, baseline: sweep.baseline, context: sweep.context, recommended: sweep.recommended, stalenessBoundBps: sweep.stalenessBoundBps, hours: sweep.config.hours, seeds: sweep.seeds.length },
     series: backtest.series,
@@ -24,11 +25,11 @@ export default function BacktestPage() {
   };
   return (
     <>
-      <PageHeader eyebrow="Backtest" title="Move the fees, watch the pool">
-        Agent-based simulation: GBM price with jumps, Poisson retail flow, arbitrageurs and momentum snipers. The default view is the <strong className="text-ink">LP-first</strong> model: retail and standard pay 30 bps,
-        proven-toxic wallets pay more, and part of that premium is rebated to proven retail. The <strong className="text-ink">rotation</strong> case is the worst one, where every bot uses fresh wallets and pays STANDARD.
+      <PageHeader eyebrow="Backtest" title="Fair launches, simulated">
+        {launch.launches} synthetic token launches with snipers, bundlers, retail buyers and DCA bots, compared under flat fees, a <strong className="text-ink">time-decay-only</strong> anti-sniper fee (what other launchpads do),
+        and <strong className="text-ink">Fairway</strong> (fee = tier × time since launch). The liquid-pair tabs show the same engine on SOL/USDC, where arbitrage bots are the toxic flow.
       </PageHeader>
-      <BacktestTabs lpfirst={lp as never} maxDiscount={maxDiscount as never} />
+      <BacktestTabs launch={launchData} lpfirst={lp as never} maxDiscount={maxDiscount as never} />
     </>
   );
 }

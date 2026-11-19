@@ -18,7 +18,7 @@ All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = t
 ## M16 Launch pivot (Fairway Launch: known snipers pay more, humans pay less)
 - [x] 1. Onchain launch fee schedule (per-pool launch params, tier × time decay, tests: decay math, window boundary, fresh wallet at block 0, wrong-signer attack)
 - [x] 2. Onchain pool TWAP for tokens without an oracle (price accumulator, settle via TWAP, tests, RISKS.md §1d)
-- [ ] 3. Launch simulation (default /backtest view)
+- [x] 3. Launch simulation (default /backtest view): packages/sim/src/launch.ts, out/launch.json, LaunchExplorer tab, docs/charts/launch-*.svg
 - [ ] 4. Launch flow and UI (/launch, /launch/[id], landing, nav)
 - [ ] 5. Streams: Pump.fun sniper scoring
 - [ ] 6. Docs

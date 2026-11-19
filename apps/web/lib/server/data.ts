@@ -334,5 +334,6 @@ export function simOutputs() {
     sensitivity: read<{ rows: import('@fairway/sim').SensitivityRow[] }>('sensitivity.json'),
     replay: read<import('@fairway/sim').ReplayOutput>('replay.json'),
     lpfirst: read<import('@fairway/sim').LpFirstOutput>('lpfirst.json'),
+    launch: read<import('@fairway/sim').LaunchStudy>('launch.json'),
   };
 }

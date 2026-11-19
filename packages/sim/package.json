@@ -15,7 +15,8 @@
     "replay": "tsx scripts/run-replay.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "launch": "tsx scripts/run-launch.ts"
   },
   "dependencies": {
     "@fairway/fixtures": "workspace:*",
