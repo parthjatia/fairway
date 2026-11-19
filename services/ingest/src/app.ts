@@ -1,9 +1,10 @@
 import { gunzipSync } from 'node:zlib';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { explainTier, makeConfig, type ScoringConfig, type Swap, type Tier } from '@fairway/scoring';
-import { parsePayload, type ParserPool } from '@fairway/parser';
+import { parsePayload, parsePumpPayload, type LaunchTradeRecord, type ParserPool } from '@fairway/parser';
 import { verifyDelivery } from './auth';
 import { allSwaps, countSwaps, getScore, lastDeliveries, listScores, logDelivery, maxTs, swapsOfPool, tierCounts, upsertSwaps, validSwap, type Db } from './db';
+import { getSniper, listSnipers, recomputeSnipers, upsertLaunchTrades, validLaunchTrade } from './launches';
 import { recompute, tierTimeline, tradesWithMarkouts, type MidSource } from './recompute';
 
 export type AppOptions = {
@@ -88,6 +89,26 @@ export function buildApp(o: AppOptions): FastifyInstance {
     return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, recomputed };
   });
 
+  /** QuickNode Streams webhook for launches: streams/pumpfun-filter.js output `{launchTrades:[...]}` or raw blocks. */
+  app.post('/streams/pumpfun', async (req, reply) => {
+    const auth = verifyDelivery(o.token, req.headers, req.rawBody ?? '');
+    if (!auth.ok) return reply.code(401).send({ error: auth.reason });
+    const body = req.body as any;
+    const kind = body && Array.isArray(body.launchTrades) ? 'filtered' : 'raw-blocks';
+    const incoming: LaunchTradeRecord[] = kind === 'filtered' ? body.launchTrades : parsePumpPayload(body);
+    const valid = incoming.filter(validLaunchTrade);
+    const stored = upsertLaunchTrades(o.db, valid);
+    logDelivery(o.db, `launch-${kind}`, incoming.length, stored);
+    const snipers = stored ? recomputeSnipers(o.db) : null;
+    return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, snipers };
+  });
+
+  /** Cross-launch sniper scores (bootstrap TOXIC from Pump.fun history). */
+  app.get('/snipers', async (req) => {
+    const q = req.query as { tier?: Tier; limit?: string };
+    return listSnipers(o.db, { tier: q.tier, limit: q.limit ? Number(q.limit) : undefined });
+  });
+
   app.post('/recompute', async (req) => {
     const body = (req.body ?? {}) as { traders?: string[] };
     const traders = Array.isArray(body.traders) ? body.traders.filter((t) => typeof t === 'string') : undefined;
@@ -108,6 +129,7 @@ export function buildApp(o: AppOptions): FastifyInstance {
         trades: [],
         timeline: [],
         label: o.labels?.[address] ?? null,
+        sniper: getSniper(o.db, address),
       });
     }
     const tierIn = score ? { scoreBps: score.scoreBps, maxScoreBps: score.maxScoreBps, trades: score.byHorizon[cfg.primaryHorizon]?.scoredTrades ?? score.trades, historyDays: score.historyDays } : undefined;
@@ -120,6 +142,7 @@ export function buildApp(o: AppOptions): FastifyInstance {
       trades,
       timeline: tierTimeline(trades, cfg),
       label: o.labels?.[address] ?? null,
+      sniper: getSniper(o.db, address),
       config: { horizons: cfg.horizons, primaryHorizon: cfg.primaryHorizon, priorNotional: cfg.priorNotional, toxicScoreBps: cfg.toxicScoreBps, retailScoreBps: cfg.retailScoreBps, minTrades: cfg.retailMinTrades, retailMinHistoryDays: cfg.retailMinHistoryDays },
     };
   });

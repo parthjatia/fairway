@@ -3,6 +3,7 @@ import type { ParsedSwap, ParserPool } from './core';
 import { parsePayload } from './core';
 
 export * from './core';
+export * from './pumpfun';
 
 /** Strip parser-only fields → canonical Swap. */
 export const toSwap = ({ source: _source, ...s }: ParsedSwap): Swap => s;

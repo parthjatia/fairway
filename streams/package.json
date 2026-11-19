@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:filter": "tsx build-filter.ts",
+    "build:filter": "tsx build-filter.ts && tsx build-pumpfun-filter.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@fairway/fixtures": "workspace:*",
     "@fairway/parser": "workspace:*",
+    "@fairway/scoring": "workspace:*",
     "esbuild": "^0.28.0"
   }
 }

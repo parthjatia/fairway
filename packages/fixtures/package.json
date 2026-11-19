@@ -15,7 +15,8 @@
     "generate:memecoin": "tsx scripts/generate-memecoin.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "generate:pumpfun": "tsx scripts/generate-pumpfun.ts"
   },
   "dependencies": {
     "@fairway/scoring": "workspace:*"

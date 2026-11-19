@@ -106,3 +106,31 @@ describe('scores + read APIs (full fixture dataset)', () => {
     expect(rc.wallets).toBe(1);
   });
 });
+
+describe('launches: POST /streams/pumpfun + GET /snipers (M16)', () => {
+  it('stores pumpfun-filter output idempotently and flags recurring snipers TOXIC', async () => {
+    const { loadPumpfun } = await import('@fairway/fixtures/node');
+    const { parsePumpPayload } = await import('@fairway/parser');
+    const { desiredScores } = await import('../src');
+    const pf = loadPumpfun();
+    const { db, app } = fresh();
+    const launchTrades = parsePumpPayload(pf.blocks);
+    const send = (body: unknown) => app.inject({ method: 'POST', url: '/streams/pumpfun', payload: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+    const r1 = await send({ launchTrades });
+    expect(r1.json()).toMatchObject({ kind: 'filtered', stored: launchTrades.length, snipers: { toxic: pf.meta.snipers.length } });
+    expect((await send({ launchTrades })).json().stored).toBe(0);
+    expect((await send(pf.blocks)).json()).toMatchObject({ kind: 'raw-blocks', stored: 0 });
+    const toxic = (await app.inject({ url: '/snipers?tier=TOXIC' })).json() as Array<{ wallet: string }>;
+    expect(new Set(toxic.map((s) => s.wallet))).toEqual(new Set(pf.meta.snipers));
+    const w = (await app.inject({ url: `/wallet/${pf.meta.snipers[0]}` })).json();
+    expect(w.sniper).toMatchObject({ tier: 'TOXIC' });
+    const d = desiredScores(db).filter((x) => x.source === 'launch-sniper');
+    expect(d.map((x) => x.trader).sort()).toEqual([...pf.meta.snipers].sort());
+    expect(d.every((x) => x.tier === 'TOXIC')).toBe(true);
+  });
+  it('requires the token when configured', async () => {
+    const { app } = fresh('s3cret');
+    const r = await app.inject({ method: 'POST', url: '/streams/pumpfun', payload: '{"launchTrades":[]}', headers: { 'content-type': 'application/json' } });
+    expect(r.statusCode).toBe(401);
+  });
+});

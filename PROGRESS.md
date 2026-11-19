@@ -20,7 +20,7 @@ All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = t
 - [x] 2. Onchain pool TWAP for tokens without an oracle (price accumulator, settle via TWAP, tests, RISKS.md §1d)
 - [x] 3. Launch simulation (default /backtest view): packages/sim/src/launch.ts, out/launch.json, LaunchExplorer tab, docs/charts/launch-*.svg
 - [x] 4. Launch flow and UI: /launch wizard (mock + live via SDK, verified on a local validator), /launch/[id] (playback, buyers with tier + score source, sniper-share meter, same-buy-two-wallets), landing reframed, nav launches-first (liquid pair secondary), seed:local adds a launch pool
-- [ ] 5. Streams: Pump.fun sniper scoring
+- [x] 5. Streams: Pump.fun sniper scoring: streams/pumpfun-filter.js (generated from packages/parser/src/pumpfun.ts, program ids marked VERIFY), new fixture data/pumpfun.json (8 launches, edge cases; existing fixtures untouched), cross-launch sniper scorer (packages/scoring/src/sniper.ts), ingest POST /streams/pumpfun + GET /snipers, keeper merges sniper TOXIC, STREAM_CONFIG.md Stream L
 - [ ] 6. Docs
 - [ ] 7. Final check
 

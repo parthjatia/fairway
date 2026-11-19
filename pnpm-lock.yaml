@@ -378,6 +378,9 @@ importers:
       '@fairway/parser':
         specifier: workspace:*
         version: link:../packages/parser
+      '@fairway/scoring':
+        specifier: workspace:*
+        version: link:../packages/scoring
       esbuild:
         specifier: ^0.28.0
         version: 0.28.2

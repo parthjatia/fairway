@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
-import { createContext, listScores, REPO_ROOT } from '@fairway/ingest';
+import { createContext, desiredScores, REPO_ROOT } from '@fairway/ingest';
 import { PROGRAM_ID } from '@fairway/sdk';
 import { runKeeper } from './keeper';
 import { DryRunSender, RpcSender } from './senders';
@@ -32,7 +32,8 @@ function loadKeypair(path: string): Keypair {
 
 async function once() {
   const ctx = createContext(process.env);
-  const desired = listScores(ctx.db, { limit: 10_000 }).map((s) => ({ trader: s.trader, tier: s.tier, scoreBps: s.scoreBps, trades: s.trades }));
+  // markout scores + launch-sniper TOXIC (M16)
+  const desired = desiredScores(ctx.db).map(({ source: _s, ...d }) => d);
   if (mode === 'dry-run') {
     const store = new MirrorStore(join(OUT, 'mirror.json'));
     let authority: PublicKey;

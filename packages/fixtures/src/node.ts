@@ -11,6 +11,7 @@ import { buildDataset } from './dataset';
 import type { Swap } from '@fairway/scoring';
 import type { MemecoinMarket } from './memecoin';
 import { generateMemecoinMarket } from './memecoin';
+import { generatePumpfunFixture, type PumpFixture } from './pumpfun';
 
 export { buildBlocks };
 
@@ -71,4 +72,17 @@ export function loadBlocks(dir = FIXTURE_DIR): BlocksFixture {
   ensureFixtures(dir);
   const exp = read<{ expected: Swap[]; edgeCases: BlocksFixture['edgeCases'] }>(dir, 'blocks.expected.json');
   return { blocks: read<BlocksFixture['blocks']>(dir, 'blocks.json'), expected: exp.expected, edgeCases: exp.edgeCases };
+}
+
+/** Writes data/pumpfun.json (M16 Pump.fun launch blocks). Additive: no other fixture file is touched. */
+export function generatePumpfun(dir = FIXTURE_DIR): { blocks: number; trades: number } {
+  const f = generatePumpfunFixture();
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'pumpfun.json'), JSON.stringify(f));
+  return { blocks: f.blocks.length, trades: f.expected.length };
+}
+
+export function loadPumpfun(dir = FIXTURE_DIR): PumpFixture {
+  if (!existsSync(join(dir, 'pumpfun.json'))) generatePumpfun(dir);
+  return read<PumpFixture>(dir, 'pumpfun.json');
 }

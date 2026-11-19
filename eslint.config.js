@@ -14,6 +14,7 @@ export default tseslint.config(
       'apps/web/next-env.d.ts',
       'programs/**',
       '.anchor/**',
+      'streams/pumpfun-filter.js', // generated (esbuild bundle), tested in streams/pumpfun-filter.test.ts
     ],
   },
   js.configs.recommended,
