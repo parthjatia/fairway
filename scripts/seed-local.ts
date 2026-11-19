@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Connection, Keypair, LAMPORTS_PER_SOL, sendAndConfirmTransaction, Transaction, type TransactionInstruction } from '@solana/web3.js';
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo } from '@solana/spl-token';
-import { addLiquidityIx, createPoolIx, initializeConfigIx, setScoresBatchIx, TIER } from '@fairway/sdk';
+import { addLiquidityIx, createPoolIx, initializeConfigIx, poolAddresses, setScoresBatchIx, TIER } from '@fairway/sdk';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const rpc = process.env.RPC_URL || 'http://127.0.0.1:8899';
@@ -49,6 +49,7 @@ async function main() {
 
   await send([initializeConfigIx({ admin: admin.publicKey, scoreAuthority: authority.publicKey, feeBps: [5, 30, 80], scoreTtlSlots: 2_000_000 })], [admin]).catch((e) => console.warn('config:', String(e).split('\n')[0]));
   await send([createPoolIx({ payer: admin.publicKey, baseMint: base, quoteMint: quote })], [admin]);
+  await getOrCreateAssociatedTokenAccount(conn, admin, poolAddresses(base, quote).lpMint, admin.publicKey); // LP token account must exist
   await send([addLiquidityIx({ owner: admin.publicKey, baseMint: base, quoteMint: quote, maxBase: 10_000n * 10n ** 9n, maxQuote: 1_500_000n * 10n ** 6n, minLp: 0n })], [admin]);
   await send(
     [setScoresBatchIx({ authority: authority.publicKey, entries: [

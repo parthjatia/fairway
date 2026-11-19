@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v pnpm >/dev/null || { echo "pnpm not found. Run: corepack enable"; exit 1; }
 [ -d node_modules ] || pnpm install
-[ -f packages/fixtures/data/swaps.jsonl ] || [ -n "$(ls packages/fixtures/data 2>/dev/null)" ] || pnpm fixtures
+[ -f packages/fixtures/data/swaps.json ] || pnpm fixtures
 [ -f packages/sim/out/backtest.json ] && [ -f packages/sim/out/sweep.json ] || pnpm sim
 
 export DATA_MODE=fixture NEXT_PUBLIC_MODE=mock INGEST_PORT="${INGEST_PORT:-8787}" PORT="${PORT:-3000}"

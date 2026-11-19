@@ -1,7 +1,7 @@
 # PROGRESS.md
 
 ## Current state / next step
-M0–M9 done. Next: M10 live wiring (wallet adapter + SDK calls, pnpm demo:local, pnpm demo). TODO referenced in STREAM_CONFIG: `pnpm seed:devnet`, GET /export.jsonl, sim replay CLI (--input).
+M0–M10 done. Next: M11 docs (README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts). TODO referenced in STREAM_CONFIG: `pnpm seed:devnet`, GET /export.jsonl, sim replay CLI (--input).
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
@@ -14,7 +14,7 @@ M0–M9 done. Next: M10 live wiring (wallet adapter + SDK calls, pnpm demo:local
 - [x] **M7 Ingest service:** webhook, SQLite, recompute, read APIs, fixture mode, tests
 - [x] **M8 Keeper:** diffing, batching, dry-run/local/devnet modes, tests
 - [x] **M9 Frontend:** all pages, mock mode, persona switcher, backtest interactivity, polished design
-- [ ] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
+- [x] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
 - [ ] **M11 Docs:** README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts embedded
 - [ ] **M12 Hardening pass:** full test, build and lint; fresh-clone check; fix everything; final UI review; README accuracy check
 

@@ -19,3 +19,5 @@ coverage/
 *.tsbuildinfo
 .turbo/
 next-env.d.ts
+apps/web/AGENTS.md
+apps/web/.env.local
