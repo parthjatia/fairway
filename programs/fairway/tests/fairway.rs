@@ -6,7 +6,7 @@ use {
         AccountDeserialize, InstructionData, ToAccountMetas,
     },
     anchor_spl::token::spl_token,
-    fairway::{state::*, ConfigUpdate, ScoreEntry},
+    fairway::{state::*, ConfigUpdate, ScoreEntry, PYTH_RECEIVER_PROGRAM, PRICE_UPDATE_V2_DISCRIMINATOR},
     fairway_math::{fee_on_input, swap_quote, withdraw, MIN_LIQUIDITY},
     litesvm::LiteSVM,
     solana_account::Account,
@@ -215,6 +215,7 @@ fn swap_ix(env: &Env, t: &Trader, score_account: Pubkey, amount_in: u64, min_out
             trader_base: t.base,
             trader_quote: t.quote,
             token_program: spl_token::ID,
+            system_program: system_program::ID,
         }
         .to_account_metas(None),
     )
@@ -467,9 +468,399 @@ fn batch_scores_and_close() {
     let stranger = new_user(&mut env.svm);
     let tox = traders[1].kp.pubkey();
     assert!(send(&mut env.svm, &[close_ix(stranger.pubkey(), tox, a.pubkey())], &stranger, &[]).unwrap_err().contains("Custom(6014)"));
-    // rent must go back to the authority, not the closer
-    assert!(send(&mut env.svm, &[close_ix(bot.pubkey(), tox, bot.pubkey())], &bot, &[]).is_err());
-    send(&mut env.svm, &[close_ix(bot.pubkey(), tox, a.pubkey())], &bot, &[]).unwrap();
+    // rent must go back to the trader, not anyone else
+    assert!(send(&mut env.svm, &[close_ix(bot.pubkey(), tox, a.pubkey())], &bot, &[]).is_err());
+    send(&mut env.svm, &[close_ix(bot.pubkey(), tox, bot.pubkey())], &bot, &[]).unwrap();
     assert!(env.svm.get_account(&pdas[1]).map_or(true, |acc| acc.data.is_empty()));
     assert_eq!(buy_and_measure(&mut env, &traders[1], 100 * USDC).2, STANDARD as usize);
+}
+
+
+// ======================================================================================
+// M13: onchain markout scoring
+// ======================================================================================
+
+const FEED: [u8; 32] = [7u8; 32];
+const MARKOUT_SLOTS: u64 = 75;
+const MAX_SETTLE: u64 = 450;
+const HISTORY: u64 = 100;
+const PRIOR: u64 = 2_000 * USDC;
+const ONCHAIN_MIN: u64 = 1_000 * USDC;
+
+fn clock(env: &Env) -> anchor_lang::prelude::Clock {
+    env.svm.get_sysvar::<anchor_lang::prelude::Clock>()
+}
+
+/// advance slots and wall-clock time (400 ms per slot)
+fn warp(env: &mut Env, slots: u64) {
+    let mut c = clock(env);
+    let slot = c.slot + slots;
+    env.svm.warp_to_slot(slot);
+    c.slot = slot;
+    c.unix_timestamp += (slots * 2 / 5) as i64 + 1;
+    env.svm.set_sysvar(&c);
+}
+
+struct Oracle {
+    key: Pubkey,
+}
+
+/// a mock Pyth `PriceUpdateV2` (pyth-solana-receiver-sdk layout), price in USD with expo -8
+fn write_price(env: &mut Env, key: Pubkey, owner: Pubkey, feed: [u8; 32], mid_e6: u64, conf: u64, publish_time: i64, posted_slot: u64) {
+    let price = (mid_e6 * 100) as i64; // 1e6 → 1e8 (expo -8)
+    let mut d = Vec::with_capacity(134);
+    d.extend_from_slice(&PRICE_UPDATE_V2_DISCRIMINATOR);
+    d.extend_from_slice(&[9u8; 32]); // write authority
+    d.push(1); // VerificationLevel::Full
+    d.extend_from_slice(&feed);
+    d.extend_from_slice(&price.to_le_bytes());
+    d.extend_from_slice(&conf.to_le_bytes());
+    d.extend_from_slice(&(-8i32).to_le_bytes());
+    d.extend_from_slice(&publish_time.to_le_bytes());
+    d.extend_from_slice(&(publish_time - 1).to_le_bytes());
+    d.extend_from_slice(&price.to_le_bytes());
+    d.extend_from_slice(&conf.to_le_bytes());
+    d.extend_from_slice(&posted_slot.to_le_bytes());
+    env.svm.set_account(key, Account { lamports: 1_000_000_000, data: d, owner, executable: false, rent_epoch: 0 }).unwrap();
+}
+
+/// a fresh, valid oracle update at the current slot/time
+fn post_mid(env: &mut Env, o: &Oracle, mid_e6: u64) {
+    let c = clock(env);
+    write_price(env, o.key, PYTH_RECEIVER_PROGRAM, FEED, mid_e6, mid_e6 / 10_000, c.unix_timestamp, c.slot);
+}
+
+fn markout_env() -> (Env, Lp, Oracle) {
+    let (mut env, lp) = seeded();
+    let mut c = clock(&env);
+    c.unix_timestamp = 1_763_000_000;
+    env.svm.set_sysvar(&c);
+    let o = Oracle { key: Pubkey::new_unique() };
+    let params = MarkoutParams {
+        markout_slots: MARKOUT_SLOTS,
+        max_settle_slots: MAX_SETTLE,
+        prior_notional: PRIOR,
+        onchain_min_notional: ONCHAIN_MIN,
+        retail_min_history_slots: HISTORY,
+        pyth_price_account: o.key,
+        pyth_feed_id: FEED,
+        ..MarkoutParams::default()
+    };
+    let admin = env.admin.insecure_clone();
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::UpdateConfig { update: ConfigUpdate { markout: Some(params), ..Default::default() } }.data(),
+        fairway::accounts::UpdateConfig { admin: admin.pubkey(), config: config_pda() }.to_account_metas(None),
+    );
+    send(&mut env.svm, &[ix], &admin, &[]).unwrap();
+    post_mid(&mut env, &o, 150 * USDC);
+    (env, lp, o)
+}
+
+fn score_of(env: &Env, trader: &Pubkey) -> TraderScore {
+    TraderScore::try_deserialize(&mut &env.svm.get_account(&score_pda(trader)).unwrap().data[..]).unwrap()
+}
+
+fn settle_ix(cranker: Pubkey, trader: Pubkey, score: Pubkey, oracle: Pubkey) -> Instruction {
+    Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::SettleMarkout { trader }.data(),
+        fairway::accounts::SettleMarkout { cranker, config: config_pda(), score, pyth_price: oracle }.to_account_metas(None),
+    )
+}
+
+/// settle `trader` from a random permissionless cranker
+fn settle(env: &mut Env, trader: &Pubkey, oracle: Pubkey) -> Result<(), String> {
+    let cranker = new_user(&mut env.svm);
+    send(&mut env.svm, &[settle_ix(cranker.pubkey(), *trader, score_pda(trader), oracle)], &cranker, &[])
+}
+
+fn pending_count(s: &TraderScore) -> usize {
+    s.pending.iter().filter(|p| p.notional != 0).count()
+}
+
+fn params() -> fairway_math::markout::TierParams {
+    MarkoutParams { prior_notional: PRIOR, retail_min_history_slots: HISTORY, ..MarkoutParams::default() }.tier_params()
+}
+
+#[test]
+fn swap_records_pending_trade_and_creates_score_pda() {
+    let (mut env, _lp, _o) = markout_env();
+    let t = new_trader(&mut env);
+    assert!(env.svm.get_account(&score_pda(&t.kp.pubkey())).map_or(true, |a| a.data.is_empty()));
+    buy_and_measure(&mut env, &t, 1_500 * USDC);
+    let s = score_of(&env, &t.kp.pubkey());
+    assert_eq!(s.trader, t.kp.pubkey());
+    assert_eq!(s.tier, STANDARD); // neutral bootstrap default, never RETAIL
+    assert_eq!(pending_count(&s), 1);
+    let p = s.pending[0];
+    let fee = fee_on_input(1_500 * USDC, 30).unwrap();
+    assert_eq!((p.side, p.notional, p.slot), (fairway_math::markout::SIDE_BUY, 1_500 * USDC - fee, clock(&env).slot));
+    // pre-fee price ≈ 150 USDC/SOL plus a little price impact
+    assert!(p.exec_price > 150 * USDC && p.exec_price < 151 * USDC, "{}", p.exec_price);
+}
+
+#[test]
+fn markout_sign_buy_and_sell() {
+    use fairway_math::markout::*;
+    let (mut env, _lp, o) = markout_env();
+    let buyer = new_trader(&mut env);
+    let seller = new_trader(&mut env);
+    swap(&mut env, &buyer, 1_000 * USDC, 1, false).unwrap();
+    swap(&mut env, &seller, 5 * SOL, 1, true).unwrap();
+    let (pb, ps) = (score_of(&env, &buyer.kp.pubkey()).pending[0], score_of(&env, &seller.kp.pubkey()).pending[0]);
+    assert_eq!((pb.side, ps.side), (SIDE_BUY, SIDE_SELL));
+    warp(&mut env, MARKOUT_SLOTS);
+    post_mid(&mut env, &o, 160 * USDC); // price went UP after both trades
+    settle(&mut env, &buyer.kp.pubkey(), o.key).unwrap();
+    settle(&mut env, &seller.kp.pubkey(), o.key).unwrap();
+    let (sb, ss) = (score_of(&env, &buyer.kp.pubkey()), score_of(&env, &seller.kp.pubkey()));
+    let mb = markout_bps(SIDE_BUY, pb.exec_price, 160 * USDC).unwrap();
+    let ms = markout_bps(SIDE_SELL, ps.exec_price, 160 * USDC).unwrap();
+    assert!(mb > 600 && ms < -600, "buy {mb} sell {ms}");
+    assert_eq!(sb.sum_weighted_markout, pb.notional as i128 * mb as i128);
+    assert_eq!(ss.sum_weighted_markout, ps.notional as i128 * ms as i128);
+    assert!(sb.onchain_score_bps > 0 && ss.onchain_score_bps < 0);
+    assert_eq!((sb.trade_count, pending_count(&sb)), (1, 0));
+}
+
+#[test]
+fn settle_before_markout_slots_does_nothing() {
+    let (mut env, _lp, o) = markout_env();
+    let t = new_trader(&mut env);
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    let before = score_of(&env, &t.kp.pubkey());
+    warp(&mut env, MARKOUT_SLOTS - 1);
+    post_mid(&mut env, &o, 200 * USDC);
+    settle(&mut env, &t.kp.pubkey(), o.key).unwrap();
+    let after = score_of(&env, &t.kp.pubkey());
+    assert_eq!(after.pending, before.pending);
+    assert_eq!((after.sum_notional, after.sum_weighted_markout, after.trade_count), (0, 0, 0));
+    // even a bogus oracle account is not touched when nothing is due
+    settle(&mut env, &t.kp.pubkey(), Pubkey::new_unique()).unwrap();
+    // one slot later it settles
+    warp(&mut env, 1);
+    post_mid(&mut env, &o, 150 * USDC);
+    settle(&mut env, &t.kp.pubkey(), o.key).unwrap();
+    assert_eq!(score_of(&env, &t.kp.pubkey()).trade_count, 1);
+}
+
+#[test]
+fn stale_and_invalid_oracle_rejected() {
+    let (mut env, _lp, o) = markout_env();
+    let t = new_trader(&mut env);
+    let tk = t.kp.pubkey();
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    warp(&mut env, MARKOUT_SLOTS);
+    let c = clock(&env);
+    let code = |r: Result<(), String>| r.unwrap_err();
+    // stale: published 61 s ago (limit 60)
+    write_price(&mut env, o.key, PYTH_RECEIVER_PROGRAM, FEED, 150 * USDC, 0, c.unix_timestamp - 61, c.slot);
+    assert!(code(settle(&mut env, &tk, o.key)).contains("Custom(6018)"));
+    // from the future
+    write_price(&mut env, o.key, PYTH_RECEIVER_PROGRAM, FEED, 150 * USDC, 0, c.unix_timestamp + 60, c.slot);
+    assert!(code(settle(&mut env, &tk, o.key)).contains("Custom(6018)"));
+    // wrong feed id
+    write_price(&mut env, o.key, PYTH_RECEIVER_PROGRAM, [8u8; 32], 150 * USDC, 0, c.unix_timestamp, c.slot);
+    assert!(code(settle(&mut env, &tk, o.key)).contains("Custom(6017)"));
+    // not owned by the Pyth receiver (anyone can create an account with the right bytes)
+    write_price(&mut env, o.key, Pubkey::new_unique(), FEED, 150 * USDC, 0, c.unix_timestamp, c.slot);
+    assert!(code(settle(&mut env, &tk, o.key)).contains("Custom(6017)"));
+    // confidence too wide: 1% > 0.5%
+    write_price(&mut env, o.key, PYTH_RECEIVER_PROGRAM, FEED, 150 * USDC, 150 * USDC, c.unix_timestamp, c.slot);
+    assert!(code(settle(&mut env, &tk, o.key)).contains("Custom(6019)"));
+    // a valid-looking price account at a different address
+    let other = Pubkey::new_unique();
+    write_price(&mut env, other, PYTH_RECEIVER_PROGRAM, FEED, 150 * USDC, 0, c.unix_timestamp, c.slot);
+    assert!(code(settle(&mut env, &tk, other)).contains("Custom(6016)"));
+    // partially verified update / garbage
+    let mut acc = env.svm.get_account(&other).unwrap();
+    acc.data[40] = 0;
+    env.svm.set_account(o.key, acc).unwrap();
+    assert!(code(settle(&mut env, &tk, o.key)).contains("Custom(6017)"));
+    // price posted BEFORE the trade's horizon: accepted oracle, but the trade stays pending
+    write_price(&mut env, o.key, PYTH_RECEIVER_PROGRAM, FEED, 150 * USDC, 0, c.unix_timestamp, c.slot - MARKOUT_SLOTS);
+    settle(&mut env, &tk, o.key).unwrap();
+    assert_eq!(pending_count(&score_of(&env, &tk)), 1);
+    // nothing was ever scored by the rejected attempts
+    assert_eq!(score_of(&env, &tk).trade_count, 0);
+    post_mid(&mut env, &o, 150 * USDC);
+    settle(&mut env, &tk, o.key).unwrap();
+    assert_eq!(score_of(&env, &tk).trade_count, 1);
+}
+
+#[test]
+fn unconfigured_oracle_rejected() {
+    let (mut env, _lp) = seeded();
+    let t = new_trader(&mut env);
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    warp(&mut env, MARKOUT_SLOTS);
+    assert!(settle(&mut env, &t.kp.pubkey(), Pubkey::new_unique()).unwrap_err().contains("Custom(6015)"));
+}
+
+#[test]
+fn wrong_trader_account_rejected() {
+    let (mut env, _lp, o) = markout_env();
+    let victim = new_trader(&mut env);
+    let attacker = new_trader(&mut env);
+    swap(&mut env, &victim, 1_000 * USDC, 1, false).unwrap();
+    swap(&mut env, &attacker, 1_000 * USDC, 1, false).unwrap();
+    warp(&mut env, MARKOUT_SLOTS);
+    post_mid(&mut env, &o, 170 * USDC);
+    let k = attacker.kp.insecure_clone();
+    // claim to settle the attacker, but pass the victim's score PDA (and vice versa)
+    for (trader, score) in [(attacker.kp.pubkey(), score_pda(&victim.kp.pubkey())), (victim.kp.pubkey(), score_pda(&attacker.kp.pubkey()))] {
+        let err = send(&mut env.svm, &[settle_ix(k.pubkey(), trader, score, o.key)], &k, &[]).unwrap_err();
+        assert!(err.contains("Custom(2006)"), "expected ConstraintSeeds, got {err}");
+    }
+    assert_eq!(score_of(&env, &victim.kp.pubkey()).trade_count, 0);
+}
+
+#[test]
+fn ring_buffer_full_drops_trade_and_removes_discount() {
+    let (mut env, _lp, o) = markout_env();
+    let t = new_trader(&mut env);
+    let tk = t.kp.pubkey();
+    set_score(&mut env, tk, RETAIL); // keeper bootstrap says RETAIL
+    for _ in 0..4 {
+        assert_eq!(buy_and_measure(&mut env, &t, 100 * USDC).2, RETAIL as usize);
+    }
+    let s = score_of(&env, &tk);
+    assert_eq!((pending_count(&s), s.dropped_trades), (4, 0));
+    // 5th trade inside the window: cannot be queued → recorded as dropped and charged STANDARD, not RETAIL
+    assert_eq!(buy_and_measure(&mut env, &t, 100 * USDC).2, STANDARD as usize);
+    let s = score_of(&env, &tk);
+    assert_eq!((pending_count(&s), s.dropped_trades), (4, 1));
+    // settling frees the buffer → discount is back
+    warp(&mut env, MARKOUT_SLOTS);
+    post_mid(&mut env, &o, 150 * USDC);
+    settle(&mut env, &tk, o.key).unwrap();
+    let s = score_of(&env, &tk);
+    assert_eq!((pending_count(&s), s.trade_count), (0, 4));
+    assert_eq!(s.tier, RETAIL); // keeper field untouched by settlement
+}
+
+#[test]
+fn unsettled_trades_expire() {
+    let (mut env, _lp, o) = markout_env();
+    let t = new_trader(&mut env);
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    warp(&mut env, MAX_SETTLE + 1);
+    settle(&mut env, &t.kp.pubkey(), o.key).unwrap(); // no oracle read needed
+    let s = score_of(&env, &t.kp.pubkey());
+    assert_eq!((pending_count(&s), s.dropped_trades, s.trade_count), (0, 1, 0));
+}
+
+/// one trade, wait for the horizon, post a mid `bps_move` away from its exec price, settle
+fn round(env: &mut Env, o: &Oracle, t: &Trader, usdc: u64, bps_move: i64) -> usize {
+    let tier = buy_and_measure(env, t, usdc).2;
+    let p = score_of(env, &t.kp.pubkey()).pending.into_iter().find(|p| p.notional != 0).unwrap();
+    warp(env, MARKOUT_SLOTS);
+    post_mid(env, o, (p.exec_price as i128 * (10_000 + bps_move as i128) / 10_000) as u64);
+    settle(env, &t.kp.pubkey(), o.key).unwrap();
+    tier
+}
+
+#[test]
+fn shrinkage_tier_transitions_and_blend_with_keeper() {
+    use fairway_math::markout::*;
+    let (mut env, _lp, o) = markout_env();
+    let bot = new_trader(&mut env);
+    let bk = bot.kp.pubkey();
+    // the keeper (wrongly) bootstraps the bot as RETAIL
+    set_score(&mut env, bk, RETAIL);
+    let mut fees = vec![];
+    for i in 0..6 {
+        fees.push(round(&mut env, &o, &bot, 1_100 * USDC, 50)); // price moves +0.5% after every buy
+        let s = score_of(&env, &bk);
+        // shrinkage: Σ(n·m) / (Σn + K), exactly as packages/scoring
+        assert_eq!(s.onchain_score_bps as i128, s.sum_weighted_markout / (s.sum_notional as i128 + PRIOR as i128));
+        let sums = Sums { sum_notional: s.sum_notional, sum_weighted_markout: s.sum_weighted_markout, trades: s.trade_count };
+        assert_eq!(s.onchain_tier, onchain_tier(&sums, clock(&env).slot - s.first_slot, &params()));
+        assert_eq!(s.trade_count, i + 1);
+        // 5 trades of ~1100 USDC at +50 bps: score ≈ 50·5500/7500 ≈ 36 bps ≥ 10 → TOXIC from the 5th settle on
+        assert_eq!(s.onchain_tier, if i >= 4 { TOXIC } else { STANDARD }, "after trade {}", i + 1);
+    }
+    // trades 1-5: fewer than 5 settled trades → the keeper's (wrong) RETAIL still applies.
+    // trade 6: 5 settled trades and ≥ 1000 USDC → the onchain TOXIC tier takes over.
+    assert_eq!(fees, vec![0, 0, 0, 0, 0, 2]);
+    // the keeper cannot override onchain evidence, and set_score does not wipe it
+    set_score(&mut env, bk, RETAIL);
+    let s = score_of(&env, &bk);
+    assert_eq!((s.trade_count, s.onchain_tier), (6, TOXIC));
+    assert_eq!(buy_and_measure(&mut env, &bot, 100 * USDC).2, TOXIC as usize);
+}
+
+#[test]
+fn uninformed_flow_earns_retail_onchain() {
+    let (mut env, _lp, o) = markout_env();
+    let rita = new_trader(&mut env);
+    let mut tiers = vec![];
+    for _ in 0..6 {
+        tiers.push(round(&mut env, &o, &rita, 1_000 * USDC, -5)); // price drifts slightly against her
+        warp(&mut env, 30);
+    }
+    let s = score_of(&env, &rita.kp.pubkey());
+    assert!(s.onchain_score_bps <= 0);
+    assert!(clock(&env).slot - s.first_slot >= HISTORY);
+    assert_eq!(s.onchain_tier, RETAIL);
+    // no keeper score at all: STANDARD until onchain evidence proves RETAIL
+    assert_eq!(tiers[0], STANDARD as usize);
+    assert_eq!(*tiers.last().unwrap(), RETAIL as usize);
+    assert_eq!(buy_and_measure(&mut env, &rita, 100 * USDC).2, RETAIL as usize);
+}
+
+#[test]
+fn invalid_markout_params_rejected() {
+    let (mut env, _lp) = seeded();
+    let admin = env.admin.insecure_clone();
+    let bad = MarkoutParams { markout_slots: 100, max_settle_slots: 50, ..MarkoutParams::default() };
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::UpdateConfig { update: ConfigUpdate { markout: Some(bad), ..Default::default() } }.data(),
+        fairway::accounts::UpdateConfig { admin: admin.pubkey(), config: config_pda() }.to_account_metas(None),
+    );
+    assert!(send(&mut env.svm, &[ix], &admin, &[]).unwrap_err().contains("Custom(6020)"));
+}
+
+#[test]
+fn authority_cannot_close_a_score_with_onchain_evidence() {
+    let (mut env, _lp, o) = markout_env();
+    let t = new_trader(&mut env);
+    let tk = t.kp.pubkey();
+    let a = env.authority.insecure_clone();
+    let close = |closer: Pubkey| {
+        Instruction::new_with_bytes(
+            fairway::id(),
+            &fairway::instruction::CloseScore {}.data(),
+            fairway::accounts::CloseScore { closer, config: config_pda(), score: score_pda(&tk), rent_receiver: tk }.to_account_metas(None),
+        )
+    };
+    // pending trade → the keeper cannot wipe it
+    swap(&mut env, &t, 1_000 * USDC, 1, false).unwrap();
+    assert!(send(&mut env.svm, &[close(a.pubkey())], &a, &[]).unwrap_err().contains("Custom(6014)"));
+    // settled evidence → still cannot
+    warp(&mut env, MARKOUT_SLOTS);
+    post_mid(&mut env, &o, 150 * USDC);
+    settle(&mut env, &tk, o.key).unwrap();
+    assert!(send(&mut env.svm, &[close(a.pubkey())], &a, &[]).unwrap_err().contains("Custom(6014)"));
+    // the trader can close their own account and gets the rent back
+    let before = env.svm.get_balance(&tk).unwrap();
+    let k = t.kp.insecure_clone();
+    send(&mut env.svm, &[close(tk)], &k, &[]).unwrap();
+    assert!(env.svm.get_balance(&tk).unwrap() > before);
+}
+
+#[test]
+fn few_large_trades_do_not_override_a_toxic_keeper_score() {
+    let (mut env, _lp, o) = markout_env();
+    let bot = new_trader(&mut env);
+    set_score(&mut env, bot.kp.pubkey(), TOXIC); // keeper knows it is a bot from other venues
+    for _ in 0..3 {
+        // big, flat trades: plenty of notional, but only 3 settled trades → onchain says STANDARD
+        assert_eq!(round(&mut env, &o, &bot, 20_000 * USDC, 0), TOXIC as usize);
+    }
+    let s = score_of(&env, &bot.kp.pubkey());
+    assert!(s.sum_notional >= ONCHAIN_MIN && s.trade_count == 3 && s.onchain_tier == STANDARD);
+    assert_eq!(buy_and_measure(&mut env, &bot, 100 * USDC).2, TOXIC as usize);
 }

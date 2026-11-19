@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { useWalletView } from '@/lib/client/use-wallet-view';
-import { Card, Empty, PageHeader, Stat, TierBadge, TIER_FEE_DEFAULT } from './ui';
+import { Card, Empty, PageHeader, ScoreSourceBadge, Stat, TierBadge, TIER_FEE_DEFAULT } from './ui';
 import { Histogram, MarkoutBars, ScoreTimeline } from './charts';
 import { WalletSearch } from './wallet-search';
 import { bps, num, short, signed, time, usd } from '@/lib/format';
@@ -42,12 +42,14 @@ export function WalletDetail({ address }: { address: string }) {
         <div className="flex flex-wrap items-center gap-3">
           <TierBadge tier={data.tier} size="lg" />
           <span>pays {TIER_FEE_DEFAULT[data.tier]} bps</span>
+          <ScoreSourceBadge source={data.scoreSource} />
           {data.label && <span className="text-muted">· {data.label}</span>}
           {data.agentClass && <span className="text-muted">· fixture class: {data.agentClass}</span>}
         </div>
         <p className="mt-3">{data.explanation}</p>
       </PageHeader>
       <div className="space-y-6">
+        <OnchainCard data={data} />
         {!data.known || !data.score ? (
           <Empty>
             No swap history for this wallet. Unknown wallets are always STANDARD (30 bps), so a fresh wallet can never beat a proven retail one. <Link className="text-accent" href="/wallet">Try an example</Link>.
@@ -115,11 +117,46 @@ export function WalletDetail({ address }: { address: string }) {
             <li>For each trade, markout = side × (mid(t+h) − execPrice) / execPrice × 10⁴ bps, using the pre-fee price. We measure information, not cost.</li>
             <li>Wallet score = Σ(notional × markout) / (Σ notional + K), with K = {usd(cfg.priorNotional)}. The prior shrinks small samples toward zero, so one lucky trade proves nothing.</li>
             <li>TOXIC if score ≥ {cfg.toxicScoreBps} bps and ≥ {cfg.minTrades} trades. RETAIL if score ≤ {cfg.retailScoreBps} bps, ≥ {cfg.minTrades} trades and ≥ {cfg.retailMinHistoryDays} days of history. Otherwise STANDARD.</li>
-            <li>A keeper writes the tier to a TraderScore PDA seeded by the wallet. The swap program reads only the PDA derived from the signer.</li>
+            <li>Bootstrap: a keeper writes the offchain tier (all venues, via QuickNode Streams) to a TraderScore PDA seeded by the wallet. The swap program reads only the PDA derived from the signer.</li>
+            <li>Onchain verified: every Fairway swap is queued in the same PDA. After {data.onchain.markoutSlots} slots (~30 s) anyone can call settle_markout, which reads the Pyth mid and applies the same formula and thresholds onchain. Once settled notional reaches {usd(data.onchain.thresholdNotional)} over at least {data.onchain.minTrades} trades, the onchain tier wins and the keeper can no longer change this wallet&apos;s fee.</li>
           </ol>
         </Card>
         <WalletSearch />
       </div>
     </>
+  );
+}
+
+function OnchainCard({ data }: { data: NonNullable<ReturnType<typeof useWalletView>['data']> }) {
+  const o = data.onchain;
+  const pct = Math.min(100, (o.notional / o.thresholdNotional) * 100);
+  return (
+    <Card
+      title="Onchain verified score"
+      subtitle="Computed by the Fairway program from this wallet's Fairway trades, marked out against Pyth. No oracle operator involved."
+      action={<ScoreSourceBadge source={data.scoreSource} />}
+    >
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Settled trades" value={o.tradeCount} hint={`needs ${o.minTrades} · horizon ${o.markoutSlots} slots`} />
+        <Stat label="Onchain score" value={o.tradeCount ? `${signed(o.scoreBps)} bps` : '—'} hint="integer bps, same shrinkage" />
+        <Stat label="Onchain tier" value={o.tradeCount ? <TierBadge tier={o.tier} /> : '—'} hint={o.verified ? 'in force' : 'not in force yet'} />
+        <Stat label="Keeper (bootstrap) tier" value={<TierBadge tier={data.bootstrapTier} />} hint={o.verified ? 'overridden' : 'in force'} />
+      </div>
+      <div className="mt-4">
+        <div className="flex justify-between text-[12px] text-ink-2">
+          <span>Settled notional {usd(o.notional)}</span>
+          <span>
+            {o.verified
+              ? 'Threshold reached: onchain score wins'
+              : o.notional < o.thresholdNotional
+                ? `${usd(o.thresholdNotional - o.notional)} more until the onchain score takes over`
+                : `${o.minTrades - o.tradeCount} more settled trades until the onchain score takes over`}
+          </span>
+        </div>
+        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+          <div className={`h-full rounded-full ${o.verified ? 'bg-retail' : 'bg-muted'}`} style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    </Card>
   );
 }

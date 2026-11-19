@@ -30,8 +30,20 @@ pub enum FairwayError {
     BadBatch,
     #[msg("Score account does not match the PDA for this trader")]
     ScoreAccountMismatch,
-    #[msg("Only the score authority or the trader can close a score")]
+    #[msg("Only the trader (or the score authority, if no onchain evidence) can close a score")]
     CannotClose,
+    #[msg("Pyth oracle is not configured")]
+    OracleNotConfigured,
+    #[msg("Oracle account is not the configured Pyth price account")]
+    OracleMismatch,
+    #[msg("Oracle account is invalid (owner, layout, feed id, verification or price)")]
+    OracleInvalid,
+    #[msg("Oracle price is stale")]
+    OracleStale,
+    #[msg("Oracle confidence interval is too wide")]
+    OracleLowConfidence,
+    #[msg("Invalid markout parameters")]
+    InvalidMarkoutParams,
 }
 
 impl From<fairway_math::MathError> for FairwayError {

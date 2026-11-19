@@ -16,7 +16,7 @@
 
 **4:15 Honest results (30 s).** "Retail pays 18 bps less and arbitrage profit drops 73%. Against a low flat fee LPs gain about $500 a day. Against flat 30 LPs give some of that up, about $155 a day at our recommended settings. That's the trade-off, and we show it in the open."
 
-**4:45 Close (15 s).** "Anchor program, Streams pipeline, scoring, keeper, and frontend all work end to end offline. Next: devnet, Pyth markouts, multi-oracle."
+**4:45 Close (15 s).** "Anchor program, Streams pipeline, scoring, keeper, and frontend all work end to end offline. Scores for Fairway flow are already computed onchain against Pyth. Next: devnet, a crank reward, multi-oracle for cross-venue history."
 
 ## 15 likely questions
 
@@ -24,7 +24,7 @@
 
 2. **Doesn't a higher bot fee make the pool price staler?** Yes. p95 deviation from the CEX goes from 32 bps to about 80 bps at an 80 bps toxic fee. That's why the sweep has a staleness bound, and why toxic fees of 100 and 150 bps are excluded from the recommended setting.
 
-3. **Who runs the oracle?** The keeper, with a `score_authority` key. Its power is limited to choosing a tier. It can't set fees or touch funds, and scores expire (TTL). Inputs are public. Future work: multiple oracles, a bond, and ZK proofs.
+3. **Who runs the oracle?** For trades on Fairway, nobody: the program computes the score itself. Every swap is queued in the trader's PDA, and after 75 slots (about 30 s) anyone can call `settle_markout`, which reads Pyth and applies the same markout, shrinkage and thresholds onchain. Once a wallet has 1,000 USDC and 5 trades of settled flow, that onchain tier wins and the keeper can't change it. The keeper only bootstraps new wallets from their history on other venues (via QuickNode Streams). Even there, its power is limited to choosing a tier, scores expire (TTL), and the inputs are public.
 
 4. **Why Solana?** Fast slots make LVR frequent, which makes the problem worse. Cheap batched writes (10 scores per transaction), PDAs let us key the fee tier to the signer cheaply, and QuickNode Streams makes the Solana history queryable.
 
@@ -44,7 +44,7 @@
 
 12. **Why K = 2,000?** It's a prior of $2k notional at markout 0. It means a wallet needs a few thousand dollars of volume before its score is near its raw average. It is configurable.
 
-13. **What if the oracle goes down?** Scores go stale after `score_ttl_slots`, and everyone pays STANDARD. The pool keeps working as a flat 30 bps pool.
+13. **What if the oracle goes down?** Bootstrap scores go stale after `score_ttl_slots`, and those wallets pay STANDARD. Onchain verified scores don't depend on the keeper and don't expire. If Pyth is stale or too uncertain, `settle_markout` refuses to settle, trades stay pending (then expire unscored) and tiers just stop changing. The pool keeps working either way.
 
 14. **Is the program secure?** It's unaudited. Math is u128 checked, rounding in the pool's favor, with the k-never-decreases property tested. The wrong-signer, stale-score, slippage and unauthorized-write tests pass. Don't use real funds.
 

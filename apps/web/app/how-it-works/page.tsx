@@ -12,6 +12,14 @@ const STEPS = [
   ['Swap', 'tiered fee'],
 ];
 
+const ONCHAIN_STEPS = [
+  ['Swap', 'queues {price, slot, side, notional} in the signer’s PDA'],
+  ['~75 slots later', 'the 30 s markout horizon passes'],
+  ['settle_markout', 'anyone cranks; reads Pyth SOL/USD'],
+  ['Program math', 'markout, shrinkage K, tier thresholds'],
+  ['TraderScore', 'onchain tier, no oracle signer'],
+];
+
 export default function HowItWorks() {
   return (
     <>
@@ -32,20 +40,47 @@ export default function HowItWorks() {
             ))}
           </ol>
         </Card>
+        <Card
+          title="Onchain verified scores (no trusted oracle)"
+          subtitle="For trades on Fairway itself, the program computes the markout score on its own. The keeper's score is only a bootstrap prior."
+        >
+          <ol className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center">
+            {ONCHAIN_STEPS.map(([t, d], i) => (
+              <li key={t} className="flex flex-1 items-center gap-2">
+                <div className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-3 text-center">
+                  <div className="text-[13px] font-semibold text-ink">{t}</div>
+                  <div className="text-[11px] text-ink-2">{d}</div>
+                </div>
+                {i < ONCHAIN_STEPS.length - 1 && <span className="hidden text-muted lg:block" aria-hidden>→</span>}
+              </li>
+            ))}
+          </ol>
+          <div className="mt-4 grid gap-3 text-[13px] leading-relaxed text-ink-2 sm:grid-cols-2">
+            <div className="rounded-xl border border-line p-3">
+              <b className="text-ink">Bootstrap score</b> (keeper). Computed offchain from a wallet&apos;s history on every venue (Raydium etc., via QuickNode Streams) and written with set_score. Lets a wallet be scored from day one. Trusted: the score authority can write any tier, limited by the TTL.
+            </div>
+            <div className="rounded-xl border border-line p-3">
+              <b className="text-ink">Onchain verified score</b> (program). Once a wallet has ≥ 1,000 USDC and ≥ 5 trades of settled Fairway flow, its onchain tier is used and keeper writes no longer affect its fee. Inputs are the wallet&apos;s own swaps and Pyth (feed id, staleness and confidence checked). The same formula runs in TypeScript and Rust, checked on shared test vectors.
+            </div>
+          </div>
+        </Card>
         <div className="grid gap-6 lg:grid-cols-2">
           <Card title="Why bots can't game it">
             <ul className="list-disc space-y-2 pl-5 text-[13px] leading-relaxed text-ink-2">
               <li><strong className="text-ink">Fresh wallets pay STANDARD (30 bps), never less.</strong> Rotating wallets only gets a bot back to the baseline fee. The backtest&apos;s rotation regime quantifies this worst case.</li>
               <li><strong className="text-ink">Faking RETAIL costs money.</strong> A bot needs ≥5 trades over ≥3 days with markout ≤ 3 bps. Trading uninformed is exactly giving up its edge.</li>
               <li><strong className="text-ink">No borrowed scores.</strong> The program derives the TraderScore PDA from the swap signer. Passing another wallet&apos;s account fails the seeds constraint (tested).</li>
-              <li><strong className="text-ink">Scores expire.</strong> A TTL in slots means a stale or missing score falls back to STANDARD.</li>
+              <li><strong className="text-ink">Keeper scores expire.</strong> A TTL in slots means a stale or missing bootstrap score falls back to STANDARD.</li>
+              <li><strong className="text-ink">No hiding trades.</strong> Each wallet queues up to 4 unsettled trades. If the queue is full, the trade is not scored and gets no RETAIL discount.</li>
+              <li><strong className="text-ink">No writing into someone else&apos;s score.</strong> settle_markout only accepts the PDA seeded by the trader it settles (tested).</li>
             </ul>
           </Card>
           <Card title="Trade-offs we state openly">
             <ul className="list-disc space-y-2 pl-5 text-[13px] leading-relaxed text-ink-2">
               <li>A retail discount is a transfer from LPs. Fairway pays for it by raising the cost to informed flow, and the sweep shows where that nets out.</li>
               <li>A higher toxic fee widens the no-arbitrage band, so the pool price can be staler. We bound p95 staleness when recommending parameters.</li>
-              <li>The score oracle is trusted for writes. Inputs are public and recomputable; TTL limits damage; ZK proofs of history are future work.</li>
+              <li>The keeper is trusted for bootstrap scores (all venues). Onchain verified scores replace that trust with Pyth for Fairway&apos;s own flow. Cross-venue history still needs the keeper; ZK proofs of history are future work.</li>
+              <li>Settlement is a permissionless crank with no reward yet. If nobody settles within 450 slots, the trade expires unscored and the wallet stays on its current tier.</li>
               <li>Aggregators: the signer is the end user, so scores follow the wallet through routers.</li>
               <li>Unaudited prototype. Mock mode shows simulated data only.</li>
             </ul>

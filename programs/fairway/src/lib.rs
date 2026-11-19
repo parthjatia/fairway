@@ -52,6 +52,11 @@ pub mod fairway {
         instructions::score::handle_set_scores_batch(ctx, entries)
     }
 
+    /// Permissionless: score the signer-recorded pending trades of `trader` against the Pyth mid.
+    pub fn settle_markout(ctx: Context<SettleMarkout>, trader: Pubkey) -> Result<()> {
+        instructions::settle::handle_settle_markout(ctx, trader)
+    }
+
     pub fn close_score(ctx: Context<CloseScore>) -> Result<()> {
         instructions::score::handle_close_score(ctx)
     }

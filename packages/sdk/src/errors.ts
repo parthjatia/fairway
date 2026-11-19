@@ -14,7 +14,13 @@ export const FAIRWAY_ERRORS = [
   ['SameMint', 'Base and quote mints must differ'],
   ['BadBatch', 'Batch too large or accounts mismatch'],
   ['ScoreAccountMismatch', 'Score account does not match the PDA for this trader'],
-  ['CannotClose', 'Only the score authority or the trader can close a score'],
+  ['CannotClose', 'Only the trader (or the score authority, if no onchain evidence) can close a score'],
+  ['OracleNotConfigured', 'Pyth oracle is not configured'],
+  ['OracleMismatch', 'Oracle account is not the configured Pyth price account'],
+  ['OracleInvalid', 'Oracle account is invalid (owner, layout, feed id, verification or price)'],
+  ['OracleStale', 'Oracle price is stale'],
+  ['OracleLowConfidence', 'Oracle confidence interval is too wide'],
+  ['InvalidMarkoutParams', 'Invalid markout parameters'],
 ] as const;
 
 export type FairwayErrorName = (typeof FAIRWAY_ERRORS)[number][0];

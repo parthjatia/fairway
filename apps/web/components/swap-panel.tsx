@@ -7,7 +7,7 @@ import type { Tier } from '@fairway/scoring';
 import { useAppState } from '@/lib/client/state';
 import { useWalletView } from '@/lib/client/use-wallet-view';
 import { bps, num, short, signed, usd } from '@/lib/format';
-import { Card, Empty, TierBadge, TIER_FEE_DEFAULT } from './ui';
+import { Card, Empty, ScoreSourceBadge, TierBadge, TIER_FEE_DEFAULT } from './ui';
 import { MarkoutBars } from './charts';
 
 const DEC = { SOL: 9, USDC: 6 } as const;
@@ -197,6 +197,7 @@ export function SwapPanel() {
           {loading && !wallet && <div className="h-40 animate-pulse rounded-xl bg-surface-2" />}
           {wallet && (
             <>
+              <div className="mb-2"><ScoreSourceBadge source={wallet.scoreSource} /></div>
               <p className="text-[14px] leading-relaxed text-ink-2">{wallet.explanation}</p>
               {wallet.known && wallet.score ? (
                 <>

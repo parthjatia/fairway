@@ -22,3 +22,15 @@ pub struct ScoreUpdated {
     pub trades: u32,
     pub slot: u64,
 }
+
+#[event]
+pub struct MarkoutSettled {
+    pub trader: Pubkey,
+    pub settled: u8,
+    pub expired: u8,
+    pub tier: u8,
+    pub score_bps: i32,
+    pub sum_notional: u64,
+    pub trade_count: u32,
+    pub slot: u64,
+}

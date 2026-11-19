@@ -1,0 +1,487 @@
+{
+ "params": {
+  "prior_notional": 2000000000,
+  "toxic_bps": 10,
+  "toxic_min_trades": 5,
+  "retail_bps": 3,
+  "retail_min_trades": 5,
+  "retail_min_history_slots": 648000
+ },
+ "markout": [
+  {
+   "side": 0,
+   "exec": 150000000,
+   "mid": 150150000,
+   "expected": 10
+  },
+  {
+   "side": 1,
+   "exec": 150000000,
+   "mid": 150150000,
+   "expected": -10
+  },
+  {
+   "side": 0,
+   "exec": 150000000,
+   "mid": 149850000,
+   "expected": -10
+  },
+  {
+   "side": 1,
+   "exec": 150000000,
+   "mid": 149850000,
+   "expected": 10
+  },
+  {
+   "side": 0,
+   "exec": 150000000,
+   "mid": 150000000,
+   "expected": 0
+  },
+  {
+   "side": 0,
+   "exec": 150000000,
+   "mid": 150000001,
+   "expected": 0
+  },
+  {
+   "side": 1,
+   "exec": 150000000,
+   "mid": 150000001,
+   "expected": 0
+  },
+  {
+   "side": 0,
+   "exec": 1000000,
+   "mid": 5000000,
+   "expected": 10000
+  },
+  {
+   "side": 1,
+   "exec": 5000000,
+   "mid": 1000000,
+   "expected": 8000
+  },
+  {
+   "side": 0,
+   "exec": 123456789,
+   "mid": 123999999,
+   "expected": 44
+  },
+  {
+   "side": 1,
+   "exec": 123456789,
+   "mid": 122000000,
+   "expected": 117
+  }
+ ],
+ "exec_price": [
+  {
+   "quote_raw": 150000000,
+   "quote_decimals": 6,
+   "base_raw": 1000000000,
+   "base_decimals": 9,
+   "expected": 150000000
+  },
+  {
+   "quote_raw": 1500000,
+   "quote_decimals": 6,
+   "base_raw": 10000000,
+   "base_decimals": 9,
+   "expected": 150000000
+  },
+  {
+   "quote_raw": 7777777,
+   "quote_decimals": 6,
+   "base_raw": 51234567,
+   "base_decimals": 9,
+   "expected": 151807216
+  },
+  {
+   "quote_raw": 1000000,
+   "quote_decimals": 6,
+   "base_raw": 1000000,
+   "base_decimals": 6,
+   "expected": 1000000
+  }
+ ],
+ "pyth": [
+  {
+   "price": 15012345678,
+   "expo": -8,
+   "expected": 150123456
+  },
+  {
+   "price": 15012345,
+   "expo": -5,
+   "expected": 150123450
+  },
+  {
+   "price": 150,
+   "expo": 0,
+   "expected": 150000000
+  },
+  {
+   "price": 123,
+   "expo": -8,
+   "expected": 1
+  },
+  {
+   "price": 25,
+   "expo": -2,
+   "expected": 250000
+  }
+ ],
+ "scenarios": [
+  {
+   "name": "empty",
+   "trades": [],
+   "history_slots": 0,
+   "expected": {
+    "sum_notional": 0,
+    "sum_weighted_markout": "0",
+    "trades": 0,
+    "score_bps": 0,
+    "tier": 1
+   }
+  },
+  {
+   "name": "toxic buyer: price rises after every buy",
+   "trades": [
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150300000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150300000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150300000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150300000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150300000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150300000,
+     "notional": 1000000000
+    }
+   ],
+   "history_slots": 100,
+   "expected": {
+    "sum_notional": 6000000000,
+    "sum_weighted_markout": "120000000000",
+    "trades": 6,
+    "score_bps": 15,
+    "tier": 2
+   }
+  },
+  {
+   "name": "toxic seller: price falls after every sell",
+   "trades": [
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 149700000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 149700000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 149700000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 149700000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 149700000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 149700000,
+     "notional": 1000000000
+    }
+   ],
+   "history_slots": 100,
+   "expected": {
+    "sum_notional": 6000000000,
+    "sum_weighted_markout": "120000000000",
+    "trades": 6,
+    "score_bps": 15,
+    "tier": 2
+   }
+  },
+  {
+   "name": "flat retail with enough history",
+   "trades": [
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    }
+   ],
+   "history_slots": 700000,
+   "expected": {
+    "sum_notional": 6000000000,
+    "sum_weighted_markout": "0",
+    "trades": 6,
+    "score_bps": 0,
+    "tier": 0
+   }
+  },
+  {
+   "name": "flat retail but history too short",
+   "trades": [
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 1,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    }
+   ],
+   "history_slots": 10,
+   "expected": {
+    "sum_notional": 6000000000,
+    "sum_weighted_markout": "0",
+    "trades": 6,
+    "score_bps": 0,
+    "tier": 1
+   }
+  },
+  {
+   "name": "flat but only 4 trades",
+   "trades": [
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150000000,
+     "notional": 1000000000
+    }
+   ],
+   "history_slots": 700000,
+   "expected": {
+    "sum_notional": 4000000000,
+    "sum_weighted_markout": "0",
+    "trades": 4,
+    "score_bps": 0,
+    "tier": 1
+   }
+  },
+  {
+   "name": "single huge trade is shrunk",
+   "trades": [
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 153000000,
+     "notional": 1000000000000
+    }
+   ],
+   "history_slots": 100,
+   "expected": {
+    "sum_notional": 1000000000000,
+    "sum_weighted_markout": "200000000000000",
+    "trades": 1,
+    "score_bps": 199,
+    "tier": 1
+   }
+  },
+  {
+   "name": "adverse selection (negative markout) is retail",
+   "trades": [
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 149850000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 149850000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 149850000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 149850000,
+     "notional": 1000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 149850000,
+     "notional": 1000000000
+    }
+   ],
+   "history_slots": 700000,
+   "expected": {
+    "sum_notional": 5000000000,
+    "sum_weighted_markout": "-50000000000",
+    "trades": 5,
+    "score_bps": -7,
+    "tier": 0
+   }
+  },
+  {
+   "name": "boundary: exactly toxic threshold is NOT reached with shrinkage",
+   "trades": [
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150150000,
+     "notional": 2000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150150000,
+     "notional": 2000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150150000,
+     "notional": 2000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150150000,
+     "notional": 2000000000
+    },
+    {
+     "side": 0,
+     "exec": 150000000,
+     "mid": 150150000,
+     "notional": 2000000000
+    }
+   ],
+   "history_slots": 100,
+   "expected": {
+    "sum_notional": 10000000000,
+    "sum_weighted_markout": "100000000000",
+    "trades": 5,
+    "score_bps": 8,
+    "tier": 1
+   }
+  }
+ ]
+}

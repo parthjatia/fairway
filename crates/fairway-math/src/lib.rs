@@ -3,6 +3,7 @@
 //! every rounding decision favours the pool.
 #![forbid(unsafe_code)]
 
+pub mod markout;
 pub mod tier;
 pub use tier::*;
 

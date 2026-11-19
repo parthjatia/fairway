@@ -73,6 +73,10 @@ export class RpcStore implements ScoreStore {
   }
   async fetch(traders: string[]) {
     const m = new Map<string, OnchainScore | null>();
+    const cfgInfo = await this.connection.getAccountInfo(configPda(this.programId)[0]);
+    const mk = cfgInfo ? decodeConfig(cfgInfo.data).markout : null;
+    const minNotional = mk?.onchainMinNotional ?? 0n;
+    const minTrades = mk ? Math.min(mk.toxicMinTrades, mk.retailMinTrades) : 0;
     for (let i = 0; i < traders.length; i += 100) {
       const part = traders.slice(i, i + 100);
       const infos = await this.connection.getMultipleAccountsInfo(part.map((t) => scorePda(new PublicKey(t), this.programId)[0]));
@@ -81,7 +85,13 @@ export class RpcStore implements ScoreStore {
         if (!info || !info.owner.equals(this.programId)) return m.set(t, null);
         try {
           const s = decodeTraderScore(info.data);
-          m.set(t, { tier: s.tier as 0 | 1 | 2, scoreBps: s.scoreBps, trades: s.trades, updatedSlot: s.updatedSlot });
+          m.set(t, {
+            tier: s.tier as 0 | 1 | 2,
+            scoreBps: s.scoreBps,
+            trades: s.trades,
+            updatedSlot: s.updatedSlot,
+            onchainVerified: minNotional > 0n && s.sumNotional >= minNotional && s.tradeCount >= minTrades,
+          });
         } catch {
           m.set(t, null);
         }

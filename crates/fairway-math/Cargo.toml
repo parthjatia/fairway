@@ -9,3 +9,6 @@ license = "MIT"
 name = "fairway_math"
 
 [dependencies]
+
+[dev-dependencies]
+serde_json = "1"

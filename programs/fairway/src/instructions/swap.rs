@@ -1,18 +1,24 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, TransferChecked};
-use fairway_math::{resolve_tier, swap_quote, ScoreView, TierSource};
+use fairway_math::{
+    markout::{exec_price_e6, SIDE_BUY, SIDE_SELL},
+    resolve_blended, swap_quote, OnchainView, ScoreView, TierSource, TIER_RETAIL, TIER_STANDARD,
+};
 
 use crate::{
     constants::*,
     error::{FairwayError, MathExt},
     events::SwapExecuted,
     instructions::pool::pool_signer_seeds,
-    state::{Config, Pool, TraderScore},
+    instructions::score::{ensure_score_account, load_score, store_score},
+    state::{Config, PendingTrade, Pool},
 };
 
 #[derive(Accounts)]
 pub struct Swap<'info> {
     /// The trader. The fee tier is looked up from the score PDA derived from THIS key.
+    /// Mutable because it pays rent for its score PDA on the first swap.
+    #[account(mut)]
     pub trader: Signer<'info>,
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Box<Account<'info, Config>>,
@@ -24,8 +30,9 @@ pub struct Swap<'info> {
     pub pool: Box<Account<'info, Pool>>,
     /// CHECK: MUST be the PDA ["score", trader]. Anchor enforces the seeds, so a bot cannot pass someone
     /// else's RETAIL score (the transaction fails with ConstraintSeeds). It may be uninitialised: a missing,
-    /// stale or malformed score resolves to the default tier (>= STANDARD).
-    #[account(seeds = [SCORE_SEED, trader.key().as_ref()], bump)]
+    /// stale or malformed score resolves to the default tier (>= STANDARD). Created on the first swap (payer = trader)
+    /// so the trade can be queued for onchain markout scoring.
+    #[account(mut, seeds = [SCORE_SEED, trader.key().as_ref()], bump)]
     pub trader_score: UncheckedAccount<'info>,
     pub base_mint: Box<Account<'info, Mint>>,
     pub quote_mint: Box<Account<'info, Mint>>,
@@ -38,26 +45,40 @@ pub struct Swap<'info> {
     #[account(mut, token::mint = quote_mint, token::authority = trader)]
     pub trader_quote: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
-/// Read the score PDA if it is a valid, program-owned `TraderScore` for this trader.
-fn read_score(acc: &AccountInfo, trader: &Pubkey) -> Option<ScoreView> {
-    if acc.owner != &crate::ID || acc.data_len() < 8 {
-        return None;
+/// What the swap needs from the signer's score PDA.
+struct ScoreRead {
+    bootstrap: Option<ScoreView>,
+    onchain: Option<OnchainView>,
+    pending_full: bool,
+}
+
+fn read_score(acc: &AccountInfo, trader: &Pubkey) -> ScoreRead {
+    match load_score(acc) {
+        Some(s) if &s.trader == trader => ScoreRead {
+            bootstrap: Some(ScoreView { tier: s.tier, updated_slot: s.updated_slot }),
+            onchain: Some(OnchainView { tier: s.onchain_tier, sum_notional: s.sum_notional, trades: s.trade_count }),
+            pending_full: s.pending_full(),
+        },
+        _ => ScoreRead { bootstrap: None, onchain: None, pending_full: false },
     }
-    let data = acc.try_borrow_data().ok()?;
-    let s = TraderScore::try_deserialize(&mut &data[..]).ok()?;
-    if &s.trader != trader {
-        return None;
-    }
-    Some(ScoreView { tier: s.tier, updated_slot: s.updated_slot })
 }
 
 pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to_b: bool) -> Result<()> {
     let a = &ctx.accounts;
     let trader = a.trader.key();
     let slot = Clock::get()?.slot;
-    let (tier, source) = resolve_tier(read_score(&a.trader_score.to_account_info(), &trader), slot, a.config.score_ttl_slots, a.config.default_tier);
+    let sr = read_score(&a.trader_score.to_account_info(), &trader);
+    let m = &a.config.markout;
+    let (mut tier, source) =
+        resolve_blended(sr.onchain, m.onchain_min_notional, m.min_trades(), sr.bootstrap, slot, a.config.score_ttl_slots, a.config.default_tier);
+    // If this trade cannot be queued for scoring (buffer full), it gets no RETAIL discount: otherwise a wallet could
+    // keep its buffer full to hide trades from the onchain score while still paying the low fee.
+    if sr.pending_full && tier == TIER_RETAIL {
+        tier = TIER_STANDARD;
+    }
     let fee_bps = a.config.fee_bps[tier as usize];
 
     let (reserve_in, reserve_out) = if a_to_b { (a.base_vault.amount, a.quote_vault.amount) } else { (a.quote_vault.amount, a.base_vault.amount) };
@@ -103,6 +124,25 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
     if source != TierSource::Score {
         msg!("fairway: tier {} ({:?})", tier, source);
     }
+
+    // ---- queue the trade for trustless markout scoring (settle_markout)
+    let (side, quote_leg, base_leg) = if a_to_b { (SIDE_SELL, q.amount_out, q.in_after_fee) } else { (SIDE_BUY, q.in_after_fee, q.amount_out) };
+    let (bd, qd) = (ctx.accounts.base_mint.decimals, ctx.accounts.quote_mint.decimals);
+    let score_info = ctx.accounts.trader_score.to_account_info();
+    let payer = ctx.accounts.trader.to_account_info();
+    ensure_score_account(&score_info, &trader, ctx.bumps.trader_score, &payer)?;
+    let mut ts = load_score(&score_info).ok_or(error!(FairwayError::ScoreAccountMismatch))?;
+    require_keys_eq!(ts.trader, trader, FairwayError::ScoreAccountMismatch);
+    match (exec_price_e6(quote_leg, qd, base_leg, bd), ts.pending.iter_mut().find(|p| p.notional == 0)) {
+        (Ok(exec_price), Some(free)) => {
+            *free = PendingTrade { exec_price, slot, side, notional: quote_leg };
+            if ts.first_slot == 0 {
+                ts.first_slot = slot.max(1);
+            }
+        }
+        _ => ts.dropped_trades = ts.dropped_trades.saturating_add(1),
+    }
+    store_score(&score_info, &ts)?;
     emit!(SwapExecuted { trader, pool: pool_key, a_to_b, amount_in, amount_out: q.amount_out, fee_bps, tier });
     Ok(())
 }

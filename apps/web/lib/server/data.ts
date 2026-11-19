@@ -1,8 +1,20 @@
 import 'server-only';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { explainTier, FixtureMidPrice, makeConfig, scoreWallets, tierTimeline, tradeMarkouts, type Swap, type Tier, type WalletScore } from '@fairway/scoring';
-import type { PoolView, Persona, WalletView } from '../types';
+import {
+  explainTier,
+  FixtureMidPrice,
+  makeConfig,
+  onchainParamsFrom,
+  onchainScoreFromSwaps,
+  scoreWallets,
+  tierTimeline,
+  tradeMarkouts,
+  type Swap,
+  type Tier,
+  type WalletScore,
+} from '@fairway/scoring';
+import type { OnchainScore, PoolView, Persona, WalletView } from '../types';
 
 /** Repo root = nearest ancestor of cwd containing pnpm-workspace.yaml (Next runs from apps/web). */
 function repoRoot(): string {
@@ -60,12 +72,49 @@ async function fromIngest<T>(path: string): Promise<T | null> {
 const labelOf = (address: string) => fixtures().meta.personas.find((p) => p.address === address)?.name ?? null;
 const CLASS_LABEL: Record<string, string> = { retail: 'retail trader', arb: 'arbitrage bot', sniper: 'momentum sniper', new: 'new wallet' };
 
+/** Program defaults (MarkoutParams::default): ~30 s horizon, onchain score wins after 1,000 USDC of settled notional. */
+const MARKOUT_SLOTS = 75;
+const ONCHAIN_MIN_NOTIONAL_USDC = 1_000;
+const ONCHAIN_PARAMS = { ...onchainParamsFrom(cfg), onchainMinNotional: BigInt(ONCHAIN_MIN_NOTIONAL_USDC * 1e6) };
+
+/** What `settle_markout` would have recorded from this wallet's swaps on the Fairway pool (same integer math as the program). */
+function onchainScoreOf(address: string): OnchainScore {
+  const f = fixtures();
+  const fairwayPools = new Set(f.meta.pools.filter((p) => p.venue === 'fairway').map((p) => p.id));
+  const own = f.swaps.filter((s) => s.trader === address && fairwayPools.has(s.pool));
+  const v = onchainScoreFromSwaps(own, (ts) => f.mids.midAt(ts), ONCHAIN_PARAMS, { horizonSec: MARKOUT_SLOTS * 0.4, asOf: f.meta.end });
+  return {
+    tradeCount: v.tradeCount,
+    notional: Number(v.sumNotional) / 1e6,
+    scoreBps: v.scoreBps,
+    tier: v.tier,
+    historyDays: (Number(v.historySlots) * 0.4) / cfg.secondsPerDay,
+    verified: v.verified,
+    thresholdNotional: ONCHAIN_MIN_NOTIONAL_USDC,
+    minTrades: Math.min(cfg.toxicMinTrades, cfg.retailMinTrades),
+    markoutSlots: MARKOUT_SLOTS,
+  };
+}
+
+/** Blend rule (programs/fairway `resolve_blended`): onchain tier once verified, else the keeper's bootstrap tier. */
+function blend(bootstrapTier: Tier, known: boolean, onchain: OnchainScore): Pick<WalletView, 'tier' | 'scoreSource' | 'bootstrapTier' | 'onchain'> {
+  if (onchain.verified) return { tier: onchain.tier, scoreSource: 'onchain', bootstrapTier, onchain };
+  return { tier: bootstrapTier, scoreSource: known ? 'bootstrap' : 'default', bootstrapTier, onchain };
+}
+
+const onchainNote = (o: OnchainScore) =>
+  `Onchain verified: ${o.tradeCount} Fairway trades (${Math.round(o.notional).toLocaleString('en-US')} USDC) settled against Pyth give ${o.scoreBps} bps, so the program charges the ${o.tier} fee and ignores the keeper's score.`;
+
 /** Wallet score explorer data: from the ingest service when it is running, else computed in-process. */
 export async function walletView(address: string): Promise<WalletView> {
   const f = fixtures();
   const agentClass = CLASS_LABEL[f.cls.get(address) ?? ''] ?? null;
-  const remote = await fromIngest<Omit<WalletView, 'source' | 'agentClass'>>(`/wallet/${address}`);
-  if (remote && remote.trades) return { ...remote, label: remote.label ?? labelOf(address), agentClass, source: 'ingest' };
+  const onchain = onchainScoreOf(address);
+  const remote = await fromIngest<Omit<WalletView, 'source' | 'agentClass' | 'scoreSource' | 'bootstrapTier' | 'onchain'>>(`/wallet/${address}`);
+  if (remote && remote.trades) {
+    const b = blend(remote.tier, remote.known, onchain);
+    return { ...remote, ...b, explanation: b.scoreSource === 'onchain' ? onchainNote(onchain) : remote.explanation, label: remote.label ?? labelOf(address), agentClass, source: 'ingest' };
+  }
 
   const config = { horizons: cfg.horizons, primaryHorizon: cfg.primaryHorizon, priorNotional: cfg.priorNotional, toxicScoreBps: cfg.toxicScoreBps, retailScoreBps: cfg.retailScoreBps, minTrades: cfg.retailMinTrades, retailMinHistoryDays: cfg.retailMinHistoryDays };
   const score = f.scores.get(address) ?? null;
@@ -79,14 +128,15 @@ export async function walletView(address: string): Promise<WalletView> {
     })
     .sort((a, b) => b.ts - a.ts);
   if (!score) {
-    return { address, known: false, tier: 'STANDARD', explanation: explainTier(undefined, cfg), label: labelOf(address), agentClass, score: null, trades: [], timeline: [], config, source: 'in-process' };
+    return { address, known: false, ...blend('STANDARD', false, onchain), explanation: explainTier(undefined, cfg), label: labelOf(address), agentClass, score: null, trades: [], timeline: [], config, source: 'in-process' };
   }
   const tierIn = { scoreBps: score.scoreBps, maxScoreBps: score.maxScoreBps, trades: score.byHorizon[cfg.primaryHorizon]?.scoredTrades ?? score.trades, historyDays: score.historyDays };
+  const b = blend(score.tier, true, onchain);
   return {
     address,
     known: true,
-    tier: score.tier,
-    explanation: explainTier(tierIn, cfg),
+    ...b,
+    explanation: b.scoreSource === 'onchain' ? onchainNote(onchain) : explainTier(tierIn, cfg),
     label: labelOf(address),
     agentClass,
     score: { ...score, byHorizon: score.byHorizon as never },

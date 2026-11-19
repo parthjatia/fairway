@@ -43,6 +43,15 @@ export class Writer {
     new DataView(b.buffer).setBigUint64(0, BigInt(v), true);
     return this.bytes(b);
   }
+  i64(v: bigint | number): this {
+    const b = new Uint8Array(8);
+    new DataView(b.buffer).setBigInt64(0, BigInt(v), true);
+    return this.bytes(b);
+  }
+  i128(v: bigint): this {
+    const u = BigInt.asUintN(128, v);
+    return this.u64(u & 0xffff_ffff_ffff_ffffn).u64(u >> 64n);
+  }
   pubkey(k: PublicKey): this {
     return this.bytes(k.toBytes());
   }
@@ -100,6 +109,21 @@ export class Reader {
     const v = this.dv.getBigUint64(this.off, true);
     this.off += 8;
     return v;
+  }
+  i64(): bigint {
+    const v = this.dv.getBigInt64(this.off, true);
+    this.off += 8;
+    return v;
+  }
+  i128(): bigint {
+    const lo = this.u64();
+    const hi = this.u64();
+    return BigInt.asIntN(128, (hi << 64n) | lo);
+  }
+  fixed(n: number): Uint8Array {
+    const out = this.b.slice(this.off, this.off + n);
+    this.off += n;
+    return out;
   }
   pubkey(): PublicKey {
     const k = new PublicKey(this.b.slice(this.off, this.off + 32));

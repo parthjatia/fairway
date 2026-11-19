@@ -45,6 +45,21 @@ export function TierBadge({ tier, size = 'sm' }: { tier: Tier; size?: 'sm' | 'lg
   );
 }
 
+/** Where the fee tier comes from: trustless onchain markout (settle_markout) or the keeper's bootstrap score. */
+export function ScoreSourceBadge({ source }: { source: 'onchain' | 'bootstrap' | 'default' }) {
+  const s = {
+    onchain: { label: 'Onchain verified', title: 'Tier computed by the program from this wallet’s own Fairway trades, marked out against Pyth. The keeper cannot override it.', cls: 'border-retail/40 text-retail', dot: 'bg-retail' },
+    bootstrap: { label: 'Bootstrap score', title: 'Tier written by the keeper from offchain history (QuickNode Streams, all venues). Used until the wallet has enough settled onchain notional.', cls: 'border-line text-ink-2', dot: 'bg-muted' },
+    default: { label: 'No score yet', title: 'No history: unknown wallets pay STANDARD.', cls: 'border-line text-muted', dot: 'bg-line' },
+  }[source];
+  return (
+    <span title={s.title} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${s.cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden />
+      {s.label}
+    </span>
+  );
+}
+
 export const TIER_FEE_DEFAULT: Record<Tier, number> = { RETAIL: 5, STANDARD: 30, TOXIC: 80 };
 
 export function SimBadge({ className = '' }: { className?: string }) {

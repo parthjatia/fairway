@@ -24,3 +24,14 @@ export const MIN_LIQUIDITY = 1_000n;
 export const MAX_FEE_BPS = 1_000;
 export const MAX_BATCH = 10;
 export const LP_DECIMALS = 6;
+
+/** Pyth Solana Receiver program (owner of PriceUpdateV2 accounts; same id on mainnet + devnet). */
+export const PYTH_RECEIVER_PROGRAM_ID = 'rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ';
+/** Pyth SOL/USD feed id (Hermes). */
+export const PYTH_SOL_USD_FEED_ID = 'ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
+/**
+ * Pyth-sponsored SOL/USD PriceUpdateV2 account (shard 0). TODO(human): verify on devnet before deploy — see docs/SETUP_REMAINING.md.
+ */
+export const PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET = '7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE';
+/** Default MARKOUT_SLOTS (≈30 s at 400 ms slots). */
+export const DEFAULT_MARKOUT_SLOTS = 75n;

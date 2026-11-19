@@ -132,7 +132,7 @@
         {
           "name": "closer",
           "docs": [
-            "the score authority or the trader themself"
+            "the trader themself, or the score authority (only while the account holds no onchain evidence)"
           ],
           "signer": true
         },
@@ -628,6 +628,86 @@
       ]
     },
     {
+      "name": "settle_markout",
+      "docs": [
+        "Permissionless: score the signer-recorded pending trades of `trader` against the Pyth mid."
+      ],
+      "discriminator": [
+        44,
+        108,
+        90,
+        59,
+        159,
+        40,
+        228,
+        97
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "anyone may crank (no reward in the MVP; LPs, the keeper or the trader have the incentive)"
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "score",
+          "docs": [
+            "MUST be the PDA [\"score\", trader]: a crank cannot write one wallet's markout into another's score."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  99,
+                  111,
+                  114,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "trader"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pyth_price",
+          "docs": [
+            "full verification, staleness and confidence."
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "trader",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "swap",
       "discriminator": [
         248,
@@ -643,8 +723,10 @@
         {
           "name": "trader",
           "docs": [
-            "The trader. The fee tier is looked up from the score PDA derived from THIS key."
+            "The trader. The fee tier is looked up from the score PDA derived from THIS key.",
+            "Mutable because it pays rent for its score PDA on the first swap."
           ],
+          "writable": true,
           "signer": true
         },
         {
@@ -696,8 +778,10 @@
           "name": "trader_score",
           "docs": [
             "else's RETAIL score (the transaction fails with ConstraintSeeds). It may be uninitialised: a missing,",
-            "stale or malformed score resolves to the default tier (>= STANDARD)."
+            "stale or malformed score resolves to the default tier (>= STANDARD). Created on the first swap (payer = trader)",
+            "so the trade can be queued for onchain markout scoring."
           ],
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -754,6 +838,10 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -866,6 +954,19 @@
   ],
   "events": [
     {
+      "name": "MarkoutSettled",
+      "discriminator": [
+        117,
+        201,
+        17,
+        77,
+        120,
+        60,
+        174,
+        41
+      ]
+    },
+    {
       "name": "ScoreUpdated",
       "discriminator": [
         175,
@@ -966,7 +1067,37 @@
     {
       "code": 6014,
       "name": "CannotClose",
-      "msg": "Only the score authority or the trader can close a score"
+      "msg": "Only the trader (or the score authority, if no onchain evidence) can close a score"
+    },
+    {
+      "code": 6015,
+      "name": "OracleNotConfigured",
+      "msg": "Pyth oracle is not configured"
+    },
+    {
+      "code": 6016,
+      "name": "OracleMismatch",
+      "msg": "Oracle account is not the configured Pyth price account"
+    },
+    {
+      "code": 6017,
+      "name": "OracleInvalid",
+      "msg": "Oracle account is invalid (owner, layout, feed id, verification or price)"
+    },
+    {
+      "code": 6018,
+      "name": "OracleStale",
+      "msg": "Oracle price is stale"
+    },
+    {
+      "code": 6019,
+      "name": "OracleLowConfidence",
+      "msg": "Oracle confidence interval is too wide"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidMarkoutParams",
+      "msg": "Invalid markout parameters"
     }
   ],
   "types": [
@@ -1018,6 +1149,17 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "markout",
+            "docs": [
+              "onchain markout scoring + oracle parameters (M13)"
+            ],
+            "type": {
+              "defined": {
+                "name": "MarkoutParams"
+              }
+            }
           }
         ]
       }
@@ -1061,6 +1203,178 @@
             "type": {
               "option": "u64"
             }
+          },
+          {
+            "name": "markout",
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "MarkoutParams"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarkoutParams",
+      "docs": [
+        "Parameters of the trustless onchain markout score. Defaults mirror `DEFAULT_SCORING_CONFIG` in packages/scoring."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "markout_slots",
+            "docs": [
+              "a pending trade becomes settleable this many slots after it executed (~30 s at 400 ms)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_settle_slots",
+            "docs": [
+              "pending trades older than this are dropped unscored (nobody cranked in time)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "prior_notional",
+            "docs": [
+              "Bayesian prior K in raw quote units"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "onchain_min_notional",
+            "docs": [
+              "once settled onchain notional reaches this (and `min_trades()` settled trades), the onchain tier overrides the keeper's bootstrap score"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "toxic_bps",
+            "type": "i32"
+          },
+          {
+            "name": "toxic_min_trades",
+            "type": "u32"
+          },
+          {
+            "name": "retail_bps",
+            "type": "i32"
+          },
+          {
+            "name": "retail_min_trades",
+            "type": "u32"
+          },
+          {
+            "name": "retail_min_history_slots",
+            "type": "u64"
+          },
+          {
+            "name": "pyth_price_account",
+            "docs": [
+              "Pyth PriceUpdateV2 account for the base/quote feed (default pubkey = unconfigured → settle fails)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pyth_feed_id",
+            "docs": [
+              "expected Pyth feed id inside that account"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pyth_max_staleness_secs",
+            "type": "u64"
+          },
+          {
+            "name": "pyth_max_conf_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarkoutSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "settled",
+            "type": "u8"
+          },
+          {
+            "name": "expired",
+            "type": "u8"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "score_bps",
+            "type": "i32"
+          },
+          {
+            "name": "sum_notional",
+            "type": "u64"
+          },
+          {
+            "name": "trade_count",
+            "type": "u32"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PendingTrade",
+      "docs": [
+        "A swap waiting for its markout horizon (ring buffer entry; `notional == 0` = empty)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "exec_price",
+            "docs": [
+              "pre-fee execution price, quote per base, 1e6 fixed point"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          },
+          {
+            "name": "side",
+            "docs": [
+              "0 = buy (trader received base), 1 = sell"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "notional",
+            "docs": [
+              "quote-token amount excluding the fee, raw units"
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -1262,7 +1576,11 @@
     {
       "name": "TraderScore",
       "docs": [
-        "Toxicity score for one wallet. PDA [\"score\", trader]. Written only by the score authority."
+        "Toxicity score for one wallet. PDA [\"score\", trader].",
+        "",
+        "Two independent sources feed the fee tier (see `fairway_math::resolve_blended`):",
+        "* bootstrap: `tier/score_bps/trades/updated_slot`, written ONLY by the score authority (keeper, offchain history);",
+        "* onchain: `sum_*`, `onchain_*`, written ONLY by the program (`swap` appends, `settle_markout` scores)."
       ],
       "type": {
         "kind": "struct",
@@ -1274,14 +1592,14 @@
           {
             "name": "tier",
             "docs": [
-              "0 RETAIL, 1 STANDARD, 2 TOXIC"
+              "bootstrap tier from the keeper: 0 RETAIL, 1 STANDARD, 2 TOXIC"
             ],
             "type": "u8"
           },
           {
             "name": "score_bps",
             "docs": [
-              "notional-weighted, shrunk markout in bps (informational; the tier drives the fee)"
+              "bootstrap score (informational; the tier drives the fee)"
             ],
             "type": "i32"
           },
@@ -1296,6 +1614,62 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "sum_notional",
+            "docs": [
+              "Σ notional of settled trades (raw quote units)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "sum_weighted_markout",
+            "docs": [
+              "Σ notional × markout_bps of settled trades"
+            ],
+            "type": "i128"
+          },
+          {
+            "name": "trade_count",
+            "docs": [
+              "settled trades"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "first_slot",
+            "docs": [
+              "slot of the first recorded trade (history length for RETAIL)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "onchain_tier",
+            "type": "u8"
+          },
+          {
+            "name": "onchain_score_bps",
+            "type": "i32"
+          },
+          {
+            "name": "dropped_trades",
+            "docs": [
+              "trades not scored: buffer was full at swap time, or expired before anyone settled them"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "pending",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "PendingTrade"
+                  }
+                },
+                4
+              ]
+            }
           }
         ]
       }

@@ -1,5 +1,5 @@
-import type { PublicKey } from '@solana/web3.js';
-import { bytesEqual, discriminator, Reader } from './borsh';
+import { PublicKey } from '@solana/web3.js';
+import { bytesEqual, discriminator, Reader, type Writer } from './borsh';
 import { TIER_NAMES, type TierName } from './constants';
 
 export type ConfigAccount = {
@@ -9,7 +9,75 @@ export type ConfigAccount = {
   defaultTier: number;
   scoreTtlSlots: bigint;
   bump: number;
+  markout: MarkoutParams;
 };
+
+/** Onchain markout scoring parameters (programs/fairway/src/state.rs `MarkoutParams`). */
+export type MarkoutParams = {
+  markoutSlots: bigint;
+  maxSettleSlots: bigint;
+  priorNotional: bigint;
+  onchainMinNotional: bigint;
+  toxicBps: number;
+  toxicMinTrades: number;
+  retailBps: number;
+  retailMinTrades: number;
+  retailMinHistorySlots: bigint;
+  pythPriceAccount: PublicKey;
+  pythFeedId: Uint8Array;
+  pythMaxStalenessSecs: bigint;
+  pythMaxConfBps: number;
+};
+
+/** Program defaults (`MarkoutParams::default()`), with an optional Pyth price account + feed id. */
+export const defaultMarkoutParams = (o: Partial<MarkoutParams> = {}): MarkoutParams => ({
+  markoutSlots: 75n,
+  maxSettleSlots: 450n,
+  priorNotional: 2_000_000_000n,
+  onchainMinNotional: 1_000_000_000n,
+  toxicBps: 10,
+  toxicMinTrades: 5,
+  retailBps: 3,
+  retailMinTrades: 5,
+  retailMinHistorySlots: 648_000n,
+  pythPriceAccount: PublicKey.default,
+  pythFeedId: new Uint8Array(32),
+  pythMaxStalenessSecs: 60n,
+  pythMaxConfBps: 50,
+  ...o,
+});
+
+export const readMarkoutParams = (r: Reader): MarkoutParams => ({
+  markoutSlots: r.u64(),
+  maxSettleSlots: r.u64(),
+  priorNotional: r.u64(),
+  onchainMinNotional: r.u64(),
+  toxicBps: r.i32(),
+  toxicMinTrades: r.u32(),
+  retailBps: r.i32(),
+  retailMinTrades: r.u32(),
+  retailMinHistorySlots: r.u64(),
+  pythPriceAccount: r.pubkey(),
+  pythFeedId: r.fixed(32),
+  pythMaxStalenessSecs: r.u64(),
+  pythMaxConfBps: r.u16(),
+});
+
+export const writeMarkoutParams = (w: Writer, m: MarkoutParams): Writer =>
+  w
+    .u64(m.markoutSlots)
+    .u64(m.maxSettleSlots)
+    .u64(m.priorNotional)
+    .u64(m.onchainMinNotional)
+    .i32(m.toxicBps)
+    .u32(m.toxicMinTrades)
+    .i32(m.retailBps)
+    .u32(m.retailMinTrades)
+    .u64(m.retailMinHistorySlots)
+    .pubkey(m.pythPriceAccount)
+    .bytes(m.pythFeedId)
+    .u64(m.pythMaxStalenessSecs)
+    .u16(m.pythMaxConfBps);
 
 export type PoolAccount = {
   baseMint: PublicKey;
@@ -27,15 +95,31 @@ export type PoolAccount = {
   lpMintBump: number;
 };
 
+export type PendingTrade = { execPrice: bigint; slot: bigint; side: 'buy' | 'sell'; notional: bigint };
+
 export type TraderScoreAccount = {
   trader: PublicKey;
+  /** keeper bootstrap tier */
   tier: number;
   tierName: TierName;
   scoreBps: number;
   trades: number;
   updatedSlot: bigint;
   bump: number;
+  // onchain verified (M13)
+  sumNotional: bigint;
+  sumWeightedMarkout: bigint;
+  tradeCount: number;
+  firstSlot: bigint;
+  onchainTier: number;
+  onchainTierName: TierName;
+  onchainScoreBps: number;
+  droppedTrades: number;
+  /** non-empty pending trades awaiting settle_markout */
+  pending: PendingTrade[];
 };
+
+export const PENDING_CAP = 4;
 
 export class AccountDecodeError extends Error {}
 
@@ -53,6 +137,7 @@ export function decodeConfig(data: Uint8Array): ConfigAccount {
     defaultTier: r.u8(),
     scoreTtlSlots: r.u64(),
     bump: r.u8(),
+    markout: readMarkoutParams(r),
   };
 }
 
@@ -80,5 +165,29 @@ export function decodeTraderScore(data: Uint8Array): TraderScoreAccount {
   const r = check(data, 'TraderScore');
   const trader = r.pubkey();
   const tier = r.u8();
-  return { trader, tier, tierName: TIER_NAMES[tier] ?? 'STANDARD', scoreBps: r.i32(), trades: r.u32(), updatedSlot: r.u64(), bump: r.u8() };
+  const head = { trader, tier, tierName: TIER_NAMES[tier] ?? 'STANDARD', scoreBps: r.i32(), trades: r.u32(), updatedSlot: r.u64(), bump: r.u8() };
+  const sumNotional = r.u64();
+  const sumWeightedMarkout = r.i128();
+  const tradeCount = r.u32();
+  const firstSlot = r.u64();
+  const onchainTier = r.u8();
+  const onchainScoreBps = r.i32();
+  const droppedTrades = r.u32();
+  const pending: PendingTrade[] = [];
+  for (let i = 0; i < PENDING_CAP; i++) {
+    const p = { execPrice: r.u64(), slot: r.u64(), side: r.u8() === 0 ? ('buy' as const) : ('sell' as const), notional: r.u64() };
+    if (p.notional !== 0n) pending.push(p);
+  }
+  return {
+    ...head,
+    sumNotional,
+    sumWeightedMarkout,
+    tradeCount,
+    firstSlot,
+    onchainTier,
+    onchainTierName: TIER_NAMES[onchainTier] ?? 'STANDARD',
+    onchainScoreBps,
+    droppedTrades,
+    pending,
+  };
 }

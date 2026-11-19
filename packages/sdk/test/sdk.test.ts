@@ -28,6 +28,10 @@ import {
   scorePda,
   setScoreIx,
   setScoresBatchIx,
+  settleMarkoutIx,
+  defaultMarkoutParams,
+  writeMarkoutParams,
+  resolveBlendedTier,
   swapIx,
   swapQuote,
   updateConfigIx,
@@ -55,7 +59,8 @@ describe('IDL parity', () => {
       swap: swapIx({ trader: t, baseMint: base, quoteMint: quote, amountIn: 1n, minAmountOut: 0n, aToB: true }),
       set_score: setScoreIx({ authority: t, entry: { trader: t, tier: 0, scoreBps: 0, trades: 0 } }),
       set_scores_batch: setScoresBatchIx({ authority: t, entries: [{ trader: t, tier: 0, scoreBps: 0, trades: 0 }] }),
-      close_score: closeScoreIx({ closer: t, trader: t, scoreAuthority: t }),
+      close_score: closeScoreIx({ closer: t, trader: t }),
+      settle_markout: settleMarkoutIx({ cranker: t, trader: t, pythPriceAccount: k() }),
     };
     for (const i of idl.instructions) {
       const ix = built[i.name]!;
@@ -100,8 +105,13 @@ describe('account decoders', () => {
   it('decode Config / Pool / TraderScore', () => {
     const admin = k();
     const auth = k();
-    const cfg = new Writer().bytes(discriminator('account', 'Config')).pubkey(admin).pubkey(auth).u16(5).u16(30).u16(80).u8(1).u64(1000n).u8(254).toBytes();
+    const oracle = k();
+    const cw = new Writer().bytes(discriminator('account', 'Config')).pubkey(admin).pubkey(auth).u16(5).u16(30).u16(80).u8(1).u64(1000n).u8(254);
+    writeMarkoutParams(cw, defaultMarkoutParams({ pythPriceAccount: oracle, pythMaxConfBps: 77 }));
+    const cfg = cw.toBytes();
     expect(decodeConfig(cfg)).toMatchObject({ feeBps: [5, 30, 80], defaultTier: 1, scoreTtlSlots: 1000n, bump: 254 });
+    expect(decodeConfig(cfg).markout).toMatchObject({ markoutSlots: 75n, priorNotional: 2_000_000_000n, toxicBps: 10, pythMaxConfBps: 77 });
+    expect(decodeConfig(cfg).markout.pythPriceAccount.equals(oracle)).toBe(true);
     expect(decodeConfig(cfg).admin.equals(admin)).toBe(true);
     const keys = [k(), k(), k(), k(), k()];
     const w = new Writer().bytes(discriminator('account', 'Pool'));
@@ -115,9 +125,36 @@ describe('account decoders', () => {
     expect(pool.swaps).toEqual([6n, 7n, 8n]);
     expect(pool.lpMintBump).toBe(4);
     const tr = k();
-    const sc = new Writer().bytes(discriminator('account', 'TraderScore')).pubkey(tr).u8(2).i32(-12).u32(40).u64(99n).u8(250).toBytes();
+    const sw = new Writer().bytes(discriminator('account', 'TraderScore')).pubkey(tr).u8(2).i32(-12).u32(40).u64(99n).u8(250);
+    sw.u64(5_000n).i128(-123_456_789_012_345_678_901n).u32(6).u64(10n).u8(0).i32(-3).u32(1);
+    sw.u64(150_000_000n).u64(500n).u8(1).u64(42n); // one pending sell
+    for (let i = 0; i < 3; i++) sw.u64(0n).u64(0n).u8(0).u64(0n);
+    const sc = sw.toBytes();
     expect(decodeTraderScore(sc)).toMatchObject({ tier: 2, tierName: 'TOXIC', scoreBps: -12, trades: 40, updatedSlot: 99n });
+    expect(decodeTraderScore(sc)).toMatchObject({
+      sumNotional: 5_000n,
+      sumWeightedMarkout: -123_456_789_012_345_678_901n,
+      tradeCount: 6,
+      onchainTierName: 'RETAIL',
+      onchainScoreBps: -3,
+      droppedTrades: 1,
+      pending: [{ execPrice: 150_000_000n, slot: 500n, side: 'sell', notional: 42n }],
+    });
+    // account size matches the program's InitSpace (8 + 185 + 4 × 25)
+    expect(sc.length).toBe(8 + 32 + 1 + 4 + 4 + 8 + 1 + 8 + 16 + 4 + 8 + 1 + 4 + 4 + 4 * 25);
     expect(() => decodeTraderScore(cfg)).toThrow(/TraderScore/);
+  });
+});
+
+describe('onchain/bootstrap blend', () => {
+  it('keeper score until onchain notional reaches the threshold, then onchain wins', () => {
+    const boot = { tier: 0, updatedSlot: 90n };
+    const r = (sumNotional: bigint, pendingFull = false, trades = 5) =>
+      resolveBlendedTier({ onchain: { tier: 2, sumNotional, trades }, onchainMinNotional: 100n, minTrades: 5, bootstrap: boot, pendingFull }, 100n, 50n, 1);
+    expect(r(99n)).toEqual({ tier: 0, source: 'score' });
+    expect(r(100n)).toEqual({ tier: 2, source: 'onchain' });
+    expect(r(100n, false, 4)).toEqual({ tier: 0, source: 'score' }); // too few trades
+    expect(r(99n, true).tier).toBe(1); // full buffer: no RETAIL discount
   });
 });
 

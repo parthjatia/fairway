@@ -47,6 +47,18 @@ It prints the pool PDA and the two vault PDAs and writes `apps/web/.env.local`. 
 pnpm --filter @fairway/streams build:filter
 ```
 
+### 4b. TODO: verify the Pyth SOL/USD account for onchain scoring
+`settle_markout` reads a Pyth `PriceUpdateV2` account set in `Config.markout`. The seed script uses `PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET = 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE` (Pyth-sponsored SOL/USD, shard 0) and feed id `ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d`, both in `packages/sdk/src/constants.ts`. **These were not checked onchain.** Before the demo:
+```bash
+solana account 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE --url devnet --output json | head -20
+```
+1. The owner must be `rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ` (Pyth Solana Receiver).
+2. The feed id (bytes 41..73 of the data) must equal the SOL/USD id above. Check it against https://docs.pyth.network/price-feeds/sponsored-feeds (Solana devnet) and https://www.pyth.network/developers/price-feed-ids.
+3. If either differs, re-seed with the correct values: `PYTH_PRICE_ACCOUNT=<addr> PYTH_FEED_ID=<hex> pnpm seed:devnet` (or send `update_config` with a new `markout` struct).
+4. Settle a trade by hand to confirm: swap once, wait about 30 s, then send `settleMarkoutIx({ cranker, trader, pythPriceAccount })` from `@fairway/sdk`.
+
+For a local validator, clone the account from devnet so local settles work: `solana-test-validator --clone 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE --url devnet`. A cloned account is a snapshot, so it goes stale after 60 s and `settle_markout` will then fail with `OracleStale`. That is expected locally. The LiteSVM tests use a mock Pyth account instead.
+
 ## 5. QuickNode account and Stream
 1. Create an account at quicknode.com and redeem the hackathon plan (see the hackathon instructions).
 2. **Streams → Create Stream.** Follow `streams/STREAM_CONFIG.md` exactly:

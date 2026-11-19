@@ -17,6 +17,8 @@ pub struct ScoreView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TierSource {
     Score,
+    /// trustless onchain markout score (overrides the keeper's bootstrap score)
+    Onchain,
     Missing,
     Stale,
     Invalid,
@@ -44,4 +46,35 @@ pub fn resolve_tier(score: Option<ScoreView>, current_slot: u64, ttl_slots: u64,
 /// Validate a fee schedule: RETAIL ≤ STANDARD ≤ TOXIC ≤ MAX_FEE_BPS.
 pub fn valid_fee_schedule(fees: &[u16; NUM_TIERS]) -> bool {
     fees[0] <= fees[1] && fees[1] <= fees[2] && fees[2] <= crate::MAX_FEE_BPS
+}
+
+/// Onchain evidence for `resolve_blended`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OnchainView {
+    pub tier: u8,
+    pub sum_notional: u64,
+    pub trades: u32,
+}
+
+/// Blend the keeper's offchain score (bootstrap prior) with the onchain markout score:
+/// once the wallet's settled onchain notional reaches `onchain_min_notional` AND it has at least `min_trades`
+/// settled trades (enough for the tier rules to decide), the onchain tier wins and the keeper score is ignored
+/// (it can no longer raise OR lower the fee). Otherwise the keeper score is used as before (TTL, default tier).
+/// The trade minimum stops a known-TOXIC wallet from escaping to STANDARD with a few large trades.
+/// Onchain evidence does not expire.
+pub fn resolve_blended(
+    onchain: Option<OnchainView>,
+    onchain_min_notional: u64,
+    min_trades: u32,
+    bootstrap: Option<ScoreView>,
+    current_slot: u64,
+    ttl_slots: u64,
+    default_tier: u8,
+) -> (u8, TierSource) {
+    if let Some(o) = onchain {
+        if (o.tier as usize) < NUM_TIERS && onchain_min_notional > 0 && o.sum_notional >= onchain_min_notional && o.trades >= min_trades {
+            return (o.tier, TierSource::Onchain);
+        }
+    }
+    resolve_tier(bootstrap, current_slot, ttl_slots, default_tier)
 }

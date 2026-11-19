@@ -57,7 +57,7 @@ export function withdraw(lp: bigint, ra: bigint, rb: bigint, supply: bigint): [b
 }
 
 export type ScoreView = { tier: number; updatedSlot: bigint };
-export type TierSource = 'score' | 'missing' | 'stale' | 'invalid';
+export type TierSource = 'score' | 'onchain' | 'missing' | 'stale' | 'invalid';
 
 /** Mirrors `resolve_tier` in the program: what tier will a swap by this wallet pay right now? */
 export function resolveTier(score: ScoreView | null, currentSlot: bigint, ttlSlots: bigint, defaultTier: number): { tier: number; source: TierSource } {
@@ -66,4 +66,21 @@ export function resolveTier(score: ScoreView | null, currentSlot: bigint, ttlSlo
   if (score.tier > 2 || score.updatedSlot > currentSlot) return { tier: fallback, source: 'invalid' };
   if (currentSlot - score.updatedSlot > ttlSlots) return { tier: fallback, source: 'stale' };
   return { tier: score.tier, source: 'score' };
+}
+
+/**
+ * Mirrors `resolve_blended`: once settled onchain notional ≥ `onchainMinNotional` and trades ≥ `minTrades`, the trustless onchain tier wins;
+ * below that the keeper's bootstrap score applies (with TTL). Also mirrors the buffer-full rule in `swap`.
+ */
+export function resolveBlendedTier(
+  p: { onchain?: { tier: number; sumNotional: bigint; trades: number } | null; onchainMinNotional: bigint; minTrades: number; bootstrap: ScoreView | null; pendingFull?: boolean },
+  currentSlot: bigint,
+  ttlSlots: bigint,
+  defaultTier: number,
+): { tier: number; source: TierSource } {
+  let r: { tier: number; source: TierSource };
+  if (p.onchain && p.onchain.tier <= 2 && p.onchainMinNotional > 0n && p.onchain.sumNotional >= p.onchainMinNotional && p.onchain.trades >= p.minTrades) r = { tier: p.onchain.tier, source: 'onchain' };
+  else r = resolveTier(p.bootstrap, currentSlot, ttlSlots, defaultTier);
+  if (p.pendingFull && r.tier === 0) r = { ...r, tier: 1 };
+  return r;
 }

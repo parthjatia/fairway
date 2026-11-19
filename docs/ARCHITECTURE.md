@@ -34,11 +34,18 @@ flowchart LR
 ## Swap fee resolution (onchain)
 
 1. `trader_score` must be the PDA `["score", signer]`. A mismatch fails the seeds constraint.
-2. If the account is empty, the wrong owner or the wrong size, use STANDARD.
-3. If `current_slot − updated_slot > score_ttl_slots`, use STANDARD.
-4. Otherwise read `tier`. An invalid tier maps to STANDARD.
-5. `fee = config.fee_bps[tier]`. The fee is taken from the input, and `out = in_after_fee × reserve_out / (reserve_in + in_after_fee)`.
-6. Slippage check against `min_amount_out`, then emit `SwapExecuted`.
+2. If settled onchain notional ≥ `config.markout.onchain_min_notional` and `trade_count` ≥ min(toxic, retail) min trades (5), use `onchain_tier` (source `Onchain`). Steps 3–5 are skipped.
+3. If the account is empty, the wrong owner or the wrong size, use STANDARD.
+4. If `current_slot − updated_slot > score_ttl_slots`, use STANDARD.
+5. Otherwise read the bootstrap `tier`. An invalid tier maps to STANDARD.
+6. If the 4-entry pending buffer is full, RETAIL is raised to STANDARD.
+7. `fee = config.fee_bps[tier]`. The fee is taken from the input, and `out = in_after_fee × reserve_out / (reserve_in + in_after_fee)`.
+8. Slippage check against `min_amount_out`, then emit `SwapExecuted`.
+9. Create the score PDA if missing (payer = trader) and queue `{exec_price (pre-fee, 1e6), slot, side, notional}`.
+
+## Onchain markout settlement
+
+`settle_markout(trader)` is permissionless. It expires pending trades older than `max_settle_slots`. If any trade is at least `markout_slots` old, it validates the Pyth `PriceUpdateV2` account (address in Config, owner, discriminator, full verification, feed id, staleness, confidence), then, for each trade whose horizon is before the price's `posted_slot`: `markout = side × (mid − exec) × 10⁴ / exec` (clamped ±10,000), `Σn += n`, `Σn·m += n·m`. It then sets `onchain_score_bps = Σn·m / (Σn + K)` and `onchain_tier` from the same thresholds as `packages/scoring` (history = slots since the first trade). The math lives in `crates/fairway-math/src/markout.rs` and is mirrored in `packages/scoring/src/onchain.ts` (shared vectors).
 
 ## Data modes
 

@@ -14,6 +14,69 @@ pub struct Config {
     /// scores older than this many slots are ignored (→ default tier)
     pub score_ttl_slots: u64,
     pub bump: u8,
+    /// onchain markout scoring + oracle parameters (M13)
+    pub markout: MarkoutParams,
+}
+
+/// Parameters of the trustless onchain markout score. Defaults mirror `DEFAULT_SCORING_CONFIG` in packages/scoring.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
+pub struct MarkoutParams {
+    /// a pending trade becomes settleable this many slots after it executed (~30 s at 400 ms)
+    pub markout_slots: u64,
+    /// pending trades older than this are dropped unscored (nobody cranked in time)
+    pub max_settle_slots: u64,
+    /// Bayesian prior K in raw quote units
+    pub prior_notional: u64,
+    /// once settled onchain notional reaches this (and `min_trades()` settled trades), the onchain tier overrides the keeper's bootstrap score
+    pub onchain_min_notional: u64,
+    pub toxic_bps: i32,
+    pub toxic_min_trades: u32,
+    pub retail_bps: i32,
+    pub retail_min_trades: u32,
+    pub retail_min_history_slots: u64,
+    /// Pyth PriceUpdateV2 account for the base/quote feed (default pubkey = unconfigured → settle fails)
+    pub pyth_price_account: Pubkey,
+    /// expected Pyth feed id inside that account
+    pub pyth_feed_id: [u8; 32],
+    pub pyth_max_staleness_secs: u64,
+    pub pyth_max_conf_bps: u16,
+}
+
+impl Default for MarkoutParams {
+    fn default() -> Self {
+        Self {
+            markout_slots: 75,
+            max_settle_slots: 450,
+            prior_notional: 2_000_000_000,
+            onchain_min_notional: 1_000_000_000,
+            toxic_bps: 10,
+            toxic_min_trades: 5,
+            retail_bps: 3,
+            retail_min_trades: 5,
+            retail_min_history_slots: 648_000,
+            pyth_price_account: Pubkey::default(),
+            pyth_feed_id: [0u8; 32],
+            pyth_max_staleness_secs: 60,
+            pyth_max_conf_bps: 50,
+        }
+    }
+}
+
+impl MarkoutParams {
+    /// settled trades needed before the onchain tier overrides the keeper (the smaller tier trade minimum)
+    pub fn min_trades(&self) -> u32 {
+        self.toxic_min_trades.min(self.retail_min_trades)
+    }
+    pub fn tier_params(&self) -> fairway_math::markout::TierParams {
+        fairway_math::markout::TierParams {
+            prior_notional: self.prior_notional,
+            toxic_bps: self.toxic_bps,
+            toxic_min_trades: self.toxic_min_trades,
+            retail_bps: self.retail_bps,
+            retail_min_trades: self.retail_min_trades,
+            retail_min_history_slots: self.retail_min_history_slots,
+        }
+    }
 }
 
 /// A constant-product pool. PDA ["pool", base_mint, quote_mint].
@@ -42,16 +105,72 @@ pub struct Pool {
     pub lp_mint_bump: u8,
 }
 
-/// Toxicity score for one wallet. PDA ["score", trader]. Written only by the score authority.
+/// A swap waiting for its markout horizon (ring buffer entry; `notional == 0` = empty).
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, Default, PartialEq, Eq, InitSpace)]
+pub struct PendingTrade {
+    /// pre-fee execution price, quote per base, 1e6 fixed point
+    pub exec_price: u64,
+    pub slot: u64,
+    /// 0 = buy (trader received base), 1 = sell
+    pub side: u8,
+    /// quote-token amount excluding the fee, raw units
+    pub notional: u64,
+}
+
+pub const PENDING_CAP: usize = 4;
+
+/// Toxicity score for one wallet. PDA ["score", trader].
+///
+/// Two independent sources feed the fee tier (see `fairway_math::resolve_blended`):
+/// * bootstrap: `tier/score_bps/trades/updated_slot`, written ONLY by the score authority (keeper, offchain history);
+/// * onchain: `sum_*`, `onchain_*`, written ONLY by the program (`swap` appends, `settle_markout` scores).
 #[account]
 #[derive(InitSpace)]
 pub struct TraderScore {
     pub trader: Pubkey,
-    /// 0 RETAIL, 1 STANDARD, 2 TOXIC
+    /// bootstrap tier from the keeper: 0 RETAIL, 1 STANDARD, 2 TOXIC
     pub tier: u8,
-    /// notional-weighted, shrunk markout in bps (informational; the tier drives the fee)
+    /// bootstrap score (informational; the tier drives the fee)
     pub score_bps: i32,
     pub trades: u32,
     pub updated_slot: u64,
     pub bump: u8,
+    // ---- onchain verified (M13)
+    /// Σ notional of settled trades (raw quote units)
+    pub sum_notional: u64,
+    /// Σ notional × markout_bps of settled trades
+    pub sum_weighted_markout: i128,
+    /// settled trades
+    pub trade_count: u32,
+    /// slot of the first recorded trade (history length for RETAIL)
+    pub first_slot: u64,
+    pub onchain_tier: u8,
+    pub onchain_score_bps: i32,
+    /// trades not scored: buffer was full at swap time, or expired before anyone settled them
+    pub dropped_trades: u32,
+    pub pending: [PendingTrade; PENDING_CAP],
+}
+
+impl TraderScore {
+    pub fn new(trader: Pubkey, bump: u8) -> Self {
+        Self {
+            trader,
+            tier: fairway_math::TIER_STANDARD,
+            score_bps: 0,
+            trades: 0,
+            updated_slot: 0,
+            bump,
+            sum_notional: 0,
+            sum_weighted_markout: 0,
+            trade_count: 0,
+            first_slot: 0,
+            onchain_tier: fairway_math::TIER_STANDARD,
+            onchain_score_bps: 0,
+            dropped_trades: 0,
+            pending: [PendingTrade::default(); PENDING_CAP],
+        }
+    }
+    pub fn pending_full(&self) -> bool {
+        self.pending.iter().all(|p| p.notional != 0)
+    }
 }

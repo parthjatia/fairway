@@ -42,6 +42,14 @@ describe('diffScores', () => {
     const stale = diffScores(desired, on, { currentSlot: 1600n, ttlSlots: 1000n });
     expect(stale.find((x) => x.trader === a)?.reason).toBe('refresh');
   });
+  it('skips onchain-verified wallets (the trustless score overrides the bootstrap)', () => {
+    const on = new Map<string, OnchainScore | null>([
+      [b, { tier: 0, scoreBps: 0, trades: 5, updatedSlot: 1n, onchainVerified: true }],
+      [c, { tier: 2, scoreBps: 20, trades: 9, updatedSlot: 1n, onchainVerified: true }],
+    ]);
+    const u = diffScores(desired, on, { currentSlot: 5000n, ttlSlots: 1000n });
+    expect(u.find((x) => x.trader === b || x.trader === c)).toBeUndefined();
+  });
   it('chunk caps batches at 10', () => {
     expect(chunk([...Array(23).keys()], 50).map((x) => x.length)).toEqual([10, 10, 3]);
     expect(chunk([...Array(5).keys()], 2).map((x) => x.length)).toEqual([2, 2, 1]);

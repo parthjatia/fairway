@@ -2,7 +2,14 @@ import type { Tier } from '@fairway/scoring';
 import { toOnchainScore } from '@fairway/scoring';
 
 export type DesiredScore = { trader: string; tier: Tier; scoreBps: number; trades: number };
-export type OnchainScore = { tier: 0 | 1 | 2; scoreBps: number; trades: number; updatedSlot: bigint };
+export type OnchainScore = {
+  tier: 0 | 1 | 2;
+  scoreBps: number;
+  trades: number;
+  updatedSlot: bigint;
+  /** settled onchain notional ≥ onchain_min_notional and enough settled trades: the program ignores the bootstrap score (M13) */
+  onchainVerified?: boolean;
+};
 export type Update = { trader: string; tier: 0 | 1 | 2; scoreBps: number; trades: number; reason: 'new' | 'tier-change' | 'refresh' | 'downgrade-to-standard' };
 
 export type DiffOptions = {
@@ -20,6 +27,7 @@ const PRIORITY: Record<number, number> = { 2: 0, 0: 1, 1: 2 }; // TOXIC first (p
  *  - wallet unknown onchain and desired RETAIL/TOXIC → write ('new')
  *  - tier differs → write ('tier-change', or 'downgrade-to-standard')
  *  - same non-STANDARD tier but older than refreshFraction × TTL → write ('refresh') so it never goes stale
+ *  - wallet already onchain-verified → skip: the trustless markout score overrides the bootstrap, a write is wasted rent/fees
  */
 export function diffScores(desired: DesiredScore[], onchain: Map<string, OnchainScore | null>, o: DiffOptions): Update[] {
   const refreshAfter = BigInt(Math.floor(Number(o.ttlSlots) * (o.refreshFraction ?? 0.5)));
@@ -31,6 +39,7 @@ export function diffScores(desired: DesiredScore[], onchain: Map<string, Onchain
       if (want.tier !== 1) out.push({ trader: d.trader, ...want, reason: 'new' });
       continue;
     }
+    if (cur.onchainVerified) continue;
     if (cur.tier !== want.tier) {
       out.push({ trader: d.trader, ...want, reason: want.tier === 1 ? 'downgrade-to-standard' : 'tier-change' });
       continue;

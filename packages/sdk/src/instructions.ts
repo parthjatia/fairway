@@ -3,6 +3,7 @@ import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-tok
 import { discriminator, Writer } from './borsh';
 import { MAX_BATCH, PROGRAM_ID, type TierIndex } from './constants';
 import { configPda, poolAddresses, scorePda } from './pda';
+import { writeMarkoutParams, type MarkoutParams } from './accounts';
 
 const w = (k: PublicKey, isWritable = false, isSigner = false): AccountMeta => ({ pubkey: k, isWritable, isSigner });
 const ix = (programId: PublicKey, keys: AccountMeta[], name: string, args: (w: Writer) => void = () => {}) => {
@@ -26,6 +27,7 @@ export type ConfigUpdate = {
   feeBps?: [number, number, number];
   defaultTier?: TierIndex;
   scoreTtlSlots?: bigint | number;
+  markout?: MarkoutParams;
 };
 
 export function updateConfigIx(p: { admin: PublicKey; update: ConfigUpdate; programId?: PublicKey }) {
@@ -37,6 +39,7 @@ export function updateConfigIx(p: { admin: PublicKey; update: ConfigUpdate; prog
     wr.option(u.feeBps, (x, v) => v.forEach((f) => x.u16(f)));
     wr.option(u.defaultTier, (x, v) => x.u8(v));
     wr.option(u.scoreTtlSlots, (x, v) => x.u64(v));
+    wr.option(u.markout, (x, v) => writeMarkoutParams(x, v));
   });
 }
 
@@ -123,10 +126,10 @@ export function swapIx(p: SwapParams) {
   return ix(
     programId,
     [
-      w(p.trader, false, true),
+      w(p.trader, true, true),
       w(configPda(programId)[0]),
       w(a.pool, true),
-      w(p.scoreAccountOverride ?? scorePda(p.trader, programId)[0]),
+      w(p.scoreAccountOverride ?? scorePda(p.trader, programId)[0], true),
       w(p.baseMint),
       w(p.quoteMint),
       w(a.baseVault, true),
@@ -134,6 +137,7 @@ export function swapIx(p: SwapParams) {
       w(p.traderBase ?? getAssociatedTokenAddressSync(p.baseMint, p.trader), true),
       w(p.traderQuote ?? getAssociatedTokenAddressSync(p.quoteMint, p.trader), true),
       w(TOKEN_PROGRAM_ID),
+      w(SystemProgram.programId),
     ],
     'swap',
     (wr) => wr.u64(p.amountIn).u64(p.minAmountOut).bool(p.aToB),
@@ -169,7 +173,19 @@ export function setScoresBatchIx(p: { authority: PublicKey; entries: ScoreEntry[
   );
 }
 
-export function closeScoreIx(p: { closer: PublicKey; trader: PublicKey; scoreAuthority: PublicKey; programId?: PublicKey }) {
+/** Rent is refunded to the trader. The score authority may close only accounts without onchain evidence. */
+export function closeScoreIx(p: { closer: PublicKey; trader: PublicKey; programId?: PublicKey }) {
   const programId = p.programId ?? PROGRAM_ID;
-  return ix(programId, [w(p.closer, false, true), w(configPda(programId)[0]), w(scorePda(p.trader, programId)[0], true), w(p.scoreAuthority, true)], 'close_score');
+  return ix(programId, [w(p.closer, false, true), w(configPda(programId)[0]), w(scorePda(p.trader, programId)[0], true), w(p.trader, true)], 'close_score');
+}
+
+/** Permissionless crank: score `trader`'s pending trades against the configured Pyth price account. */
+export function settleMarkoutIx(p: { cranker: PublicKey; trader: PublicKey; pythPriceAccount: PublicKey; scoreAccountOverride?: PublicKey; programId?: PublicKey }) {
+  const programId = p.programId ?? PROGRAM_ID;
+  return ix(
+    programId,
+    [w(p.cranker, false, true), w(configPda(programId)[0]), w(p.scoreAccountOverride ?? scorePda(p.trader, programId)[0], true), w(p.pythPriceAccount)],
+    'settle_markout',
+    (wr) => wr.pubkey(p.trader),
+  );
 }
