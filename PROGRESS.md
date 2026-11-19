@@ -1,15 +1,15 @@
 # PROGRESS.md
 
 ## Current state / next step
-M0–M3 done. Next: M4 math crate + Anchor program.
+M0–M5 done. Next: M6 parser + Streams filter.
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
 - [x] **M1 Scoring package:** types, markout, shrinkage, tiers, MidPriceProviders, tests green
 - [x] **M2 Fixtures:** deterministic generator (agents, CEX path, swaps, getBlock-shaped blocks incl. edge cases)
 - [x] **M3 Simulator and backtest:** regimes, metrics, sweep grid, recommended params, chart export
-- [ ] **M4 Math crate and Anchor program:** accounts, instructions, events, security checks, tests green (or the Section 5.6 fallback)
-- [ ] **M5 SDK:** PDAs, instruction builders, account decoders, typed errors, tests
+- [x] **M4 Math crate and Anchor program:** accounts, instructions, events, security checks, tests green (or the Section 5.6 fallback)
+- [x] **M5 SDK:** PDAs, instruction builders, account decoders, typed errors, tests
 - [ ] **M6 Parser and Streams filter:** shared logic, filter.js, tests against fixtures, STREAM_CONFIG.md
 - [ ] **M7 Ingest service:** webhook, SQLite, recompute, read APIs, fixture mode, tests
 - [ ] **M8 Keeper:** diffing, batching, dry-run/local/devnet modes, tests
@@ -36,4 +36,4 @@ M0–M3 done. Next: M4 math crate + Anchor program.
 - node v24.22.3, pnpm 12.21.0, typescript 6.0.3
 - rustc/cargo 1.100.0 (rustup, user-level)
 - solana-cli 4.4.1 (Agave, user-level)
-- anchor: installing via avm (see DECISIONS.md)
+- anchor-cli 1.2.2 (avm), platform-tools v1.57; LiteSVM tests

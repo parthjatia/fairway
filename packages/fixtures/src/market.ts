@@ -83,8 +83,8 @@ export const PROGRAMS = {
   vote: 'Vote111111111111111111111111111111111111111',
   raydiumAmm: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
   orcaWhirlpool: 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
-  /** placeholder until `anchor keys sync`; overridden by fixtures generator if provided */
-  fairway: 'FAiRwAyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+  /** Fairway program id (programs/fairway, Anchor.toml); override via FAIRWAY_PROGRAM_ID when regenerating */
+  fairway: '8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk',
 };
 
 export type CexPath = { start: number; stepSec: number; prices: number[] };

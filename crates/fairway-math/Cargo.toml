@@ -1,0 +1,11 @@
+[package]
+name = "fairway-math"
+version = "0.1.0"
+description = "Pure, integer-only AMM math and fee-tier logic for the Fairway program (no Solana deps, testable with plain cargo)"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "fairway_math"
+
+[dependencies]

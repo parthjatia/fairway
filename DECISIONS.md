@@ -20,3 +20,10 @@ One line per decision: date — decision — why.
 - 2026-11-19 — Honest headline framing: a flat fee sets BOTH the retail price and the LVR no-arb band. We report Fairway vs flat 30 (same band: retail saves ~18 bps, LPs give up ~that as a transfer) AND vs flat 5 (same retail price: LPs keep ~$500/day more). Worst case (rotation) lands on the flat-fee curve — documented, not hidden.
 - 2026-11-19 — Staleness bound for "recommended" = max(60 bps, 3 × baseline p95); sweep picks max LP PnL s.t. retail cost ≤ baseline and p95 ≤ bound (spec rule).
 - 2026-11-19 — Charts are hand-written SVG (no chart lib), palette validated with the dataviz validator; PNG copies via optional `sharp`.
+- 2026-11-19 — Anchor 1.2.2 (avm latest) + Agave 4.4.1 installed fine; no fallback needed. Program tests use LiteSVM 0.15 (Anchor's template default) in Rust; Cargo.lock seeded from the Anchor template to pin a LiteSVM-compatible dependency graph.
+- 2026-11-19 — Program id 8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk from a throwaway keypair in .keys/ (gitignored, copied to target/deploy). Fresh clones without it: run `anchor keys sync` (documented in SETUP_REMAINING).
+- 2026-11-19 — Wrong-signer protection: `trader_score` is an UncheckedAccount with `seeds = ["score", trader.key()]`, so passing another wallet's PDA fails with ConstraintSeeds (2006) rather than silently downgrading; a missing/stale/malformed account resolves to default tier (clamped ≥ STANDARD).
+- 2026-11-19 — MIN_LIQUIDITY (1000 LP units) is tracked as virtual supply (`pool.lp_supply`) rather than minted to a burn account — same economics, one fewer account.
+- 2026-11-19 — Fees stay in the vaults (k grows); per-tier cumulative fees/swaps are tracked on the Pool for transparency. close_score rent always returns to the score authority (who paid).
+- 2026-11-19 — Score writes: `set_score` uses init_if_needed; `set_scores_batch` creates PDAs manually (transfer+allocate+assign) from remaining_accounts, max 10/tx.
+- 2026-11-19 — SDK is hand-written on @solana/web3.js 1.99 (wallet-adapter peer) with a minimal Borsh codec; IDL committed at packages/sdk/idl/fairway.json and tests assert byte-level parity.
