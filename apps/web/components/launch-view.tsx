@@ -56,6 +56,12 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
 
   const run = compare === 'fairway' ? v.fairway : compare === 'bundle' ? v.bundle : v.decay;
   const buyers = useMemo(() => buyersAt(v, run, slot), [v, run, slot]);
+  // bundle wallets that buy in the plain Fairway run but stay out once detection charges them TOXIC
+  const bundleKeptOut = useMemo(() => {
+    const ids = (r: typeof run) => new Set(r.trades.filter((t) => t.agent === 'bundler').map((t) => t.wallet));
+    const inBundle = ids(v.bundle);
+    return [...ids(v.fairway)].filter((w) => !inBundle.has(w)).length;
+  }, [v]);
   const shareFw = sniperShareAt(v.fairway, Math.min(slot, W - 1), W);
   const shareDc = sniperShareAt(v.decay, Math.min(slot, W - 1), W);
   const shareBd = sniperShareAt(v.bundle, Math.min(slot, W - 1), W);
@@ -201,6 +207,12 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
               </tbody>
             </table>
           </div>
+        )}
+        {compare === 'bundle' && bundleKeptOut > 0 && (
+          <p className="mt-3 rounded-lg border border-[color:var(--s-bundle)] px-3 py-2 text-[13px] text-ink-2">
+            <span className="font-semibold text-[color:var(--s-bundle)]">{bundleKeptOut} bundle wallets kept out.</span> Their funder bundled earlier launches, so the keeper flagged them before the launch and they face
+            the TOXIC curve. Under plain Fairway they buy as fresh STANDARD wallets.
+          </p>
         )}
         <p className="mt-3 text-[12px] leading-relaxed text-muted">
           Onchain verified: the tier comes from the wallet’s own settled Fairway trades (Pyth or pool TWAP markouts). Bootstrap score: from history the keeper scored with QuickNode Streams (Pump.fun, Raydium). No score yet: a fresh

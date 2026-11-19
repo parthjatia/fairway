@@ -355,7 +355,7 @@ pnpm demo            # offline: fixtures → sim → ingest (fixture mode) → w
 # open http://localhost:3000
 ```
 
-Pages: `/` landing · **`/launch`** (create wizard + demo launches) · **`/launch/frog`**, `/launch/sols`, `/launch/pie` (launch replays) · `/backtest` (launch study by default, liquid-pair sweep in the second tab) · `/wallet/[address]` · `/how-it-works` · liquid pair: `/swap` (persona switcher: Retail Rita, New wallet, Arb Bot 7) and `/pool`.
+Pages: `/` landing · **`/launch`** (create wizard + demo launches) · **`/launch/frog`**, `/launch/sols`, `/launch/pie`, `/launch/cat` (launch replays; CAT has a bundle) · `/backtest` (launch study by default, liquid-pair sweep in the second tab) · `/wallet/[address]` · `/how-it-works` · liquid pair: `/swap` (persona switcher: Retail Rita, New wallet, Arb Bot 7) and `/pool`.
 
 Other commands:
 

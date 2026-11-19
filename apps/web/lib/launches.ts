@@ -26,11 +26,13 @@ export type LaunchSpec = {
 
 export const TIER_OF: Record<TierIdx, Tier> = { 0: 'RETAIL', 1: 'STANDARD', 2: 'TOXIC' };
 
-/** Demo launches (seeds picked from the 200-launch study: each has snipers, and some have a bundle). */
+/** Demo launches (seeds picked from the 200-launch study: each has snipers; CAT has a bundle that buys). */
 export const DEMO_LAUNCHES: LaunchSpec[] = [
   { id: 'frog', name: 'Fairway Frog', symbol: 'FROG', supply: 1_000_000_000, poolPct: 80, liquidityUsd: 24_000, windowMin: 5, seed: 5, createdBy: 'demo', createdAt: 1_763_560_000 },
   { id: 'sols', name: 'Solstice', symbol: 'SOLS', supply: 1_000_000_000, poolPct: 80, liquidityUsd: 15_000, windowMin: 5, seed: 31, createdBy: 'demo', createdAt: 1_763_550_000 },
   { id: 'pie', name: 'Moonpie', symbol: 'PIE', supply: 500_000_000, poolPct: 90, liquidityUsd: 32_000, windowMin: 3, seed: 3, createdBy: 'demo', createdAt: 1_763_540_000 },
+  // a bundle whose funder is a known bundler: 7 bundle wallets buy under plain Fairway, none with bundle detection
+  { id: 'cat', name: 'Copycat', symbol: 'CAT', supply: 1_000_000_000, poolPct: 80, liquidityUsd: 20_000, windowMin: 5, seed: 9, createdBy: 'demo', createdAt: 1_763_530_000 },
 ];
 
 export const SLOT_SEC = 0.4;
