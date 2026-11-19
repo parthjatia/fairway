@@ -321,3 +321,10 @@ describe('launch fee schedule (mirrors crates/fairway-math launch.rs)', () => {
     expect(poolTwap(t, 5n, 15n)).toBe(200n);
   });
 });
+
+describe('verified addresses (2026-11-19)', () => {
+  it('uses exactly the verified devnet Pyth SOL/USD account', async () => {
+    const c = await import('../src/constants');
+    expect(c.PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET).toBe('7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE');
+  });
+});

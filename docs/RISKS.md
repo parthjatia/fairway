@@ -2,7 +2,7 @@
 
 **The program is unaudited and was only tested with LiteSVM and unit tests. Do not use real funds.**
 
-Launch-specific risks (M16) are in [§1d TWAP manipulation](#1d-pool-twap-as-the-markout-price-launch-tokens-m16) and [§10](#10-launch-specific-risks-m16): fresh-wallet Sybils, bundlers, unverified Pump.fun program IDs, false TOXIC labels, memecoin perception and launch configuration.
+Launch-specific risks (M16) are in [§1d TWAP manipulation](#1d-pool-twap-as-the-markout-price-launch-tokens-m16) and [§10](#10-launch-specific-risks-m16): fresh-wallet Sybils, bundlers, Pump.fun account-layout assumptions, false TOXIC labels, memecoin perception and launch configuration.
 
 ## 1. Score-oracle trust
 The `score_authority` (a keeper key) writes the **bootstrap** fields of `TraderScore` accounts. A compromised or malicious keeper could mark bots RETAIL (LPs lose fees) or retail TOXIC (users pay more), **but only for wallets without enough onchain evidence**.
@@ -53,7 +53,7 @@ The signer is the end user, and the tier follows the signer. Aggregator programs
 - External-venue execution prices are approximated using a configured pool fee (CLMM and dynamic-fee pools vary).
 - Multi-hop or multi-pool transactions: each configured pool is evaluated separately by vault deltas. Atomic arbs across two venues appear as two swaps, which is intended.
 - Matching is by vault balance deltas, so liquidity actions are ignored by direction, but unusual transactions (e.g. a swap and a deposit in the same transaction) can be misclassified.
-- The Raydium vault addresses in `pools.config.json` were entered from memory and **must be verified**.
+- The Raydium vault addresses in `pools.config.json` were checked on mainnet on 2026-11-19.
 - Offchain markouts use the pool-implied mid in live mode. It is noisy for illiquid pools, and offchain Pyth support (`PythMidPrice`) is only a stub. The onchain score uses Pyth directly.
 
 ## 5. Liquidity fragmentation
@@ -81,8 +81,8 @@ A sniper who has never sniped before, or who uses a new wallet for every launch,
 ### 10b. Bundlers
 A bundler buys the first slots through several fresh wallets in one bundle (in the sim: ~$6k over 3–8 wallets in half the launches). Each wallet is new, so each pays STANDARD. **Not detected today.** The sniper scorer looks at each wallet's history across launches, not at who funded it. Future work: funding-graph features (wallets funded from one source shortly before a launch inherit that source's tier), a per-launch cap on STANDARD-tier buys in the first N slots, and Jito-bundle awareness. The fee payer is the trader in our parser, so a bundle with one fee payer for many buyers is attributed to that payer.
 
-### 10c. Unverified program IDs and account layout
-`streams/pumpfun-filter.js` matches Pump.fun (`6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`) and PumpSwap (`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`). **Both are marked VERIFY: they were written from memory and have not been checked onchain in this repo.** The filter also assumes the account layout: Pump.fun keeps SOL as lamports in the bonding-curve account, and PumpSwap pools hold WSOL in a token account. It was tested on synthetic blocks only. If a program ID is wrong, the filter matches nothing (fail-closed: no false TOXIC labels). If the layout differs, trades may be mis-sized. Checking steps are in `streams/STREAM_CONFIG.md` §Pump.fun. Run the dashboard's "Run test" on a known Pump.fun slot before trusting the scores.
+### 10c. Program IDs and account layout
+`streams/pumpfun-filter.js` matches Pump.fun (`6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`) and PumpSwap (`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`). Both were verified onchain on 2026-11-19. The filter also assumes the account layout: Pump.fun keeps SOL as lamports in the bonding-curve account, and PumpSwap pools hold WSOL in a token account. It was tested on synthetic blocks only. If a program is ever redeployed to a new ID, the filter matches nothing (fail-closed: no false TOXIC labels). If the layout differs, trades may be mis-sized. Re-check steps are in `streams/STREAM_CONFIG.md` §Program IDs. Run the dashboard's "Run test" on a known Pump.fun slot before trusting the scores.
 
 ### 10d. False TOXIC labels on humans
 A human who happens to buy early in three or more launches that then pump could be labelled TOXIC. Mitigations: the ≥ 3 distinct launches rule, a 500 bps shrunk-score threshold with K = 5 SOL of prior notional (small early buys barely move it), the keeper's TTL (a label expires unless refreshed), and onchain-verified scores taking over once a wallet has settled flow on Fairway. The damage is bounded: a higher fee during the launch window, never lost funds.

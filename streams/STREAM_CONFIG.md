@@ -50,16 +50,16 @@ Solana devnet  ──► Stream B (Block) ──► filter.js ──────
 | Batch size | 1–10 blocks. Compression off or gzip. |
 | Reorgs | Default handling; ingest is idempotent on `(sig, mint, kind)`. |
 
-### Program IDs: VERIFY before going live
+### Program IDs (verified 2026-11-19)
 
-The filter matches transactions that invoke these programs. **They were written from memory and have not been checked onchain in this repo.** They also appear in `packages/parser/src/pumpfun.ts` (`PUMP_PROGRAMS`), and a test asserts the two copies match.
+The filter matches transactions that invoke these programs. **Both were verified onchain on 2026-11-19.** They also appear in `packages/parser/src/pumpfun.ts` (`PUMP_PROGRAMS`), and a test asserts the two copies match.
 
-| Program | ID (VERIFY) | How to check |
+| Program | ID (verified 2026-11-19) | How to re-check |
 |---|---|---|
 | Pump.fun bonding curve | `6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P` | Open any token on pump.fun → its Solscan link → a recent "Buy" transaction → "Instructions": the invoked program id. Or `solana account 6EF8… --url mainnet-beta` should show `Executable: true`. |
 | PumpSwap AMM (graduated tokens) | `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA` | Open a token that "graduated" (pump.fun shows it trading on PumpSwap) → a recent swap on Solscan → invoked program id. |
 
-If either differs, edit the `PROGRAMS` block at the top of `pumpfun-filter.js` in the dashboard (and `PUMP_PROGRAMS` in the repo), then rebuild with `pnpm --filter @fairway/streams build:filter`.
+If either ever changes (for example a program upgrade to a new address), edit the `PROGRAMS` block at the top of `pumpfun-filter.js` in the dashboard (and `PUMP_PROGRAMS` in the repo), then rebuild with `pnpm --filter @fairway/streams build:filter`.
 
 ### Filter logic (per transaction)
 

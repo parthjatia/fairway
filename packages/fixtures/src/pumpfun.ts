@@ -3,7 +3,7 @@
  * with recurring sniper wallets (buy in the first slots, sell into the crowd), retail buyers, a one-off lucky early buyer,
  * PumpSwap trades after "graduation", and edge cases (failed tx, non-Pump tx, ALT-loaded curve accounts, create without a
  * dev buy). Deterministic (seeded). ADDITIVE: written to data/pumpfun.json; no other fixture is touched.
- * Synthetic data: addresses are random, the program ids are the (VERIFY) mainnet ids from packages/parser/src/pumpfun.ts.
+ * Synthetic data: addresses are random, the program ids are the verified mainnet ids from packages/parser/src/pumpfun.ts.
  */
 import { base58Encode } from './base58';
 import { Rng } from './rng';

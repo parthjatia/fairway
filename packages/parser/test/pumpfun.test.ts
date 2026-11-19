@@ -6,8 +6,10 @@ import { parsePumpPayload, parsePumpTransaction, PUMP_PROGRAMS } from '../src';
 const fx = loadPumpfun();
 
 describe('Pump.fun / PumpSwap parser', () => {
-  it('uses the same (VERIFY) program ids as the fixture', () => {
+  it('uses the verified mainnet program ids, same as the fixture', () => {
     expect(PUMP_PROGRAMS).toEqual(fx.programs);
+    // Verified onchain 2026-11-19: the code must use exactly these.
+    expect(PUMP_PROGRAMS).toEqual({ pumpfun: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P', pumpswap: 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA' });
   });
   it('extracts exactly the expected launch trades from fixture blocks', () => {
     expect(parsePumpPayload(fx.blocks)).toEqual(fx.expected);

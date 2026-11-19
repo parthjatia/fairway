@@ -11,15 +11,13 @@
  *     as lamports in the bonding-curve account). Platform fees go to a fee recipient, so this is the pre-fee SOL amount.
  * A `create` record is emitted when the logs show Pump.fun's Create instruction (launch slot for that mint).
  *
- * PROGRAM IDS ARE MARKED VERIFY: they were written from memory, not checked onchain here. How to check: open a recent
- * Pump.fun trade on an explorer (e.g. solscan.io → a token page on pump.fun → any "Buy" transaction) and compare the
- * invoked program id; for PumpSwap, open a graduated token's pool trade. See streams/STREAM_CONFIG.md §Pump.fun.
+ * Program ids verified onchain 2026-11-19 (mainnet). See streams/STREAM_CONFIG.md §Program IDs.
  */
 import { accountKeysOf, blocksFromPayload } from './core';
 
 export type PumpPrograms = { pumpfun: string; pumpswap: string };
 
-/** VERIFY: Pump.fun bonding-curve program and PumpSwap AMM program (mainnet). */
+/** Pump.fun bonding-curve program and PumpSwap AMM program (mainnet, verified 2026-11-19). */
 export const PUMP_PROGRAMS: PumpPrograms = {
   pumpfun: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
   pumpswap: 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',

@@ -74,7 +74,7 @@ async function main() {
   await send([initializeConfigIx({ admin: admin.publicKey, scoreAuthority: authority.publicKey, feeBps: [30, 30, 80], scoreTtlSlots: 2_000_000 })], [admin]).catch((e) => console.warn('config:', String(e).split('\n')[0]));
   await send([createPoolIx({ payer: admin.publicKey, baseMint: base, quoteMint: quote })], [admin]);
   // Onchain markout scoring is per pool: point this pool at Pyth SOL/USD (override with PYTH_PRICE_ACCOUNT / PYTH_FEED_ID; on a
-  // local validator clone the account from devnet, see docs/SETUP_REMAINING.md). TODO(human): verify the account on devnet first.
+  // local validator clone the account from devnet, see docs/SETUP_REMAINING.md). The account was verified 2026-11-19.
   // A pool without an oracle still trades; it just does not build onchain evidence.
   const pyth = new PublicKey(process.env.PYTH_PRICE_ACCOUNT || PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET);
   const feedId = Uint8Array.from(Buffer.from(process.env.PYTH_FEED_ID || PYTH_SOL_USD_FEED_ID, 'hex'));

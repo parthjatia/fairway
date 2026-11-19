@@ -36,7 +36,7 @@
 
 8. **Couldn't you wrongly label a human TOXIC?** A human would have to buy in the first ~10 s of three or more launches that then pumped. That is sniping behaviour, whatever is behind it. The damage is bounded: a higher fee in the window, never lost funds. Labels expire, and onchain-verified scores take over once the wallet trades on Fairway.
 
-9. **Is the Pump.fun data real?** The filter and scorer are real, tested code, but tested on synthetic `getBlock`-shaped blocks. The Pump.fun and PumpSwap program IDs are marked **VERIFY** in the repo (written from memory, not yet checked onchain), and no live Stream has run. If an ID were wrong, the filter would match nothing: fail-closed, no false labels.
+9. **Is the Pump.fun data real?** The filter and scorer are real, tested code, but tested on synthetic `getBlock`-shaped blocks. The Pump.fun and PumpSwap program IDs were verified onchain on 2026-11-19, but no live Stream has run yet. The filter matches on those program IDs only, so an unexpected transaction shape is skipped rather than labelled.
 
 10. **How does the protocol make money?** A 0.05 SOL launch fee per launch (paid to the treasury by non-admin creators in `configure_launch`), plus 15% of the toxic premium (the TOXIC fee above STANDARD) on every pool. Next: licensing scores via `getFeeTier` to other DEXes, launchpads and wallets.
 

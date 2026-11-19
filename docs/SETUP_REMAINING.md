@@ -47,15 +47,10 @@ It prints the pool PDA and the two vault PDAs and writes `apps/web/.env.local`. 
 pnpm --filter @fairway/streams build:filter
 ```
 
-### 4b. TODO: verify the Pyth SOL/USD account for onchain scoring
-`settle_markout` reads a Pyth `PriceUpdateV2` account set **per pool** with `set_pool_oracle` (the seed script does this for the SOL pool). A pool without an oracle still trades but builds no onchain evidence, which is the case for BONK-test (a test mint has no Pyth feed). The seed script uses `PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET = 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE` (Pyth-sponsored SOL/USD, shard 0) and feed id `ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d`, both in `packages/sdk/src/constants.ts`. **These were not checked onchain.** Before the demo:
-```bash
-solana account 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE --url devnet --output json | head -20
-```
-1. The owner must be `rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ` (Pyth Solana Receiver).
-2. The feed id (bytes 41..73 of the data) must equal the SOL/USD id above. Check it against https://docs.pyth.network/price-feeds/sponsored-feeds (Solana devnet) and https://www.pyth.network/developers/price-feed-ids.
-3. If either differs, re-seed with the correct values: `PYTH_PRICE_ACCOUNT=<addr> PYTH_FEED_ID=<hex> pnpm seed:devnet` (or send `setPoolOracleIx({ admin, baseMint, quoteMint, priceAccount, feedId })` for the existing pool).
-4. Settle a trade by hand to confirm: swap once, wait about 30 s, then send `settleMarkoutIx({ cranker, trader, baseMint, quoteMint, pythPriceAccount })` from `@fairway/sdk`.
+### 4b. Pyth SOL/USD account for onchain scoring (verified 2026-11-19)
+`settle_markout` reads a Pyth `PriceUpdateV2` account set **per pool** with `set_pool_oracle` (the seed script does this for the SOL pool). A pool without an oracle still trades but builds no onchain evidence, which is the case for BONK-test (a test mint has no Pyth feed). The seed script uses `PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET = 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE` (Pyth-sponsored SOL/USD, shard 0, **verified 2026-11-19**) and feed id `ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d`, both in `packages/sdk/src/constants.ts`. Nothing to do before the demo. Optional sanity check after deploy:
+1. Settle a trade by hand: swap once, wait about 30 s, then send `settleMarkoutIx({ cranker, trader, baseMint, quoteMint, pythPriceAccount })` from `@fairway/sdk`.
+2. If Pyth ever moves the sponsored account, re-seed with `PYTH_PRICE_ACCOUNT=<addr> PYTH_FEED_ID=<hex> pnpm seed:devnet` (or send `setPoolOracleIx({ admin, baseMint, quoteMint, priceAccount, feedId })` for the existing pool).
 
 For a local validator, clone the account from devnet so local settles work: `solana-test-validator --clone 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE --url devnet`. A cloned account is a snapshot, so it goes stale after 60 s and `settle_markout` will then fail with `OracleStale`. That is expected locally. The LiteSVM tests use a mock Pyth account instead.
 
@@ -72,7 +67,7 @@ For a local validator, clone the account from devnet so local settles work: `sol
    - **Stream L (launches, the headline):** Solana **mainnet**, dataset **Block**, start 1–3 days back, filter = contents of `streams/pumpfun-filter.js`, destination `https://<tunnel-host>/streams/pumpfun` (same token). See STREAM_CONFIG.md §Stream L.
 3. The Raydium vaults in `pools.config.json` were checked on mainnet on 2026-11-19 (see "Filling in real pool addresses" in STREAM_CONFIG.md). Fill the Orca entry if you want it.
 4. Use the dashboard's **Run test** on a slot that contains a SOL-USDC swap.
-5. **TODO: verify the Pump.fun / PumpSwap program IDs** (marked VERIFY in `packages/parser/src/pumpfun.ts` and at the top of `streams/pumpfun-filter.js`; they were written from memory). Open a recent pump.fun token on Solscan → a "Buy" transaction → the invoked program should be `6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`. For a graduated token's swap it should be `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`. Or run `solana account <id> --url mainnet-beta` (should say `Executable: true`). If either differs, fix `PUMP_PROGRAMS`, run `pnpm --filter @fairway/streams build:filter` and `pnpm test`, and paste the new filter.
+5. The Pump.fun (`6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`) and PumpSwap (`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`) program IDs in `packages/parser/src/pumpfun.ts` and `streams/pumpfun-filter.js` were **verified 2026-11-19**. Nothing to do.
 6. In the Stream L editor, **Run test** on a slot with a Pump.fun buy. Expect `{"launchTrades":[...]}` with non-zero `solAmount`. If `solAmount` is 0 or missing, the account layout assumption (SOL as lamports on the bonding curve) needs a look: `parsePumpTransaction` in `packages/parser/src/pumpfun.ts`.
 
 ## 6. Expose ingest and set the webhook

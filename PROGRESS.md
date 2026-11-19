@@ -25,6 +25,12 @@ All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = t
 - [x] 6. Docs: README (Fairway Launch headline, For judges criteria + per-prize checklists, launch economics, Solana, Streams L/A/B, What's next with the 6 required items, "LP-neutral within noise" next to LVR −73%), ECONOMICS §8, RISKS §10, PITCH (launch script + 14 launch Q&As), DEMO_SCRIPT (live launch), SETUP_REMAINING (Stream L, VERIFY ids), ARCHITECTURE, /how-it-works launch card
 - [x] 7. Final check: pnpm test (TS 8 suites + cargo incl. 46 LiteSVM), pnpm build, pnpm lint all pass; all pages 200 in mock mode (/, /launch, /launch/{frog,sols,pie}, /backtest, /swap, /wallet, /wallet/[addr], /pool, /how-it-works); README links and anchors checked, overclaims reviewed
 
+## M16 follow-up (steps 8-11)
+- [x] 8. Verified program IDs: Pyth SOL/USD devnet 7UVim…, Pump.fun 6EF8…, PumpSwap pAMM…, all used exactly; VERIFY labels removed; tests pin the literals; SETUP_REMAINING notes "verified 2026-11-19"
+- [ ] 9. Lead metrics: humans pay 53% less than time-decay-only; sniper share of early supply 49% → 27%; "same sniper fee" explained as deterrence
+- [ ] 10. Creator share of the TOXIC premium (default 50%): sim, /launch/[id], ECONOMICS trade-off
+- [ ] 11. Bundler detection: Streams funding check, ≥ STANDARD + "bundle" badge, fixtures, tests, STREAM_CONFIG, sim regime
+
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
 - [x] **M1 Scoring package:** types, markout, shrinkage, tiers, MidPriceProviders, tests green

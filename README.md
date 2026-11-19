@@ -10,7 +10,7 @@ A launch on Fairway is a normal Fairway pool with a **launch fee curve**. During
 
 The same engine also runs a liquid SOL/USDC pool (markouts against Pyth, a bot-tax rebate, a protocol share). Those results are now the **secondary evidence**: [Liquid-pair results](#liquid-pair-results-solusdc-secondary-evidence-synthetic).
 
-> **Hackathon status, read this first.** Everything runs offline on **synthetic data** (a deterministic simulator and fixtures). The Anchor program is unaudited and **not deployed to devnet yet**. No live Stream has run yet. The **Pump.fun and PumpSwap program IDs in the launch filter are marked VERIFY**: they were written from memory and are not checked onchain ([how to check](streams/STREAM_CONFIG.md#program-ids-verify-before-going-live)). The Raydium SOL-USDC vault addresses were checked against mainnet. See [What is simulated vs. live](#what-is-simulated-vs-live).
+> **Hackathon status, read this first.** Everything runs offline on **synthetic data** (a deterministic simulator and fixtures). The Anchor program is unaudited and **not deployed to devnet yet**. No live Stream has run yet. The Pump.fun and PumpSwap program IDs in the launch filter and the devnet Pyth SOL/USD account were verified onchain on 2026-11-19 ([details](streams/STREAM_CONFIG.md#program-ids-verified-2026-11-19)). The Raydium SOL-USDC vault addresses were checked against mainnet. See [What is simulated vs. live](#what-is-simulated-vs-live).
 
 **Fairway is bot-friendly: good bots pay less, extractive flow pays its fair share.** The fee follows measured behaviour (markout), not whether the signer is a human or a program.
 
@@ -48,7 +48,7 @@ The same engine also runs a liquid SOL/USDC pool (markouts against Pyth, a bot-t
   - [x] **Stream A, liquid pairs:** [`streams/filter.js`](streams/filter.js) (vault-delta swap extraction) → `POST /streams/solana`
   - [x] Both filters are standalone, generated from the parser code the ingest service runs, and tested against `getBlock`-shaped fixtures: [`streams/pumpfun-filter.test.ts`](streams/pumpfun-filter.test.ts), [`streams/filter.test.ts`](streams/filter.test.ts)
   - [x] Webhook receiver with signature check, idempotent storage and scoring: [`services/ingest/`](services/ingest/src/app.ts), [`launches.ts`](services/ingest/src/launches.ts)
-  - [ ] A live Stream running: not yet created (needs a QuickNode account). The Pump.fun program IDs are **unverified** ([how to check](streams/STREAM_CONFIG.md#program-ids-verify-before-going-live))
+  - [ ] A live Stream running: not yet created (needs a QuickNode account). The Pump.fun program IDs are verified ([details](streams/STREAM_CONFIG.md#program-ids-verified-2026-11-19))
 
 ## The problem
 
@@ -289,7 +289,7 @@ Full list in [`docs/RISKS.md`](docs/RISKS.md). The main ones:
 
 - **Fresh-wallet snipers at launch.** A sniper with no history pays the STANDARD curve, the same as time-decay. Known-sniper detection only covers wallets that sniped before. Bundlers that fund many fresh wallets from one source are not detected (funding-graph analysis is future work).
 - **TWAP manipulation.** A launch pool's markout reference is its own TWAP, which a large trader can push. Mitigations: a 25-slot average measured 75 slots after the trade, post-trade reference prices, and observations at least 8 slots apart. Moving it costs real price impact against everyone else.
-- **Unverified program IDs.** The Pump.fun and PumpSwap IDs in the launch filter are marked VERIFY and have not been checked onchain.
+- **Account layout assumption.** The Pump.fun and PumpSwap program IDs were verified on 2026-11-19, but the filter's account-layout assumptions (SOL as lamports on the bonding curve, WSOL in the PumpSwap pool) are tested on synthetic blocks only.
 - **Memecoin perception.** Launches are associated with memecoins. Fairway's pitch is a fairer distribution, not endorsement of any token.
 - **Oracle trust.** The `score_authority` can mislabel wallets that have little Fairway history. Mitigations: a TTL, public inputs, the fact that it cannot set fees or touch funds, and the onchain verified score, which overrides it after 1,000 USDC and 5 trades of settled Fairway flow. The remaining trust for active wallets is in Pyth (validated feed id, staleness, confidence).
 - **Settlement liveness.** `settle_markout` is a permissionless crank with no reward yet. Unsettled trades expire after 450 slots and are not scored.
@@ -332,7 +332,7 @@ Full dashboard steps are in [`streams/STREAM_CONFIG.md`](streams/STREAM_CONFIG.m
 | Streams | **L: launches** (`pumpfun-filter.js` → `/streams/pumpfun`), **A: liquid-pair history** (`filter.js` → `/streams/solana`), **B: the Fairway pool on devnet** | L finds known snipers before a token exists. A scores wallets from their trading on other DEXs. |
 | Network | Solana **mainnet** (history and scores) and **devnet** (Fairway pool) | Scores need real, deep history. The Fairway pool lives on devnet during the hackathon. |
 | Dataset | **Block** | We need full transactions with `meta` (token balances, loaded addresses, logs). The matching is by vault token accounts, so it works for any AMM and for aggregator-routed swaps. |
-| Filter L | `streams/pumpfun-filter.js`: transactions that invoke Pump.fun or PumpSwap (IDs marked VERIFY) → per mint, the trader's token delta vs the curve's opposite move, the SOL leg from the curve's lamport or WSOL delta, plus `create` records. Returns `{launchTrades}` or `null`. | Launches can't be configured in advance, so it matches on program IDs, not on pool accounts. |
+| Filter L | `streams/pumpfun-filter.js`: transactions that invoke Pump.fun or PumpSwap (IDs verified 2026-11-19) → per mint, the trader's token delta vs the curve's opposite move, the SOL leg from the curve's lamport or WSOL delta, plus `create` records. Returns `{launchTrades}` or `null`. | Launches can't be configured in advance, so it matches on program IDs, not on pool accounts. |
 | Filter A | `streams/filter.js`: for each successful tx, build the full account list (including ALT-loaded addresses), compute vault deltas for configured pools, classify buy/sell, and emit compact swap records. Returns `null` if nothing matched. | Server-side filtering means the webhook only receives swaps (KBs), not blocks (MBs). |
 | Destination | **Webhook** → `https://<host>/streams/solana`, HMAC-verified (`QN_STREAM_TOKEN`) | The ingest service is idempotent on `(sig, pool)`, so retries and reorgs are safe. |
 | Start | A: backfill 3–7 days, L: 1–3 days, then live | The RETAIL rule requires ≥ 3 days of history. Pump.fun has thousands of launches a day, so a short backfill already finds the repeat snipers. |
@@ -371,7 +371,7 @@ The program's tests use LiteSVM: `anchor build && cargo test -p fairway` (46 tes
 |---|---|
 | Launch simulation (`/backtest` default, `/launch/[id]` replays) | **Synthetic.** 200 seeded launches from `packages/sim/src/launch.ts`. A launch page replays one seeded scenario in the browser. Buyer addresses are fake, and the "Score" column (onchain verified / bootstrap / none) is assigned for illustration. Launches you create in mock mode are stored in your browser (localStorage). |
 | Live launch creation (`/launch` with `NEXT_PUBLIC_MODE=live`) | **Real transactions** against a local validator: mint + supply, pool + liquidity, `configure_launch`. Verified end to end with a script on `solana-test-validator`. The wallet-adapter clicks were not tested in a browser. No Metaplex metadata, so the name and symbol are not onchain. |
-| Pump.fun Stream L and sniper scores | **Filter and scorer are real code, tested on synthetic `getBlock`-shaped Pump.fun blocks** (`packages/fixtures/data/pumpfun.json`). Not run on real blocks. **Program IDs unverified (VERIFY).** |
+| Pump.fun Stream L and sniper scores | **Filter and scorer are real code, tested on synthetic `getBlock`-shaped Pump.fun blocks** (`packages/fixtures/data/pumpfun.json`). Not run on real blocks. Program IDs verified 2026-11-19. |
 | Backtest, sweep, charts, fixtures | **Synthetic.** Generated from a seeded simulator. The UI shows a "Simulated data" badge in mock mode. |
 | Frontend (default) | **Mock mode**: reads fixtures and sim outputs. No wallet or RPC. |
 | Frontend (live mode) | Real wallet adapter + SDK against a local validator (`pnpm demo:local`). Devnet is untested until the human deploys. |
@@ -412,7 +412,7 @@ Storage is SQLite (`better-sqlite3`). The SQL uses `ON CONFLICT` upserts and sta
 
 ## What's next
 
-1. **Go live:** deploy to devnet, verify the Pump.fun / PumpSwap program IDs, run Stream L over a few days of Pump.fun history and let the keeper write the first real known-sniper scores (steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md)).
+1. **Go live:** deploy to devnet, run Stream L over a few days of Pump.fun history and let the keeper write the first real known-sniper scores (steps in [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md)).
 2. **Oracle-anchored pricing for liquid pairs:** the pool re-centres on Pyth, so arbitrageurs no longer capture the stale-price gap at all (today the fee only taxes it). That attacks LVR directly instead of pricing it.
 3. **Jupiter integration:** quoting needs the trader's tier, so a router must read the signer's `TraderScore` (one account read, [`getFeeTier`](packages/sdk/src/feetier.ts)) before quoting a Fairway pool.
 4. **Launchpad partnerships:** graduating tokens (for example from a bonding curve) land in Fairway pools with a launch curve, so the fair-launch window continues after graduation.
