@@ -80,6 +80,12 @@ pub mod fairway {
         instructions::rebate::handle_update_retail_fee(ctx)
     }
 
+    /// Make the pool a fair launch: trading opens at `launch_slot` (0 = now) and, for `window_slots` (0 = default), the fee
+    /// follows the per-tier decay curve (None = the Config default). Creator or admin, before the first swap.
+    pub fn configure_launch(ctx: Context<ConfigureLaunch>, launch_slot: u64, window_slots: u64, curve: Option<LaunchCurveParams>) -> Result<()> {
+        instructions::launch::handle_configure_launch(ctx, launch_slot, window_slots, curve)
+    }
+
     pub fn close_score(ctx: Context<CloseScore>) -> Result<()> {
         instructions::score::handle_close_score(ctx)
     }

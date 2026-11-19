@@ -3,7 +3,7 @@ import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-tok
 import { discriminator, Writer } from './borsh';
 import { MAX_BATCH, PROGRAM_ID, type TierIndex } from './constants';
 import { configPda, poolAddresses, scorePda, treasuryPda } from './pda';
-import { writeMarkoutParams, writeRebateParams, type MarkoutParams, type RebateParams } from './accounts';
+import { writeLaunchConfig, writeLaunchCurve, writeMarkoutParams, writeRebateParams, type LaunchConfig, type LaunchCurve, type MarkoutParams, type RebateParams } from './accounts';
 
 const w = (k: PublicKey, isWritable = false, isSigner = false): AccountMeta => ({ pubkey: k, isWritable, isSigner });
 const ix = (programId: PublicKey, keys: AccountMeta[], name: string, args: (w: Writer) => void = () => {}) => {
@@ -30,6 +30,7 @@ export type ConfigUpdate = {
   markout?: MarkoutParams;
   protocolFeeBps?: number;
   rebate?: RebateParams;
+  launch?: LaunchConfig;
 };
 
 export function updateConfigIx(p: { admin: PublicKey; update: ConfigUpdate; programId?: PublicKey }) {
@@ -44,6 +45,7 @@ export function updateConfigIx(p: { admin: PublicKey; update: ConfigUpdate; prog
     wr.option(u.markout, (x, v) => writeMarkoutParams(x, v));
     wr.option(u.protocolFeeBps, (x, v) => x.u16(v));
     wr.option(u.rebate, (x, v) => writeRebateParams(x, v));
+    wr.option(u.launch, (x, v) => writeLaunchConfig(x, v));
   });
 }
 
@@ -190,7 +192,7 @@ export function closeScoreIx(p: { closer: PublicKey; trader: PublicKey; /** set 
 }
 
 /** Permissionless crank: score `trader`'s pending trades on this pool against the pool's Pyth price account. */
-export function settleMarkoutIx(p: { cranker: PublicKey; trader: PublicKey; baseMint: PublicKey; quoteMint: PublicKey; /** the pool's oracle (Pool.oracleCfg.priceAccount) */ pythPriceAccount: PublicKey; scoreAccountOverride?: PublicKey; programId?: PublicKey }) {
+export function settleMarkoutIx(p: { cranker: PublicKey; trader: PublicKey; baseMint: PublicKey; quoteMint: PublicKey; /** the pool's oracle (Pool.oracleCfg.priceAccount); for a launch pool without an oracle pass any key (e.g. the pool) */ pythPriceAccount: PublicKey; scoreAccountOverride?: PublicKey; programId?: PublicKey }) {
   const programId = p.programId ?? PROGRAM_ID;
   return ix(
     programId,
@@ -257,5 +259,23 @@ export function setPoolOracleIx(p: { admin: PublicKey; baseMint: PublicKey; quot
     [w(p.admin, false, true), w(configPda(programId)[0]), w(poolAddresses(p.baseMint, p.quoteMint, programId).pool, true)],
     'set_pool_oracle',
     (wr) => wr.pubkey(p.priceAccount).bytes(p.feedId),
+  );
+}
+
+/**
+ * Make a pool a fair launch (creator or admin, before the first swap). `launchSlot` 0 = open now; `windowSlots` 0 = the
+ * Config default (750 ≈ 5 min); `curve` omitted = the Config default curve. A non-admin creator pays the launch fee to the treasury.
+ */
+export function configureLaunchIx(p: { authority: PublicKey; baseMint: PublicKey; quoteMint: PublicKey; launchSlot?: bigint | number; windowSlots?: bigint | number; curve?: LaunchCurve; programId?: PublicKey }) {
+  const programId = p.programId ?? PROGRAM_ID;
+  return ix(
+    programId,
+    [w(p.authority, true, true), w(configPda(programId)[0]), w(poolAddresses(p.baseMint, p.quoteMint, programId).pool, true), w(treasuryPda(programId)[0], true), w(SystemProgram.programId)],
+    'configure_launch',
+    (wr) => {
+      wr.u64(p.launchSlot ?? 0);
+      wr.u64(p.windowSlots ?? 0);
+      wr.option(p.curve, (x, v) => writeLaunchCurve(x, v));
+    },
   );
 }

@@ -49,3 +49,13 @@ pub struct MarkoutSettled {
     pub trade_count: u32,
     pub slot: u64,
 }
+
+#[event]
+pub struct LaunchConfigured {
+    pub pool: Pubkey,
+    pub launch_slot: u64,
+    pub window_slots: u64,
+    pub start_bps: [u16; 3],
+    pub end_bps: [u16; 3],
+    pub launch_fee_lamports: u64,
+}

@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use fairway_math::{valid_fee_schedule, TIER_STANDARD, TIER_TOXIC};
 
-use crate::{constants::*, error::FairwayError, state::{Config, MarkoutParams, RebateParams}};
+use crate::{constants::*, error::FairwayError, state::{Config, LaunchConfig, MarkoutParams, RebateParams}};
 
 #[derive(Accounts)]
 pub struct InitializeConfig<'info> {
@@ -30,6 +30,7 @@ pub fn handle_initialize_config(ctx: Context<InitializeConfig>, score_authority:
     c.markout = MarkoutParams::default();
     c.protocol_fee_bps = DEFAULT_PROTOCOL_FEE_BPS;
     c.rebate = RebateParams::default();
+    c.launch = LaunchConfig::default();
     Ok(())
 }
 
@@ -50,6 +51,7 @@ pub struct ConfigUpdate {
     pub markout: Option<MarkoutParams>,
     pub protocol_fee_bps: Option<u16>,
     pub rebate: Option<RebateParams>,
+    pub launch: Option<LaunchConfig>,
 }
 
 pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) -> Result<()> {
@@ -77,6 +79,17 @@ pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) ->
         validate_markout(&m)?;
         c.markout = m;
     }
+    if let Some(l) = update.launch {
+        require!(
+            fairway_math::launch::valid_launch_curve(&l.curve.math())
+                && l.default_window_slots > 0
+                && l.default_window_slots <= MAX_LAUNCH_WINDOW_SLOTS
+                && l.twap_window_slots > 0
+                && l.twap_window_slots <= c.markout.markout_slots,
+            FairwayError::InvalidLaunchParams
+        );
+        c.launch = l;
+    }
     if let Some(t) = update.score_ttl_slots {
         c.score_ttl_slots = t;
     }
@@ -89,7 +102,7 @@ pub struct SetPoolOracle<'info> {
     #[account(seeds = [CONFIG_SEED], bump = config.bump, has_one = admin @ FairwayError::Unauthorized)]
     pub config: Account<'info, Config>,
     #[account(mut, seeds = [POOL_SEED, pool.base_mint.as_ref(), pool.quote_mint.as_ref()], bump = pool.bump)]
-    pub pool: Account<'info, crate::state::Pool>,
+    pub pool: Box<Account<'info, crate::state::Pool>>,
 }
 
 /// Point a pool at its Pyth price account (base/USD; the quote token is assumed USD-pegged). `Pubkey::default()` turns

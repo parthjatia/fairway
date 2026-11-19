@@ -316,6 +316,123 @@
       "args": []
     },
     {
+      "name": "configure_launch",
+      "docs": [
+        "Make the pool a fair launch: trading opens at `launch_slot` (0 = now) and, for `window_slots` (0 = default), the fee",
+        "follows the per-tier decay curve (None = the Config default). Creator or admin, before the first swap."
+      ],
+      "discriminator": [
+        4,
+        9,
+        63,
+        61,
+        104,
+        54,
+        141,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "the pool's creator or the admin; pays the launch fee"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.base_mint",
+                "account": "Pool"
+              },
+              {
+                "kind": "account",
+                "path": "pool.quote_mint",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "launch_slot",
+          "type": "u64"
+        },
+        {
+          "name": "window_slots",
+          "type": "u64"
+        },
+        {
+          "name": "curve",
+          "type": {
+            "option": {
+              "defined": {
+                "name": "LaunchCurveParams"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "create_pool",
       "discriminator": [
         233,
@@ -938,7 +1055,8 @@
         {
           "name": "pyth_price",
           "docs": [
-            "full verification, staleness and confidence."
+            "feed id, full verification, staleness and confidence). TWAP pools (no oracle, launch): ignored, pass any account",
+            "(the SDK passes the pool)."
           ]
         }
       ],
@@ -1448,6 +1566,19 @@
   ],
   "events": [
     {
+      "name": "LaunchConfigured",
+      "discriminator": [
+        110,
+        18,
+        138,
+        67,
+        225,
+        113,
+        169,
+        7
+      ]
+    },
+    {
       "name": "MarkoutSettled",
       "discriminator": [
         117,
@@ -1625,6 +1756,26 @@
       "code": 6024,
       "name": "EpochNotElapsed",
       "msg": "The rebate epoch has not elapsed yet"
+    },
+    {
+      "code": 6025,
+      "name": "LaunchNotStarted",
+      "msg": "Trading on this launch has not opened yet"
+    },
+    {
+      "code": 6026,
+      "name": "LaunchAlreadyTrading",
+      "msg": "A launch can only be configured before the pool's first swap"
+    },
+    {
+      "code": 6027,
+      "name": "InvalidLaunchParams",
+      "msg": "Launch params: window 1..=216000 slots, launch slot not in the past, curve decays and is tier-ordered, fees <= 1000 bps"
+    },
+    {
+      "code": 6028,
+      "name": "TwapUnavailable",
+      "msg": "The pool TWAP does not cover this trade's markout window"
     }
   ],
   "types": [
@@ -1705,6 +1856,17 @@
                 "name": "RebateParams"
               }
             }
+          },
+          {
+            "name": "launch",
+            "docs": [
+              "launch defaults (M16): the fee curve new launches start from, TWAP window, launch fee"
+            ],
+            "type": {
+              "defined": {
+                "name": "LaunchConfig"
+              }
+            }
           }
         ]
       }
@@ -1773,6 +1935,130 @@
                   "name": "RebateParams"
                 }
               }
+            }
+          },
+          {
+            "name": "launch",
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "LaunchConfig"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "LaunchConfig",
+      "docs": [
+        "Launch defaults (M16)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "curve",
+            "docs": [
+              "default curve copied into a pool by `configure_launch` (TOXIC 1000→80, STANDARD 300→30, RETAIL 30→5)"
+            ],
+            "type": {
+              "defined": {
+                "name": "LaunchCurveParams"
+              }
+            }
+          },
+          {
+            "name": "default_window_slots",
+            "docs": [
+              "default window when `configure_launch` passes 0 (750 slots ≈ 5 min)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "twap_window_slots",
+            "docs": [
+              "TWAP window ending at the markout horizon, used by `settle_markout` on pools without an oracle"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "launch_fee_lamports",
+            "docs": [
+              "SOL paid by the creator to the treasury when a launch is configured (0 = free)"
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LaunchConfigured",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "launch_slot",
+            "type": "u64"
+          },
+          {
+            "name": "window_slots",
+            "type": "u64"
+          },
+          {
+            "name": "start_bps",
+            "type": {
+              "array": [
+                "u16",
+                3
+              ]
+            }
+          },
+          {
+            "name": "end_bps",
+            "type": {
+              "array": [
+                "u16",
+                3
+              ]
+            }
+          },
+          {
+            "name": "launch_fee_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LaunchCurveParams",
+      "docs": [
+        "Per-tier launch fee curve `[RETAIL, STANDARD, TOXIC]`: each tier decays linearly from `start_bps` to `end_bps`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "start_bps",
+            "type": {
+              "array": [
+                "u16",
+                3
+              ]
+            }
+          },
+          {
+            "name": "end_bps",
+            "type": {
+              "array": [
+                "u16",
+                3
+              ]
             }
           }
         ]
@@ -2134,6 +2420,118 @@
           {
             "name": "rebate_total_q",
             "type": "u64"
+          },
+          {
+            "name": "creator",
+            "docs": [
+              "who created the pool: may configure its launch (as may the admin)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "launch",
+            "type": {
+              "defined": {
+                "name": "PoolLaunch"
+              }
+            }
+          },
+          {
+            "name": "twap",
+            "docs": [
+              "pool price accumulator, updated on every swap and liquidity change"
+            ],
+            "type": {
+              "defined": {
+                "name": "PoolTwap"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolLaunch",
+      "docs": [
+        "A pool's launch (M16). `window_slots == 0` = not a launch pool (normal tier fees from the first swap)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "launch_slot",
+            "docs": [
+              "first slot trading is allowed (swaps before it are refused)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "window_slots",
+            "type": "u64"
+          },
+          {
+            "name": "curve",
+            "type": {
+              "defined": {
+                "name": "LaunchCurveParams"
+              }
+            }
+          },
+          {
+            "name": "twap_scoring",
+            "docs": [
+              "queue trades for onchain markout scoring against the pool TWAP when the pool has no oracle"
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolTwap",
+      "docs": [
+        "Pool price accumulator (M16), see `fairway_math::twap`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "last_slot",
+            "type": "u64"
+          },
+          {
+            "name": "last_price",
+            "type": "u64"
+          },
+          {
+            "name": "cum",
+            "type": "u128"
+          },
+          {
+            "name": "head",
+            "type": "u16"
+          },
+          {
+            "name": "count",
+            "type": "u16"
+          },
+          {
+            "name": "obs_slot",
+            "type": {
+              "array": [
+                "u64",
+                64
+              ]
+            }
+          },
+          {
+            "name": "obs_cum",
+            "type": {
+              "array": [
+                "u128",
+                64
+              ]
+            }
           }
         ]
       }

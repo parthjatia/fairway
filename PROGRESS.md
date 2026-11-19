@@ -15,6 +15,15 @@ All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = t
 - [x] #6 run.sh (local autonomous build loop) untracked and gitignored; file kept on disk
 - [x] #7 .env.example: QN_STREAM_TOKEN comment now describes the HMAC x-qn-signature check (matches auth.ts / STREAM_CONFIG)
 
+## M16 Launch pivot (Fairway Launch: known snipers pay more, humans pay less)
+- [x] 1. Onchain launch fee schedule (per-pool launch params, tier × time decay, tests: decay math, window boundary, fresh wallet at block 0, wrong-signer attack)
+- [x] 2. Onchain pool TWAP for tokens without an oracle (price accumulator, settle via TWAP, tests, RISKS.md §1d)
+- [ ] 3. Launch simulation (default /backtest view)
+- [ ] 4. Launch flow and UI (/launch, /launch/[id], landing, nav)
+- [ ] 5. Streams: Pump.fun sniper scoring
+- [ ] 6. Docs
+- [ ] 7. Final check
+
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
 - [x] **M1 Scoring package:** types, markout, shrinkage, tiers, MidPriceProviders, tests green

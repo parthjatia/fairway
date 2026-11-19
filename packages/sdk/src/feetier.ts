@@ -8,7 +8,7 @@
 import { Connection, PublicKey, type Commitment } from '@solana/web3.js';
 import { decodeConfig, decodeTraderScore, PENDING_CAP, type ConfigAccount, type PoolAccount, type TraderScoreAccount } from './accounts';
 import { PROGRAM_ID, TIER_NAMES, type TierName } from './constants';
-import { resolveBlendedTier, swapRebateBps, type TierSource } from './math';
+import { launchPhase, decayedFeeBps, resolveBlendedTier, swapRebateBps, type TierSource } from './math';
 import { configPda, scorePda } from './pda';
 
 export type FeeTier = {
@@ -30,6 +30,8 @@ export type FeeTier = {
   bootstrapScoreBps: number | null;
   /** the wallet has no score account: it pays the STANDARD default, like every new wallet */
   isNew: boolean;
+  /** set when `pool` is inside its launch window: `feeBps` is the decayed launch fee for this tier */
+  launch: { elapsedSlots: bigint; windowSlots: bigint } | null;
 };
 
 /** Pure: same result as the program for these two accounts at `currentSlot`. */
@@ -49,10 +51,14 @@ export function feeTierFromAccounts(wallet: PublicKey, config: ConfigAccount, sc
     config.defaultTier,
   );
   const tier = r.tier as 0 | 1 | 2;
+  // launch window (M16): fee = f(tier, slots since launch), no rebate
+  const launch = pool?.launch; // optional: callers may pass a partial pool (rebate fields only)
+  const ph = launch ? launchPhase(currentSlot, launch.launchSlot, launch.windowSlots) : ({ kind: 'after' } as const);
+  const inWindow = ph.kind === 'window' && !!launch;
+  const baseFee = ph.kind === 'window' && launch ? decayedFeeBps(launch.curve, tier, ph.elapsed, launch.windowSlots) : config.feeBps[tier];
   // bot-tax rebate: RETAIL tier only. Without a notional the epoch rate is shown (an upper bound for this swap).
-  const baseFee = config.feeBps[tier];
   const rebateBps =
-    tier === 0 && pool ? swapRebateBps(pool.rebate.rebateBps, pool.rebate.budgetQ, notionalQ ?? pool.rebate.budgetQ * 10_000n, baseFee, config.rebate.floorBps) : 0;
+    tier === 0 && pool && !inWindow ? swapRebateBps(pool.rebate.rebateBps, pool.rebate.budgetQ, notionalQ ?? pool.rebate.budgetQ * 10_000n, baseFee, config.rebate.floorBps) : 0;
   return {
     wallet,
     tier,
@@ -64,6 +70,7 @@ export function feeTierFromAccounts(wallet: PublicKey, config: ConfigAccount, sc
     onchain: score ? { scoreBps: score.onchainScoreBps, settledTrades: score.tradeCount, settledNotional: score.sumNotional } : null,
     bootstrapScoreBps: score ? score.scoreBps : null,
     isNew: !score,
+    launch: ph.kind === 'window' && launch ? { elapsedSlots: ph.elapsed, windowSlots: launch.windowSlots } : null,
   };
 }
 

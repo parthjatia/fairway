@@ -93,3 +93,64 @@ export function resolveBlendedTier(
   if (p.pendingFull && r.tier === 0) r = { ...r, tier: 1 };
   return r;
 }
+
+// ---- M16 launch fee schedule (mirrors crates/fairway-math/src/launch.rs) ----
+
+export type LaunchCurveLike = { startBps: readonly number[]; endBps: readonly number[] };
+export type LaunchPhase = { kind: 'not-started' } | { kind: 'window'; elapsed: bigint } | { kind: 'after' };
+
+export function launchPhase(slot: bigint, launchSlot: bigint, windowSlots: bigint): LaunchPhase {
+  if (windowSlots === 0n) return { kind: 'after' };
+  if (slot < launchSlot) return { kind: 'not-started' };
+  const elapsed = slot - launchSlot;
+  return elapsed >= windowSlots ? { kind: 'after' } : { kind: 'window', elapsed };
+}
+
+/** `end + ceil((start − end) × (window − elapsed) / window)`; elapsed 0 → start fee. */
+export function decayedFeeBps(curve: LaunchCurveLike, tier: number, elapsed: bigint, windowSlots: bigint): number {
+  const t = Math.min(Math.max(tier, 0), 2);
+  const s = BigInt(curve.startBps[t]!);
+  const e = BigInt(curve.endBps[t]!);
+  if (windowSlots === 0n || elapsed >= windowSlots || s <= e) return Number(e);
+  const num = (s - e) * (windowSlots - elapsed);
+  return Number(e + (num + windowSlots - 1n) / windowSlots);
+}
+
+/** Launch fee at `slot`, or null when the normal tier fee applies. */
+export function launchFeeBps(curve: LaunchCurveLike, tier: number, slot: bigint, launchSlot: bigint, windowSlots: bigint): number | null {
+  const ph = launchPhase(slot, launchSlot, windowSlots);
+  return ph.kind === 'window' ? decayedFeeBps(curve, tier, ph.elapsed, windowSlots) : null;
+}
+
+// ---- M16 pool TWAP (mirrors crates/fairway-math/src/twap.rs; read-only) ----
+
+export type TwapLike = { lastSlot: bigint; lastPrice: bigint; cum: bigint; head: number; count: number; obsSlot: readonly bigint[]; obsCum: readonly bigint[] };
+
+export function twapCumAt(t: TwapLike, x: bigint): bigint | null {
+  const cap = t.obsSlot.length;
+  if (t.count === 0) return null;
+  const oldest = t.count < cap ? 0 : (t.head + 1) % cap;
+  if (x < t.obsSlot[oldest]!) return null;
+  if (x >= t.lastSlot) return t.cum + t.lastPrice * (x - t.lastSlot);
+  let upSlot = t.lastSlot;
+  let upCum = t.cum;
+  for (let k = 0; k < t.count; k++) {
+    const i = (t.head + cap - k) % cap;
+    const s = t.obsSlot[i]!;
+    const c = t.obsCum[i]!;
+    if (s <= x) return upSlot === s ? c : c + ((upCum - c) * (x - s)) / (upSlot - s);
+    upSlot = s;
+    upCum = c;
+  }
+  return null;
+}
+
+/** Average pool price over [from, to), 1e12 fixed point; null if out of history. */
+export function poolTwap(t: TwapLike, from: bigint, to: bigint): bigint | null {
+  if (to <= from) return null;
+  const a = twapCumAt(t, from);
+  const b = twapCumAt(t, to);
+  if (a === null || b === null || b < a) return null;
+  const p = (b - a) / (to - from);
+  return p > 0n ? p : null;
+}

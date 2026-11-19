@@ -25,8 +25,9 @@ pub struct SettleMarkout<'info> {
     /// The pool whose pending trades are settled, and whose oracle is used.
     #[account(seeds = [POOL_SEED, pool.base_mint.as_ref(), pool.quote_mint.as_ref()], bump = pool.bump)]
     pub pool: Box<Account<'info, Pool>>,
-    /// CHECK: validated in `read_pyth`: address = the pool's oracle, owner = Pyth receiver, discriminator, feed id,
-    /// full verification, staleness and confidence.
+    /// CHECK: Pyth pools: validated in `read_pyth` (address = the pool's oracle, owner = Pyth receiver, discriminator,
+    /// feed id, full verification, staleness and confidence). TWAP pools (no oracle, launch): ignored, pass any account
+    /// (the SDK passes the pool).
     pub pyth_price: UncheckedAccount<'info>,
 }
 
@@ -114,21 +115,39 @@ pub fn handle_settle_markout(ctx: Context<SettleMarkout>, trader: Pubkey) -> Res
         return Ok(());
     }
 
-    // 2) one validated oracle mid for all due trades. The price must have been posted after each trade's horizon.
-    let (mid, posted_slot) = read_pyth(&ctx.accounts.pyth_price.to_account_info(), cfg, pool, clock.unix_timestamp)?;
+    // 2) the mid: one validated Pyth price for all due trades (posted after each trade's horizon), or, for a pool without
+    //    an oracle (launch tokens), the pool's own TWAP over the `twap_window_slots` ending at each trade's horizon.
+    let use_twap = pool.oracle_price_account == Pubkey::default();
+    require!(!use_twap || pool.launch.twap_scoring, FairwayError::OracleNotConfigured);
+    let pyth = if use_twap { None } else { Some(read_pyth(&ctx.accounts.pyth_price.to_account_info(), cfg, pool, clock.unix_timestamp)?) };
+    let w = cfg.launch.twap_window_slots.clamp(1, m.markout_slots);
     let mut sums = Sums { sum_notional: s.sum_notional, sum_weighted_markout: s.sum_weighted_markout, trades: s.trade_count };
     let mut settled = 0u8;
+    let mut unavailable = 0u8;
     for p in s.pending.iter_mut().filter(|p| p.notional != 0) {
         let horizon = p.slot.saturating_add(m.markout_slots);
-        // only this pool's trades are marked against this pool's oracle
-        if p.pool != pool_key || slot < horizon || posted_slot < horizon {
+        // only this pool's trades are marked against this pool's price
+        if p.pool != pool_key || slot < horizon {
             continue;
         }
+        let mid = match pyth {
+            Some((mid, posted_slot)) if posted_slot >= horizon => mid,
+            Some(_) => continue,
+            None => match pool.twap.twap(horizon - w, horizon) {
+                Some(mid) => mid,
+                None => {
+                    unavailable += 1;
+                    continue;
+                }
+            },
+        };
         let mk = markout_bps(p.side, p.exec_price, mid).map_err(|_| error!(FairwayError::OracleInvalid))?;
         sums = accumulate(sums, p.notional, mk).map_err(|_| error!(FairwayError::Overflow))?;
         *p = PendingTrade::default();
         settled += 1;
     }
+
+    require!(settled > 0 || unavailable == 0, FairwayError::TwapUnavailable);
 
     // 3) same shrinkage + thresholds as packages/scoring
     s.sum_notional = sums.sum_notional;

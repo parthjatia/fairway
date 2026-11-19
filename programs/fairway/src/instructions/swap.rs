@@ -4,6 +4,7 @@ use fairway_math::{
     markout::{exec_price_scaled, SIDE_BUY, SIDE_SELL},
     fee_on_input,
     protocol_share,
+    launch::{decayed_fee_bps, launch_phase, LaunchPhase},
     rebate::{quote_equivalent, swap_rebate_bps, toxic_premium},
     resolve_blended, swap_quote, OnchainView, ScoreView, TierSource, TIER_RETAIL, TIER_STANDARD, TIER_TOXIC,
 };
@@ -84,16 +85,30 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
         resolve_blended(sr.onchain, m.onchain_min_notional, m.min_trades(), sr.bootstrap, slot, a.config.score_ttl_slots, a.config.default_tier);
     // If this trade cannot be queued for scoring (buffer full), it gets no RETAIL discount: otherwise a wallet could
     // keep its buffer full to hide trades from the onchain score while still paying the low fee.
-    let scored = a.pool.oracle_price_account != Pubkey::default();
+    let scored = a.pool.scored();
     if scored && sr.pending_full && tier == TIER_RETAIL {
         tier = TIER_STANDARD;
     }
+    // launch window (M16): fee = f(tier, slots since launch); before the launch slot nobody can trade
+    let launch = a.pool.launch;
+    let phase = launch_phase(slot, launch.launch_slot, launch.window_slots);
+    require!(phase != LaunchPhase::NotStarted, FairwayError::LaunchNotStarted);
+    let launch_elapsed = match phase {
+        LaunchPhase::Window { elapsed } => Some(elapsed),
+        _ => None,
+    };
+    let curve = launch.curve.math();
+    let fee_for = |t: u8| match launch_elapsed {
+        Some(e) => decayed_fee_bps(&curve, t, e, launch.window_slots),
+        None => a.config.fee_bps[t as usize],
+    };
     // pricing uses LP reserves only: unclaimed protocol fees sit in the vaults but do not move the curve
     let (rb, rq) = a.pool.lp_reserves(a.base_vault.amount, a.quote_vault.amount).ok_or(FairwayError::Overflow)?;
     let notional_q = quote_equivalent(amount_in, a_to_b, rb, rq).m()?;
     // bot-tax rebate: only the RETAIL tier, never below the floor, never beyond what is left of the epoch's budget
-    let base_fee_bps = a.config.fee_bps[tier as usize];
-    let rebate_bps = if tier == TIER_RETAIL {
+    let base_fee_bps = fee_for(tier);
+    // no rebate inside a launch window: the launch curve already sets the RETAIL fee
+    let rebate_bps = if tier == TIER_RETAIL && launch_elapsed.is_none() {
         swap_rebate_bps(a.pool.rebate_bps, a.pool.rebate_budget_q, notional_q, base_fee_bps, a.config.rebate.floor_bps)
     } else {
         0
@@ -131,7 +146,7 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
 
     let pool_key = a.pool.key();
     // protocol revenue = a share of the toxic PREMIUM only (the fee above what STANDARD would have paid): LPs keep all other fees
-    let premium_in = if tier == TIER_TOXIC { toxic_premium(q.fee, amount_in, a.config.fee_bps[TIER_STANDARD as usize]).m()? } else { 0 };
+    let premium_in = if tier == TIER_TOXIC { toxic_premium(q.fee, amount_in, fee_for(TIER_STANDARD)).m()? } else { 0 };
     let cut = protocol_share(premium_in, a.config.protocol_fee_bps).m()?;
     let premium_q = quote_equivalent(premium_in, a_to_b, rb, rq).m()?;
     let rebate_q = if rebate_bps > 0 {
@@ -159,6 +174,16 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
         p.protocol_earned_quote = p.protocol_earned_quote.saturating_add(cut);
     }
     p.swaps[t] = p.swaps[t].saturating_add(1);
+    // post-trade LP reserves → TWAP accumulator (and the reference price for TWAP-scored trades)
+    let (nb, nq) = if a_to_b {
+        (rb.checked_add(amount_in - cut).ok_or(FairwayError::Overflow)?, rq - q.amount_out)
+    } else {
+        (rb - q.amount_out, rq.checked_add(amount_in - cut).ok_or(FairwayError::Overflow)?)
+    };
+    let (bd0, qd0) = (ctx.accounts.base_mint.decimals, ctx.accounts.quote_mint.decimals);
+    let p = &mut ctx.accounts.pool;
+    p.record_price(slot, nb, bd0, nq, qd0);
+    let twap_scored = p.oracle_price_account == Pubkey::default();
 
     if source != TierSource::Score {
         msg!("fairway: tier {} ({:?})", tier, source);
@@ -182,7 +207,10 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
     }
     let mut ts = load_score(&score_info).ok_or(error!(FairwayError::ScoreAccountMismatch))?;
     require_keys_eq!(ts.trader, trader, FairwayError::ScoreAccountMismatch);
-    match (exec_price_scaled(quote_leg, qd, base_leg, bd), ts.pending.iter_mut().find(|p| p.notional == 0)) {
+    // Pyth pools: the reference is the pre-fee execution price. TWAP pools: the post-trade pool price, so the trader's
+    // own price impact (which the pool TWAP would otherwise count as a favourable move) is never scored as information.
+    let reference = if twap_scored { exec_price_scaled(nq, qd, nb, bd) } else { exec_price_scaled(quote_leg, qd, base_leg, bd) };
+    match (reference, ts.pending.iter_mut().find(|p| p.notional == 0)) {
         (Ok(exec_price), Some(free)) => {
             *free = PendingTrade { pool: pool_key, exec_price, slot, side, notional: quote_leg };
             if ts.first_slot == 0 {

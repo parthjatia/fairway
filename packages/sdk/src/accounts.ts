@@ -13,7 +13,39 @@ export type ConfigAccount = {
   /** share of the TOXIC PREMIUM (toxic fee above the STANDARD fee) kept by the protocol, bps (1500 = 15%); LPs keep every other fee */
   protocolFeeBps: number;
   rebate: RebateParams;
+  /** launch defaults (M16) */
+  launch: LaunchConfig;
 };
+
+/** Per-tier launch fee curve [RETAIL, STANDARD, TOXIC] (state.rs `LaunchCurveParams`). */
+export type LaunchCurve = { startBps: [number, number, number]; endBps: [number, number, number] };
+/** Program defaults: TOXIC 1000→80, STANDARD (fresh wallets) 300→30, RETAIL 30→5. */
+export const DEFAULT_LAUNCH_CURVE: LaunchCurve = { startBps: [30, 300, 1_000], endBps: [5, 30, 80] };
+export const DEFAULT_LAUNCH_WINDOW_SLOTS = 750n;
+export const DEFAULT_TWAP_WINDOW_SLOTS = 25n;
+export const DEFAULT_LAUNCH_FEE_LAMPORTS = 50_000_000n;
+export type LaunchConfig = { curve: LaunchCurve; defaultWindowSlots: bigint; twapWindowSlots: bigint; launchFeeLamports: bigint };
+export const defaultLaunchConfig = (o: Partial<LaunchConfig> = {}): LaunchConfig => ({
+  curve: DEFAULT_LAUNCH_CURVE,
+  defaultWindowSlots: DEFAULT_LAUNCH_WINDOW_SLOTS,
+  twapWindowSlots: DEFAULT_TWAP_WINDOW_SLOTS,
+  launchFeeLamports: DEFAULT_LAUNCH_FEE_LAMPORTS,
+  ...o,
+});
+const t3n = (r: Reader): [number, number, number] => [r.u16(), r.u16(), r.u16()];
+export const readLaunchCurve = (r: Reader): LaunchCurve => ({ startBps: t3n(r), endBps: t3n(r) });
+export const writeLaunchCurve = (w: Writer, c: LaunchCurve): Writer => {
+  c.startBps.forEach((f) => w.u16(f));
+  c.endBps.forEach((f) => w.u16(f));
+  return w;
+};
+export const readLaunchConfig = (r: Reader): LaunchConfig => ({ curve: readLaunchCurve(r), defaultWindowSlots: r.u64(), twapWindowSlots: r.u64(), launchFeeLamports: r.u64() });
+export const writeLaunchConfig = (w: Writer, l: LaunchConfig): Writer => writeLaunchCurve(w, l.curve).u64(l.defaultWindowSlots).u64(l.twapWindowSlots).u64(l.launchFeeLamports);
+
+/** TWAP ring buffer size (fairway_math::twap::OBS_CAP). */
+export const OBS_CAP = 64;
+export type PoolTwap = { lastSlot: bigint; lastPrice: bigint; cum: bigint; head: number; count: number; obsSlot: bigint[]; obsCum: bigint[] };
+export type PoolLaunch = { launchSlot: bigint; windowSlots: bigint; curve: LaunchCurve; twapScoring: boolean };
 
 /** Bot-tax rebate parameters (programs/fairway/src/state.rs `RebateParams`). */
 export type RebateParams = { epochSlots: bigint; shareBps: number; floorBps: number };
@@ -120,6 +152,10 @@ export type PoolAccount = {
     premiumTotalQ: bigint;
     rebateTotalQ: bigint;
   };
+  /** M16: pool creator (may configure the launch), launch params (windowSlots 0 = not a launch), price accumulator */
+  creator: PublicKey;
+  launch: PoolLaunch;
+  twap: PoolTwap;
 };
 
 export type PendingTrade = { pool: PublicKey; /** 1e12 fixed point */ execPrice: bigint; slot: bigint; side: 'buy' | 'sell'; notional: bigint };
@@ -169,6 +205,7 @@ export function decodeConfig(data: Uint8Array): ConfigAccount {
     markout: readMarkoutParams(r),
     protocolFeeBps: r.u16(),
     rebate: readRebateParams(r),
+    launch: readLaunchConfig(r),
   };
 }
 
@@ -206,6 +243,14 @@ export function decodePool(data: Uint8Array): PoolAccount {
       premiumTotalQ: r.u64(),
       rebateTotalQ: r.u64(),
     },
+    creator: r.pubkey(),
+    launch: { launchSlot: r.u64(), windowSlots: r.u64(), curve: readLaunchCurve(r), twapScoring: r.bool() },
+    twap: (() => {
+      const h = { lastSlot: r.u64(), lastPrice: r.u64(), cum: r.u128(), head: r.u16(), count: r.u16() };
+      const obsSlot = Array.from({ length: OBS_CAP }, () => r.u64());
+      const obsCum = Array.from({ length: OBS_CAP }, () => r.u128());
+      return { ...h, obsSlot, obsCum };
+    })(),
   };
 }
 

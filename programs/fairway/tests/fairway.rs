@@ -1429,3 +1429,256 @@ fn protocol_takes_a_share_of_the_premium_only() {
     let premium = fee - fee_on_input(10_000 * USDC, 30).unwrap();
     assert_eq!(pool_state(&env).protocol_owed_quote, premium * 15 / 100);
 }
+
+// ======================================================================================
+// M16: launch fee schedule + pool TWAP scoring
+// ======================================================================================
+
+const ERR_LAUNCH_NOT_STARTED: &str = "Custom(6025)";
+const ERR_LAUNCH_ALREADY_TRADING: &str = "Custom(6026)";
+const ERR_INVALID_LAUNCH: &str = "Custom(6027)";
+const WINDOW: u64 = 750;
+
+fn configure_launch_ix(pool: Pubkey, authority: Pubkey, launch_slot: u64, window_slots: u64, curve: Option<LaunchCurveParams>) -> Instruction {
+    Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::ConfigureLaunch { launch_slot, window_slots, curve }.data(),
+        fairway::accounts::ConfigureLaunch { authority, config: config_pda(), pool, treasury: treasury_pda(), system_program: system_program::ID }.to_account_metas(None),
+    )
+}
+
+fn configure_launch(env: &mut Env, signer: &Keypair, launch_slot: u64, window_slots: u64, curve: Option<LaunchCurveParams>) -> Result<(), String> {
+    let ix = configure_launch_ix(env.pool, signer.pubkey(), launch_slot, window_slots, curve);
+    send(&mut env.svm, &[ix], signer, &[])
+}
+
+/// the SOL/USDC test pool turned into a launch that opens now
+fn launch_env() -> (Env, Lp) {
+    let (mut env, lp) = seeded();
+    let admin = env.admin.insecure_clone();
+    configure_launch(&mut env, &admin, 0, WINDOW, None).unwrap();
+    (env, lp)
+}
+
+/// quote→base swap of `usdc`; returns (fee charged in quote units, tier index)
+fn launch_buy(env: &mut Env, t: &Trader, usdc: u64) -> (u64, usize) {
+    let before = pool_state(env);
+    swap(env, t, usdc, 1, false).unwrap();
+    let p = pool_state(env);
+    let tier = (0..3).find(|&i| p.swaps[i] != before.swaps[i]).unwrap();
+    (p.fees_quote[tier] - before.fees_quote[tier], tier)
+}
+
+fn launch_slot(env: &Env) -> u64 {
+    pool_state(env).launch.launch_slot
+}
+
+#[test]
+fn launch_defaults_are_configured_and_copied_to_the_pool() {
+    let (env, _lp) = launch_env();
+    let c = config_state(&env);
+    assert_eq!(c.launch.curve.start_bps, [30, 300, 1_000]);
+    assert_eq!(c.launch.curve.end_bps, [5, 30, 80]);
+    assert_eq!(c.launch.twap_window_slots, 25);
+    let p = pool_state(&env);
+    assert_eq!(p.launch.curve, c.launch.curve);
+    assert_eq!((p.launch.launch_slot, p.launch.window_slots, p.launch.twap_scoring), (clock(&env).slot, WINDOW, true));
+    assert_eq!(p.creator, env.admin.pubkey());
+}
+
+#[test]
+fn block_zero_fees_per_tier_and_a_fresh_wallet_pays_standard_curve() {
+    let (mut env, _lp) = launch_env();
+    let rita = new_trader(&mut env);
+    let sniper = new_trader(&mut env);
+    let fresh = new_trader(&mut env); // brand-new wallet: no score at all
+    set_score(&mut env, rita.kp.pubkey(), RETAIL);
+    set_score(&mut env, sniper.kp.pubkey(), TOXIC);
+    assert_eq!(clock(&env).slot, launch_slot(&env)); // block 0
+    assert_eq!(launch_buy(&mut env, &fresh, 1_000 * USDC), (fee_on_input(1_000 * USDC, 300).unwrap(), STANDARD as usize));
+    assert_eq!(launch_buy(&mut env, &sniper, 1_000 * USDC), (fee_on_input(1_000 * USDC, 1_000).unwrap(), TOXIC as usize));
+    assert_eq!(launch_buy(&mut env, &rita, 1_000 * USDC), (fee_on_input(1_000 * USDC, 30).unwrap(), RETAIL as usize));
+    // the event carries the launch fee
+    let p = pool_state(&env);
+    assert_eq!(p.swaps, [1, 1, 1]);
+}
+
+#[test]
+fn launch_fee_decays_linearly_and_reverts_to_tier_fees_after_the_window() {
+    let (mut env, _lp) = launch_env();
+    let sniper = new_trader(&mut env);
+    let rita = new_trader(&mut env);
+    let l0 = launch_slot(&env);
+    let at = |env: &mut Env, elapsed: u64, t: &Trader, tier: u8| {
+        env.svm.warp_to_slot(l0 + elapsed);
+        set_score(env, t.kp.pubkey(), tier); // keep the bootstrap score fresh
+        launch_buy(env, t, 1_000 * USDC).0
+    };
+    assert_eq!(at(&mut env, 375, &sniper, TOXIC), fee_on_input(1_000 * USDC, 540).unwrap()); // halfway: 80 + 920/2
+    assert_eq!(at(&mut env, 375, &rita, RETAIL), fee_on_input(1_000 * USDC, 18).unwrap()); // 5 + ceil(25/2)
+    assert_eq!(at(&mut env, WINDOW - 1, &sniper, TOXIC), fee_on_input(1_000 * USDC, 82).unwrap()); // last window slot
+    assert_eq!(at(&mut env, WINDOW, &sniper, TOXIC), fee_on_input(1_000 * USDC, FEES[2]).unwrap()); // window over → tier fee
+    assert_eq!(at(&mut env, WINDOW, &rita, RETAIL), fee_on_input(1_000 * USDC, FEES[0]).unwrap());
+}
+
+#[test]
+fn swaps_before_the_launch_slot_are_refused() {
+    let (mut env, _lp) = seeded();
+    let admin = env.admin.insecure_clone();
+    let open = clock(&env).slot + 100;
+    configure_launch(&mut env, &admin, open, WINDOW, None).unwrap();
+    let t = new_trader(&mut env);
+    assert!(swap(&mut env, &t, 100 * USDC, 1, false).unwrap_err().contains(ERR_LAUNCH_NOT_STARTED));
+    env.svm.warp_to_slot(open - 1);
+    assert!(swap(&mut env, &t, 100 * USDC, 1, false).unwrap_err().contains(ERR_LAUNCH_NOT_STARTED));
+    env.svm.warp_to_slot(open);
+    assert_eq!(launch_buy(&mut env, &t, 100 * USDC), (fee_on_input(100 * USDC, 300).unwrap(), STANDARD as usize));
+}
+
+#[test]
+fn wrong_signer_attack_is_still_blocked_during_a_launch() {
+    let (mut env, _lp) = launch_env();
+    let rita = new_trader(&mut env);
+    let bot = new_trader(&mut env);
+    set_score(&mut env, rita.kp.pubkey(), RETAIL);
+    set_score(&mut env, bot.kp.pubkey(), TOXIC);
+    let ix = swap_ix(&env, &bot, score_pda(&rita.kp.pubkey()), 1_000 * USDC, 1, false);
+    let k = bot.kp.insecure_clone();
+    assert!(send(&mut env.svm, &[ix], &k, &[]).unwrap_err().contains("Custom(2006)"));
+    assert_eq!(pool_state(&env).swaps, [0, 0, 0]);
+    assert_eq!(launch_buy(&mut env, &bot, 1_000 * USDC), (fee_on_input(1_000 * USDC, 1_000).unwrap(), TOXIC as usize));
+}
+
+#[test]
+fn configure_launch_auth_validation_and_launch_fee() {
+    let (mut env, _lp) = seeded();
+    // a stranger cannot configure someone else's pool
+    let stranger = new_user(&mut env.svm);
+    assert!(configure_launch(&mut env, &stranger, 0, WINDOW, None).unwrap_err().contains("Custom(6000)"));
+    let admin = env.admin.insecure_clone();
+    // invalid params
+    let now = clock(&env).slot;
+    env.svm.warp_to_slot(now + 10);
+    for (slot, window, curve) in [
+        (now, WINDOW, None), // launch slot in the past
+        (0, 216_001, None),  // window too long
+        (0, WINDOW, Some(LaunchCurveParams { start_bps: [30, 300, 1_001], end_bps: [5, 30, 80] })), // above the 10% cap
+        (0, WINDOW, Some(LaunchCurveParams { start_bps: [400, 300, 1_000], end_bps: [5, 30, 80] })), // RETAIL above STANDARD
+        (0, WINDOW, Some(LaunchCurveParams { start_bps: [30, 20, 1_000], end_bps: [5, 30, 80] })),  // a rising curve
+    ] {
+        let e = configure_launch(&mut env, &admin, slot, window, curve).unwrap_err();
+        assert!(e.contains(ERR_INVALID_LAUNCH), "{e}");
+    }
+    // window 0 → the config default
+    configure_launch(&mut env, &admin, 0, 0, None).unwrap();
+    assert_eq!(pool_state(&env).launch.window_slots, 750);
+    // once trading started, the launch is frozen
+    let t = new_trader(&mut env);
+    swap(&mut env, &t, 100 * USDC, 1, false).unwrap();
+    assert!(configure_launch(&mut env, &admin, 0, WINDOW, None).unwrap_err().contains(ERR_LAUNCH_ALREADY_TRADING));
+
+    // a non-admin creator pays the launch fee to the treasury
+    let creator = new_user(&mut env.svm);
+    let base_mint = set_mint(&mut env.svm, 6);
+    let quote_mint = env.quote_mint;
+    let pool = pda(&[b"pool", base_mint.as_ref(), quote_mint.as_ref()]);
+    let ix = Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::CreatePool {}.data(),
+        fairway::accounts::CreatePool {
+            payer: creator.pubkey(),
+            base_mint,
+            quote_mint,
+            pool,
+            base_vault: pda(&[b"vault", pool.as_ref(), base_mint.as_ref()]),
+            quote_vault: pda(&[b"vault", pool.as_ref(), quote_mint.as_ref()]),
+            lp_mint: pda(&[b"lp_mint", pool.as_ref()]),
+            token_program: spl_token::ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+    send(&mut env.svm, &[ix], &creator, &[]).unwrap();
+    let before = treasury_balance(&env);
+    send(&mut env.svm, &[configure_launch_ix(pool, creator.pubkey(), 0, WINDOW, None)], &creator, &[]).unwrap();
+    assert_eq!(treasury_balance(&env) - before, config_state(&env).launch.launch_fee_lamports);
+    assert_eq!(config_state(&env).launch.launch_fee_lamports, 50_000_000);
+}
+
+#[test]
+fn pool_twap_accumulates_price_times_slots() {
+    let (mut env, _lp) = launch_env();
+    let t = new_trader(&mut env);
+    let s0 = clock(&env).slot;
+    let p0 = pool_state(&env).twap.last_price; // set by add_liquidity
+    assert!(p0 > 149 * PX && p0 < 151 * PX, "{p0}");
+    env.svm.warp_to_slot(s0 + 20);
+    swap(&mut env, &t, 50_000 * USDC, 1, false).unwrap();
+    let p1 = pool_state(&env).twap.last_price;
+    assert!(p1 > p0);
+    env.svm.warp_to_slot(s0 + 40);
+    swap(&mut env, &t, 50_000 * USDC, 1, false).unwrap();
+    let st = pool_state(&env);
+    let p2 = st.twap.last_price;
+    // the price in effect for [s0, s0+20) is p0, [s0+20, s0+40) is p1, then p2
+    assert_eq!(st.twap.twap(s0, s0 + 20), Some(p0));
+    assert_eq!(st.twap.twap(s0 + 20, s0 + 40), Some(p1));
+    assert_eq!(st.twap.twap(s0 + 10, s0 + 30), Some(((p0 as u128 + p1 as u128) / 2) as u64));
+    assert_eq!(st.twap.twap(s0 + 40, s0 + 100), Some(p2)); // extrapolated: no swap since
+}
+
+/// spot price of the pool's LP reserves, 1e12 (what TWAP-scored trades use as their reference)
+fn spot(env: &Env) -> u64 {
+    let p = pool_state(env);
+    let rb = token_balance(&env.svm, &env.base_vault) - p.protocol_owed_base;
+    let rq = token_balance(&env.svm, &env.quote_vault) - p.protocol_owed_quote;
+    fairway_math::markout::exec_price_scaled(rq, 6, rb, 9).unwrap()
+}
+
+#[test]
+fn launch_pool_without_oracle_scores_against_its_twap() {
+    use fairway_math::markout::*;
+    let (mut env, _lp) = launch_env();
+    assert_eq!(pool_state(&env).oracle_price_account, Pubkey::default());
+    let sniper = new_trader(&mut env);
+    let crowd = new_trader(&mut env);
+    let s0 = clock(&env).slot;
+    swap(&mut env, &sniper, 10_000 * USDC, 1, false).unwrap();
+    let reference = spot(&env);
+    let s = score_of(&env, &sniper.kp.pubkey());
+    assert_eq!(pending_count(&s), 1);
+    // the reference is the POST-trade pool price, not the execution price: own impact is never scored
+    assert_eq!(s.pending[0].exec_price, reference);
+    // the crowd buys after the sniper at slot +10: the price rises and stays there through the TWAP window [+50, +75)
+    env.svm.warp_to_slot(s0 + 10);
+    swap(&mut env, &crowd, 200_000 * USDC, 1, false).unwrap();
+    let after_crowd = spot(&env);
+    // settle too early: nothing happens (no error, trade stays pending)
+    env.svm.warp_to_slot(s0 + 74);
+    let pk = env.pool;
+    settle(&mut env, &sniper.kp.pubkey(), pk).unwrap();
+    let s = score_of(&env, &sniper.kp.pubkey());
+    assert_eq!((pending_count(&s), s.trade_count), (1, 0));
+    env.svm.warp_to_slot(s0 + 80);
+    // the oracle account is ignored for TWAP pools: any account works
+    settle(&mut env, &sniper.kp.pubkey(), Pubkey::new_unique()).unwrap();
+    let s = score_of(&env, &sniper.kp.pubkey());
+    let mk = markout_bps(SIDE_BUY, reference, after_crowd).unwrap();
+    assert!(mk > 100, "{mk}");
+    assert_eq!(s.trade_count, 1);
+    assert_eq!(s.sum_weighted_markout, s.sum_notional as i128 * mk as i128);
+    assert_eq!(pending_count(&s), 0);
+}
+
+#[test]
+fn twap_scoring_of_a_price_that_did_not_move_is_zero() {
+    let (mut env, _lp) = launch_env();
+    let t = new_trader(&mut env);
+    let s0 = clock(&env).slot;
+    swap(&mut env, &t, 10_000 * USDC, 1, false).unwrap();
+    env.svm.warp_to_slot(s0 + 100);
+    let pk = env.pool;
+    settle(&mut env, &t.kp.pubkey(), pk).unwrap();
+    let s = score_of(&env, &t.kp.pubkey());
+    assert_eq!((s.trade_count, s.sum_weighted_markout), (1, 0)); // a big buy alone is not "informed"
+}

@@ -66,6 +66,9 @@ pub fn handle_create_pool(ctx: Context<CreatePool>) -> Result<()> {
     p.volume_q = [0; 3];
     p.premium_total_q = 0;
     p.rebate_total_q = 0;
+    p.creator = ctx.accounts.payer.key();
+    p.launch = crate::state::PoolLaunch::default();
+    // twap: the account is zero-initialised (= empty accumulator); not assigned here to keep 1.5 KB off the stack
     Ok(())
 }
 
@@ -130,7 +133,14 @@ pub fn handle_add_liquidity(ctx: Context<Liquidity>, max_base: u64, max_quote: u
         CpiContext::new_with_signer(tp, MintTo { mint: a.lp_mint.to_account_info(), to: a.owner_lp.to_account_info(), authority: a.pool.to_account_info() }, signer),
         lp_out,
     )?;
-    ctx.accounts.pool.lp_supply = new_supply;
+    let slot = Clock::get()?.slot;
+    let (bd, qd) = (ctx.accounts.base_mint.decimals, ctx.accounts.quote_mint.decimals);
+    ctx.accounts.base_vault.reload()?;
+    ctx.accounts.quote_vault.reload()?;
+    let (nb, nq) = ctx.accounts.pool.lp_reserves(ctx.accounts.base_vault.amount, ctx.accounts.quote_vault.amount).ok_or(FairwayError::Overflow)?;
+    let p = &mut ctx.accounts.pool;
+    p.lp_supply = new_supply;
+    p.record_price(slot, nb, bd, nq, qd);
     Ok(())
 }
 
@@ -161,7 +171,10 @@ pub fn handle_remove_liquidity(ctx: Context<Liquidity>, lp_amount: u64, min_base
             a.quote_mint.decimals,
         )?;
     }
+    let slot = Clock::get()?.slot;
+    let (bd, qd) = (ctx.accounts.base_mint.decimals, ctx.accounts.quote_mint.decimals);
     let p = &mut ctx.accounts.pool;
     p.lp_supply = p.lp_supply.checked_sub(lp_amount).ok_or(FairwayError::Overflow)?;
+    p.record_price(slot, rb - out_base, bd, rq - out_quote, qd);
     Ok(())
 }

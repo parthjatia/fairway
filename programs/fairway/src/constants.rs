@@ -24,3 +24,6 @@ pub const LP_DECIMALS: u8 = 6;
 
 /// Owner of Pyth pull-oracle `PriceUpdateV2` accounts (Pyth Solana Receiver, same id on mainnet and devnet).
 pub const PYTH_RECEIVER_PROGRAM: Pubkey = pubkey!("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
+
+/// Longest allowed launch window: 216_000 slots ≈ 24 h.
+pub const MAX_LAUNCH_WINDOW_SLOTS: u64 = 216_000;

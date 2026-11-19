@@ -25,6 +25,10 @@ export const FAIRWAY_ERRORS = [
   ['TreasuryBelowFloor', 'Withdrawal would take the treasury below its rent-exempt minimum'],
   ['InvalidRebateParams', 'Rebate params: epoch_slots > 0, share <= 10000 bps, floor <= 1000 bps'],
   ['EpochNotElapsed', 'The rebate epoch has not elapsed yet'],
+  ['LaunchNotStarted', 'Trading on this launch has not opened yet'],
+  ['LaunchAlreadyTrading', "A launch can only be configured before the pool's first swap"],
+  ['InvalidLaunchParams', 'Launch params: window 1..=216000 slots, launch slot not in the past, curve decays and is tier-ordered, fees <= 1000 bps'],
+  ['TwapUnavailable', "The pool TWAP does not cover this trade's markout window"],
 ] as const;
 
 export type FairwayErrorName = (typeof FAIRWAY_ERRORS)[number][0];

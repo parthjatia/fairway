@@ -20,6 +20,100 @@ pub struct Config {
     pub protocol_fee_bps: u16,
     /// bot-tax rebate parameters (M15)
     pub rebate: RebateParams,
+    /// launch defaults (M16): the fee curve new launches start from, TWAP window, launch fee
+    pub launch: LaunchConfig,
+}
+
+/// Per-tier launch fee curve `[RETAIL, STANDARD, TOXIC]`: each tier decays linearly from `start_bps` to `end_bps`.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
+pub struct LaunchCurveParams {
+    pub start_bps: [u16; 3],
+    pub end_bps: [u16; 3],
+}
+
+impl LaunchCurveParams {
+    pub fn math(&self) -> fairway_math::launch::LaunchCurve {
+        fairway_math::launch::LaunchCurve { start_bps: self.start_bps, end_bps: self.end_bps }
+    }
+}
+
+impl Default for LaunchCurveParams {
+    fn default() -> Self {
+        let c = fairway_math::launch::DEFAULT_LAUNCH_CURVE;
+        Self { start_bps: c.start_bps, end_bps: c.end_bps }
+    }
+}
+
+/// Launch defaults (M16).
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
+pub struct LaunchConfig {
+    /// default curve copied into a pool by `configure_launch` (TOXIC 1000→80, STANDARD 300→30, RETAIL 30→5)
+    pub curve: LaunchCurveParams,
+    /// default window when `configure_launch` passes 0 (750 slots ≈ 5 min)
+    pub default_window_slots: u64,
+    /// TWAP window ending at the markout horizon, used by `settle_markout` on pools without an oracle
+    pub twap_window_slots: u64,
+    /// SOL paid by the creator to the treasury when a launch is configured (0 = free)
+    pub launch_fee_lamports: u64,
+}
+
+impl Default for LaunchConfig {
+    fn default() -> Self {
+        Self {
+            curve: LaunchCurveParams::default(),
+            default_window_slots: fairway_math::launch::DEFAULT_LAUNCH_WINDOW_SLOTS,
+            twap_window_slots: fairway_math::twap::DEFAULT_TWAP_WINDOW_SLOTS,
+            launch_fee_lamports: 50_000_000,
+        }
+    }
+}
+
+/// A pool's launch (M16). `window_slots == 0` = not a launch pool (normal tier fees from the first swap).
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, Default, PartialEq, Eq, InitSpace)]
+pub struct PoolLaunch {
+    /// first slot trading is allowed (swaps before it are refused)
+    pub launch_slot: u64,
+    pub window_slots: u64,
+    pub curve: LaunchCurveParams,
+    /// queue trades for onchain markout scoring against the pool TWAP when the pool has no oracle
+    pub twap_scoring: bool,
+}
+
+/// Pool price accumulator (M16), see `fairway_math::twap`.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
+pub struct PoolTwap {
+    pub last_slot: u64,
+    pub last_price: u64,
+    pub cum: u128,
+    pub head: u16,
+    pub count: u16,
+    pub obs_slot: [u64; fairway_math::twap::OBS_CAP],
+    pub obs_cum: [u128; fairway_math::twap::OBS_CAP],
+}
+
+impl Default for PoolTwap {
+    fn default() -> Self {
+        Self { last_slot: 0, last_price: 0, cum: 0, head: 0, count: 0, obs_slot: [0; fairway_math::twap::OBS_CAP], obs_cum: [0; fairway_math::twap::OBS_CAP] }
+    }
+}
+
+impl PoolTwap {
+    pub fn header(&self) -> fairway_math::twap::TwapHeader {
+        fairway_math::twap::TwapHeader { last_slot: self.last_slot, last_price: self.last_price, cum: self.cum, head: self.head, count: self.count }
+    }
+    /// in place: only the 40-byte header is copied
+    pub fn record(&mut self, slot: u64, price: u64) {
+        let mut h = self.header();
+        fairway_math::twap::record(&mut h, &mut self.obs_slot, &mut self.obs_cum, slot, price);
+        self.last_slot = h.last_slot;
+        self.last_price = h.last_price;
+        self.cum = h.cum;
+        self.head = h.head;
+        self.count = h.count;
+    }
+    pub fn twap(&self, from: u64, to: u64) -> Option<u64> {
+        fairway_math::twap::twap(&self.header(), &self.obs_slot, &self.obs_cum, from, to)
+    }
 }
 
 /// Bot-tax rebate: RETAIL-tier wallets pay `fee_bps[RETAIL] − rebate`, funded by a share of the PREVIOUS epoch's toxic premium
@@ -150,12 +244,34 @@ pub struct Pool {
     /// lifetime toxic premium and lifetime rebate handed out
     pub premium_total_q: u64,
     pub rebate_total_q: u64,
+    // ---- launch (M16)
+    /// who created the pool: may configure its launch (as may the admin)
+    pub creator: Pubkey,
+    pub launch: PoolLaunch,
+    /// pool price accumulator, updated on every swap and liquidity change
+    pub twap: PoolTwap,
 }
 
 impl Pool {
     /// reserves that belong to LPs and price the curve: vault balance minus unclaimed protocol fees
     pub fn lp_reserves(&self, base_vault_amount: u64, quote_vault_amount: u64) -> Option<(u64, u64)> {
         Some((base_vault_amount.checked_sub(self.protocol_owed_base)?, quote_vault_amount.checked_sub(self.protocol_owed_quote)?))
+    }
+
+    /// Record the pool's spot price (quote per base, 1e12) in the TWAP accumulator. Zero reserves record nothing.
+    pub fn record_price(&mut self, slot: u64, reserve_base: u64, base_decimals: u8, reserve_quote: u64, quote_decimals: u8) {
+        if let Ok(price) = fairway_math::markout::exec_price_scaled(reserve_quote, quote_decimals, reserve_base, base_decimals) {
+            self.twap.record(slot, price);
+        }
+    }
+
+    /// trades on this pool are queued for onchain markout scoring (Pyth oracle, or the pool TWAP for launches)
+    pub fn scored(&self) -> bool {
+        self.oracle_price_account != Pubkey::default() || self.launch.twap_scoring
+    }
+
+    pub fn total_swaps(&self) -> u64 {
+        self.swaps.iter().fold(0u64, |a, s| a.saturating_add(*s))
     }
 }
 

@@ -52,6 +52,14 @@ pub enum FairwayError {
     InvalidRebateParams,
     #[msg("The rebate epoch has not elapsed yet")]
     EpochNotElapsed,
+    #[msg("Trading on this launch has not opened yet")]
+    LaunchNotStarted,
+    #[msg("A launch can only be configured before the pool's first swap")]
+    LaunchAlreadyTrading,
+    #[msg("Launch params: window 1..=216000 slots, launch slot not in the past, curve decays and is tier-ordered, fees <= 1000 bps")]
+    InvalidLaunchParams,
+    #[msg("The pool TWAP does not cover this trade's markout window")]
+    TwapUnavailable,
 }
 
 impl From<fairway_math::MathError> for FairwayError {

@@ -4,6 +4,16 @@ import { Keypair, PublicKey } from '@solana/web3.js';
 import { describe, expect, it } from 'vitest';
 import { encodeSwapExecuted } from '@fairway/fixtures';
 import {
+  configureLaunchIx,
+  decayedFeeBps,
+  defaultLaunchConfig,
+  DEFAULT_LAUNCH_CURVE,
+  launchFeeBps,
+  launchPhase,
+  OBS_CAP,
+  poolTwap,
+  writeLaunchConfig,
+  writeLaunchCurve,
   addLiquidityIx,
   closeScoreIx,
   configPda,
@@ -72,6 +82,7 @@ describe('IDL parity', () => {
       claim_protocol_fees: claimProtocolFeesIx({ cranker: t, baseMint: base, quoteMint: quote }),
       treasury_transfer_tokens: treasuryTransferTokensIx({ admin: t, mint: base, to: k(), amount: 1n }),
       treasury_withdraw_sol: treasuryWithdrawSolIx({ admin: t, destination: k(), lamports: 1n }),
+      configure_launch: configureLaunchIx({ authority: t, baseMint: base, quoteMint: quote }),
     };
     for (const i of idl.instructions) {
       const ix = built[i.name]!;
@@ -119,7 +130,9 @@ describe('account decoders', () => {
     const cw = new Writer().bytes(discriminator('account', 'Config')).pubkey(admin).pubkey(auth).u16(5).u16(30).u16(80).u8(1).u64(1000n).u8(254);
     writeMarkoutParams(cw, defaultMarkoutParams({ pythMaxConfBps: 77 }));
     cw.u16(1500).u64(9000n).u16(1000).u16(5);
+    writeLaunchConfig(cw, defaultLaunchConfig({ launchFeeLamports: 7n }));
     const cfg = cw.toBytes();
+    expect(decodeConfig(cfg).launch).toEqual({ curve: { startBps: [30, 300, 1000], endBps: [5, 30, 80] }, defaultWindowSlots: 750n, twapWindowSlots: 25n, launchFeeLamports: 7n });
     expect(decodeConfig(cfg).protocolFeeBps).toBe(1500);
     expect(decodeConfig(cfg).rebate).toEqual({ epochSlots: 9000n, shareBps: 1000, floorBps: 5 });
     expect(decodeConfig(cfg)).toMatchObject({ feeBps: [5, 30, 80], defaultTier: 1, scoreTtlSlots: 1000n, bump: 254 });
@@ -135,7 +148,17 @@ describe('account decoders', () => {
     const oracleKey = k();
     w.pubkey(oracleKey).bytes(new Uint8Array(32).fill(7));
     w.u64(900n).u64(50n).u64(60n).u16(7).u64(40n).u64(1n).u64(2n).u64(3n).u64(70n).u64(80n);
+    const creator = k();
+    w.pubkey(creator).u64(1_000n).u64(750n);
+    writeLaunchCurve(w, DEFAULT_LAUNCH_CURVE).bool(true);
+    w.u64(1_010n).u64(5n).u64(0n).u64(0n).u16(1).u16(2); // twap header: lastSlot, lastPrice, cum (u128), head, count
+    for (let i = 0; i < OBS_CAP; i++) w.u64(i === 1 ? 1_010n : i === 0 ? 1_000n : 0n);
+    for (let i = 0; i < OBS_CAP; i++) w.u64(0n).u64(0n);
     const pool = decodePool(w.toBytes());
+    expect(pool.creator.equals(creator)).toBe(true);
+    expect(pool.launch).toEqual({ launchSlot: 1_000n, windowSlots: 750n, curve: DEFAULT_LAUNCH_CURVE, twapScoring: true });
+    expect(pool.twap).toMatchObject({ lastSlot: 1_010n, lastPrice: 5n, head: 1, count: 2 });
+    expect(pool.twap.obsSlot.slice(0, 2)).toEqual([1_000n, 1_010n]);
     expect(pool.oracleCfg.priceAccount.equals(oracleKey)).toBe(true);
     expect(Array.from(pool.oracleCfg.feedId)).toEqual(new Array(32).fill(7));
     expect(pool).toMatchObject({ protocolOwedBase: 11n, protocolOwedQuote: 12n, protocolEarnedBase: 13n, protocolEarnedQuote: 14n, sponsoredAccounts: 2, sponsoredLamports: 5_000_000n });
@@ -186,7 +209,7 @@ describe('getFeeTier (composable read)', () => {
   const cfgBytes = () => {
     const cw = new Writer().bytes(discriminator('account', 'Config')).pubkey(k()).pubkey(k()).u16(5).u16(30).u16(80).u8(1).u64(1000n).u8(254);
     writeMarkoutParams(cw, defaultMarkoutParams());
-    return decodeConfig(cw.u16(1500).u64(9000n).u16(1000).u16(5).toBytes());
+    return decodeConfig(writeLaunchConfig(cw.u16(1500).u64(9000n).u16(1000).u16(5), defaultLaunchConfig()).toBytes());
   };
   const scoreBytes = (o: { tier: number; onchainTier: number; sumNotional: bigint; trades: number; pending?: number }) => {
     const w = new Writer().bytes(discriminator('account', 'TraderScore')).pubkey(wallet).u8(o.tier).i32(0).u32(9).u64(90n).u8(250);
@@ -271,5 +294,30 @@ describe('errors', () => {
     expect(parseFairwayError({ message: 'Transaction simulation failed: custom program error: 0x1771' })!.errorName).toBe('NotScoreAuthority');
     expect(parseFairwayError({ InstructionError: [0, { Custom: 6013 }] })!.errorName).toBe('ScoreAccountMismatch');
     expect(() => setScoresBatchIx({ authority: k(), entries: [] })).toThrow();
+  });
+});
+
+describe('launch fee schedule (mirrors crates/fairway-math launch.rs)', () => {
+  const C = DEFAULT_LAUNCH_CURVE;
+  it('block 0, halfway, last slot and after the window', () => {
+    expect([0, 1, 2].map((t) => launchFeeBps(C, t, 1000n, 1000n, 750n))).toEqual([30, 300, 1000]);
+    expect(decayedFeeBps(C, 2, 375n, 750n)).toBe(540);
+    expect(decayedFeeBps(C, 1, 375n, 750n)).toBe(165);
+    expect(decayedFeeBps(C, 0, 375n, 750n)).toBe(18);
+    expect(decayedFeeBps(C, 2, 749n, 750n)).toBe(82);
+    expect(launchFeeBps(C, 2, 1750n, 1000n, 750n)).toBeNull();
+    expect(launchPhase(999n, 1000n, 750n)).toEqual({ kind: 'not-started' });
+    expect(launchPhase(5n, 0n, 0n)).toEqual({ kind: 'after' });
+  });
+  it('pool TWAP: step change is time-weighted, extrapolates after the last update', () => {
+    const obsSlot = new Array<bigint>(OBS_CAP).fill(0n);
+    const obsCum = new Array<bigint>(OBS_CAP).fill(0n);
+    obsSlot[1] = 10n;
+    obsCum[1] = 1000n; // price 100 during [0,10)
+    const t = { lastSlot: 10n, lastPrice: 300n, cum: 1000n, head: 1, count: 2, obsSlot, obsCum };
+    expect(poolTwap(t, 0n, 10n)).toBe(100n);
+    expect(poolTwap(t, 0n, 20n)).toBe(200n);
+    expect(poolTwap(t, 10n, 50n)).toBe(300n);
+    expect(poolTwap(t, 5n, 15n)).toBe(200n);
   });
 });

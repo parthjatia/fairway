@@ -115,6 +115,11 @@ export class Reader {
     this.off += 8;
     return v;
   }
+  u128(): bigint {
+    const lo = this.u64();
+    const hi = this.u64();
+    return (hi << 64n) | lo;
+  }
   i128(): bigint {
     const lo = this.u64();
     const hi = this.u64();
