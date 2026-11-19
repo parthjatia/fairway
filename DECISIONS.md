@@ -27,3 +27,6 @@ One line per decision: date — decision — why.
 - 2026-11-19 — Fees stay in the vaults (k grows); per-tier cumulative fees/swaps are tracked on the Pool for transparency. close_score rent always returns to the score authority (who paid).
 - 2026-11-19 — Score writes: `set_score` uses init_if_needed; `set_scores_batch` creates PDAs manually (transfer+allocate+assign) from remaining_accounts, max 10/tx.
 - 2026-11-19 — SDK is hand-written on @solana/web3.js 1.99 (wallet-adapter peer) with a minimal Borsh codec; IDL committed at packages/sdk/idl/fairway.json and tests assert byte-level parity.
+- 2026-11-19 — Parser core is one self-contained TS file (no imports/BigInt, ES2018) that esbuild inlines into streams/filter.js; a test asserts filter.js is byte-identical to a fresh build and gives identical output to the parser. Matching is by pool VAULT accounts (works for any AMM and aggregator-routed swaps).
+- 2026-11-19 — Raydium SOL-USDC vault addresses prefilled from memory and marked "VERIFY" in pools.config.json/STREAM_CONFIG.md; Orca/Fairway entries are placeholders (ignored by the filter until filled).
+- 2026-11-19 — Webhook auth: QuickNode HMAC (x-qn-signature over nonce+timestamp+body) when QN_STREAM_TOKEN is set, plus an `x-fairway-token` shared-secret header for curl/local use.

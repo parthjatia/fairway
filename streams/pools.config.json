@@ -1,0 +1,35 @@
+{
+  "_comment": "Pools the QuickNode Stream filter watches. Edit here, then run `pnpm --filter @fairway/streams build:filter` (or edit the CONFIG block at the top of filter.js directly in the QuickNode dashboard). Entries whose vaults start with '<' are placeholders and are ignored. See STREAM_CONFIG.md for how to find vault addresses.",
+  "pools": [
+    {
+      "id": "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2",
+      "venue": "raydium",
+      "label": "Raydium AMM v4 SOL-USDC (mainnet) — VERIFY vaults on an explorer before use",
+      "baseVault": "DQyrAcCrDXQ7NeoqGgDCZwBvWDcYmFCjSb9JtteuvPpz",
+      "quoteVault": "HLmqeL62xR1QoZ1HKKbXRrdN1p3phKpxRMb2VVopvBBz",
+      "feeBps": 25,
+      "baseDecimals": 9,
+      "quoteDecimals": 6
+    },
+    {
+      "id": "<ORCA_WHIRLPOOL_SOL_USDC_POOL>",
+      "venue": "orca",
+      "label": "Orca Whirlpool SOL-USDC (mainnet) — fill tokenVaultA / tokenVaultB",
+      "baseVault": "<ORCA_TOKEN_VAULT_A>",
+      "quoteVault": "<ORCA_TOKEN_VAULT_B>",
+      "feeBps": 4,
+      "baseDecimals": 9,
+      "quoteDecimals": 6
+    },
+    {
+      "id": "<FAIRWAY_DEVNET_POOL_PDA>",
+      "venue": "fairway",
+      "label": "Fairway SOL-USDC (devnet) — fill after `pnpm seed:devnet` prints the pool + vault PDAs",
+      "baseVault": "<FAIRWAY_BASE_VAULT>",
+      "quoteVault": "<FAIRWAY_QUOTE_VAULT>",
+      "feeBps": 30,
+      "baseDecimals": 9,
+      "quoteDecimals": 6
+    }
+  ]
+}

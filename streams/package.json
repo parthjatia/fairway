@@ -1,0 +1,16 @@
+{
+  "name": "@fairway/streams",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:filter": "tsx build-filter.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@fairway/fixtures": "workspace:*",
+    "@fairway/parser": "workspace:*",
+    "esbuild": "^0.28.0"
+  }
+}
