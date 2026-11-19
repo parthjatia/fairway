@@ -11,6 +11,7 @@ All milestones M0–M12 complete. Fresh-clone install/build/test verified (TS 8 
 - [x] #3 Venue overclaims fixed (landing page, README): only Raydium is configured; Orca/Meteora need vaults added
 - [x] #4 DEMO_SCRIPT: added a QuickNode Streams shot (live + offline fallback); fixed the nonexistent "rotation toggle" step
 - [x] #5 SETUP_REMAINING: skip keygen/`anchor keys sync` on the build machine (prevents a program-ID change before deploy)
+- [x] #6 run.sh (local autonomous build loop) untracked and gitignored; file kept on disk
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
