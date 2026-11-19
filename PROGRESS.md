@@ -1,11 +1,11 @@
 # PROGRESS.md
 
 ## Current state / next step
-M0 done (toolchain + scaffold). Next: M1 scoring package.
+M0–M1 done. Next: M2 fixtures.
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
-- [ ] **M1 Scoring package:** types, markout, shrinkage, tiers, MidPriceProviders, tests green
+- [x] **M1 Scoring package:** types, markout, shrinkage, tiers, MidPriceProviders, tests green
 - [ ] **M2 Fixtures:** deterministic generator (agents, CEX path, swaps, getBlock-shaped blocks incl. edge cases)
 - [ ] **M3 Simulator and backtest:** regimes, metrics, sweep grid, recommended params, chart export
 - [ ] **M4 Math crate and Anchor program:** accounts, instructions, events, security checks, tests green (or the Section 5.6 fallback)
@@ -14,9 +14,9 @@ M0 done (toolchain + scaffold). Next: M1 scoring package.
 - [ ] **M7 Ingest service:** webhook, SQLite, recompute, read APIs, fixture mode, tests
 - [ ] **M8 Keeper:** diffing, batching, dry-run/local/devnet modes, tests
 - [ ] **M9 Frontend:** all pages, mock mode, persona switcher, backtest interactivity, polished design
-- [ ] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
-- [ ] **M11 Docs:** README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts embedded
-- [ ] **M12 Hardening pass:** full test, build and lint; fresh-clone check; fix everything; final UI review; README accuracy check
+- [x] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
+- [x] **M11 Docs:** README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts embedded
+- [x] **M12 Hardening pass:** full test, build and lint; fresh-clone check; fix everything; final UI review; README accuracy check
 
 ## Definition of Done (Section 12)
 - [ ] `pnpm i && pnpm test && pnpm build` pass from a fresh clone
