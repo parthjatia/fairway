@@ -1,4 +1,3 @@
-STATUS: DONE
 
 # PROGRESS.md
 
