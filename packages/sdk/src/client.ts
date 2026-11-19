@@ -24,7 +24,7 @@ export class FairwayClient {
     const pool = decodePool(info.data);
     const [b, q] = await Promise.all([this.connection.getTokenAccountBalance(pool.baseVault), this.connection.getTokenAccountBalance(pool.quoteVault)]);
     // reserves that price the curve exclude protocol fees that have accrued in the vaults but are not yet claimed
-    return { ...pool, address: a.pool, reserveBase: BigInt(b.value.amount) - pool.protocolOwedBase, reserveQuote: BigInt(q.value.amount) - pool.protocolOwedQuote };
+    return { ...pool, address: a.pool, reserveBase: BigInt(b.value.amount) - pool.protocolOwedBase - pool.creatorFees.owedBase, reserveQuote: BigInt(q.value.amount) - pool.protocolOwedQuote - pool.creatorFees.owedQuote };
   }
 
   async fetchScore(trader: PublicKey): Promise<TraderScoreAccount | null> {

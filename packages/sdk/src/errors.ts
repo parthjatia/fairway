@@ -29,6 +29,7 @@ export const FAIRWAY_ERRORS = [
   ['LaunchAlreadyTrading', "A launch can only be configured before the pool's first swap"],
   ['InvalidLaunchParams', 'Launch params: window 1..=216000 slots, launch slot not in the past, curve decays and is tier-ordered, fees <= 1000 bps'],
   ['TwapUnavailable', "The pool TWAP does not cover this trade's markout window"],
+  ['InvalidCreatorShare', 'Creator share + protocol fee must be at most 100% of the premium'],
 ] as const;
 
 export type FairwayErrorName = (typeof FAIRWAY_ERRORS)[number][0];

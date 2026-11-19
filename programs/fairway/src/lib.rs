@@ -82,8 +82,14 @@ pub mod fairway {
 
     /// Make the pool a fair launch: trading opens at `launch_slot` (0 = now) and, for `window_slots` (0 = default), the fee
     /// follows the per-tier decay curve (None = the Config default). Creator or admin, before the first swap.
-    pub fn configure_launch(ctx: Context<ConfigureLaunch>, launch_slot: u64, window_slots: u64, curve: Option<LaunchCurveParams>) -> Result<()> {
-        instructions::launch::handle_configure_launch(ctx, launch_slot, window_slots, curve)
+    /// `creator_share_bps` (None = Config default 50%): share of the TOXIC premium paid to the pool creator.
+    pub fn configure_launch(ctx: Context<ConfigureLaunch>, launch_slot: u64, window_slots: u64, curve: Option<LaunchCurveParams>, creator_share_bps: Option<u16>) -> Result<()> {
+        instructions::launch::handle_configure_launch(ctx, launch_slot, window_slots, curve, creator_share_bps)
+    }
+
+    /// Permissionless: pay the creator's accrued share of the TOXIC premium into token accounts owned by the pool creator.
+    pub fn claim_creator_fees(ctx: Context<ClaimCreatorFees>) -> Result<()> {
+        instructions::launch::handle_claim_creator_fees(ctx)
     }
 
     pub fn close_score(ctx: Context<CloseScore>) -> Result<()> {

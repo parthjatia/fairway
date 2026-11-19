@@ -264,9 +264,19 @@ export function setPoolOracleIx(p: { admin: PublicKey; baseMint: PublicKey; quot
 
 /**
  * Make a pool a fair launch (creator or admin, before the first swap). `launchSlot` 0 = open now; `windowSlots` 0 = the
- * Config default (750 ≈ 5 min); `curve` omitted = the Config default curve. A non-admin creator pays the launch fee to the treasury.
+ * Config default (750 ≈ 5 min); `curve` omitted = the Config default curve; `creatorShareBps` omitted = the Config default
+ * share of the TOXIC premium paid to the creator (50%). A non-admin creator pays the launch fee to the treasury.
  */
-export function configureLaunchIx(p: { authority: PublicKey; baseMint: PublicKey; quoteMint: PublicKey; launchSlot?: bigint | number; windowSlots?: bigint | number; curve?: LaunchCurve; programId?: PublicKey }) {
+export function configureLaunchIx(p: {
+  authority: PublicKey;
+  baseMint: PublicKey;
+  quoteMint: PublicKey;
+  launchSlot?: bigint | number;
+  windowSlots?: bigint | number;
+  curve?: LaunchCurve;
+  creatorShareBps?: number;
+  programId?: PublicKey;
+}) {
   const programId = p.programId ?? PROGRAM_ID;
   return ix(
     programId,
@@ -276,6 +286,24 @@ export function configureLaunchIx(p: { authority: PublicKey; baseMint: PublicKey
       wr.u64(p.launchSlot ?? 0);
       wr.u64(p.windowSlots ?? 0);
       wr.option(p.curve, (x, v) => writeLaunchCurve(x, v));
+      wr.option(p.creatorShareBps, (x, v) => x.u16(v));
     },
   );
+}
+
+/** Permissionless: pay the creator's accrued share of the TOXIC premium into token accounts owned by the pool creator (ATAs by default). */
+export function claimCreatorFeesIx(p: { cranker: PublicKey; baseMint: PublicKey; quoteMint: PublicKey; creator: PublicKey; creatorBase?: PublicKey; creatorQuote?: PublicKey; programId?: PublicKey }) {
+  const programId = p.programId ?? PROGRAM_ID;
+  const a = poolAddresses(p.baseMint, p.quoteMint, programId);
+  return ix(programId, [
+    w(p.cranker, false, true),
+    w(a.pool, true),
+    w(p.baseMint),
+    w(p.quoteMint),
+    w(a.baseVault, true),
+    w(a.quoteVault, true),
+    w(p.creatorBase ?? getAssociatedTokenAddressSync(p.baseMint, p.creator, true), true),
+    w(p.creatorQuote ?? getAssociatedTokenAddressSync(p.quoteMint, p.creator, true), true),
+    w(TOKEN_PROGRAM_ID),
+  ], 'claim_creator_fees');
 }

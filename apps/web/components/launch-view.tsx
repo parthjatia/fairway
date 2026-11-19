@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Pause, Play, RotateCcw, ShieldAlert } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { buyersAt, decayFeeNow, feeNow, priceAt, simulateLaunch, sniperShareAt, SLOT_SEC, TIER_OF, type LaunchSpec, type ScoreSource } from '@/lib/launches';
+import { buyersAt, decayFeeNow, feeNow, priceAt, revenueAt, simulateLaunch, sniperShareAt, SLOT_SEC, TIER_OF, type LaunchSimView, type LaunchSpec, type ScoreSource } from '@/lib/launches';
 import { loadMyLaunches } from '@/lib/client/launch-store';
 import { short, usd } from '@/lib/format';
 import { Card, Empty, ScoreSourceBadge, Stat, TierBadge } from './ui';
@@ -137,6 +137,8 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         <TwoWalletsLaunch buyUsd={buyUsd} setBuyUsd={setBuyUsd} fees={fees} decayFee={decayFee} />
       </div>
 
+      <CreatorRevenue v={v} slot={slot} />
+
       <Card title="Price since launch" subtitle={`Pool price ÷ listing price (${compare === 'fairway' ? 'Fairway' : 'time-decay-only'} run). The dashed line is the end of the launch window.`}>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={chart} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
@@ -203,6 +205,33 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         </p>
       </Card>
     </div>
+  );
+}
+
+/** Where this launch's fees went so far (Fairway run): the creator's direct share of the sniper premium, LPs, protocol. */
+function CreatorRevenue({ v, slot }: { v: LaunchSimView; slot: number }) {
+  const r = revenueAt(v, slot);
+  const rows: [string, number, string][] = [
+    [`Creator share of the sniper premium (${r.sharePct}%)`, r.creator, 'paid to the creator directly, even if its LP position is locked or burned'],
+    ['LP fees (stay in the pool)', r.lp, 'the creator earns these too while it is the only LP'],
+    ['Protocol (15% of the premium)', r.protocol, 'the 0.05 SOL launch fee comes on top'],
+  ];
+  return (
+    <Card title="Creator revenue" subtitle={`Fees paid in this launch so far under Fairway: ${usd(r.fees, 2)}, of which ${usd(r.fromSnipers, 2)} from snipers and bundle wallets.`}>
+      <div className="grid gap-3 md:grid-cols-3">
+        {rows.map(([k, val, note]) => (
+          <div key={k} className="rounded-xl border border-line px-3 py-2.5">
+            <div className="text-[12px] text-ink-2">{k}</div>
+            <div className="mt-1 text-lg font-semibold text-ink tnum">{usd(val, 2)}</div>
+            <div className="mt-0.5 text-[11px] leading-snug text-muted">{note}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+        The premium is what known snipers pay above the fresh-wallet fee: {usd(r.premium, 2)} here. It is small when Fairway works, because most known snipers skip the launch. The same launch under time-decay-only would have
+        paid {usd(r.decayFees, 2)} in fees by now, mostly from humans. That is the trade-off: a fairer distribution and cheaper entry for your holders, in exchange for less fee income. Simulated data.
+      </p>
+    </Card>
   );
 }
 

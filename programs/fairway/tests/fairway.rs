@@ -1440,9 +1440,13 @@ const ERR_INVALID_LAUNCH: &str = "Custom(6027)";
 const WINDOW: u64 = 750;
 
 fn configure_launch_ix(pool: Pubkey, authority: Pubkey, launch_slot: u64, window_slots: u64, curve: Option<LaunchCurveParams>) -> Instruction {
+    configure_launch_share_ix(pool, authority, launch_slot, window_slots, curve, None)
+}
+
+fn configure_launch_share_ix(pool: Pubkey, authority: Pubkey, launch_slot: u64, window_slots: u64, curve: Option<LaunchCurveParams>, creator_share_bps: Option<u16>) -> Instruction {
     Instruction::new_with_bytes(
         fairway::id(),
-        &fairway::instruction::ConfigureLaunch { launch_slot, window_slots, curve }.data(),
+        &fairway::instruction::ConfigureLaunch { launch_slot, window_slots, curve, creator_share_bps }.data(),
         fairway::accounts::ConfigureLaunch { authority, config: config_pda(), pool, treasury: treasury_pda(), system_program: system_program::ID }.to_account_metas(None),
     )
 }
@@ -1681,4 +1685,117 @@ fn twap_scoring_of_a_price_that_did_not_move_is_zero() {
     settle(&mut env, &t.kp.pubkey(), pk).unwrap();
     let s = score_of(&env, &t.kp.pubkey());
     assert_eq!((s.trade_count, s.sum_weighted_markout), (1, 0)); // a big buy alone is not "informed"
+}
+
+// ---- creator share of the TOXIC premium (M16 step 10)
+
+fn claim_creator_ix(env: &Env, cranker: Pubkey, cb: Pubkey, cq: Pubkey) -> Instruction {
+    Instruction::new_with_bytes(
+        fairway::id(),
+        &fairway::instruction::ClaimCreatorFees {}.data(),
+        fairway::accounts::ClaimCreatorFees {
+            cranker,
+            pool: env.pool,
+            base_mint: env.base_mint,
+            quote_mint: env.quote_mint,
+            base_vault: env.base_vault,
+            quote_vault: env.quote_vault,
+            creator_base: cb,
+            creator_quote: cq,
+            token_program: spl_token::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+#[test]
+fn creator_share_defaults_to_half_the_premium_on_launch_pools_only() {
+    let (env, _lp) = seeded();
+    assert_eq!(config_state(&env).launch.creator_premium_share_bps, 5_000);
+    assert_eq!(pool_state(&env).creator_share_bps, 0, "a plain pool pays no creator share");
+    let (env, _lp) = launch_env();
+    assert_eq!(pool_state(&env).creator_share_bps, 5_000);
+}
+
+#[test]
+fn creator_gets_its_share_of_the_toxic_premium_excluded_from_reserves_and_claimable() {
+    let (mut env, _lp) = launch_env();
+    let sniper = new_trader(&mut env);
+    let rita = new_trader(&mut env);
+    let fresh = new_trader(&mut env);
+    set_score(&mut env, sniper.kp.pubkey(), TOXIC);
+    set_score(&mut env, rita.kp.pubkey(), RETAIL);
+    // humans and fresh wallets pay no premium, so the creator share is 0 on their trades
+    launch_buy(&mut env, &rita, 1_000 * USDC);
+    launch_buy(&mut env, &fresh, 1_000 * USDC);
+    assert_eq!((pool_state(&env).creator_owed_quote, pool_state(&env).creator_owed_base), (0, 0));
+    // a known sniper at block 0: 1000 bps vs the STANDARD 300 bps → premium = 700 bps of the trade
+    let (fee, tier) = launch_buy(&mut env, &sniper, 2_000 * USDC);
+    assert_eq!(tier, TOXIC as usize);
+    let premium = fee - fee_on_input(2_000 * USDC, 300).unwrap();
+    let cut = fairway_math::protocol_share(premium, 1_500).unwrap();
+    let creator = fairway_math::protocol_share(premium, 5_000).unwrap();
+    let p = pool_state(&env);
+    assert_eq!((p.protocol_owed_quote, p.creator_owed_quote, p.creator_earned_quote), (cut, creator, creator));
+    assert_eq!(creator, premium / 2);
+
+    // pricing uses vault − protocol − creator owed
+    let (rb, rq) = (token_balance(&env.svm, &env.base_vault) - p.protocol_owed_base - p.creator_owed_base, token_balance(&env.svm, &env.quote_vault) - p.protocol_owed_quote - p.creator_owed_quote);
+    let elapsed = clock(&env).slot - p.launch.launch_slot;
+    let fee_bps = fairway_math::launch::decayed_fee_bps(&p.launch.curve.math(), RETAIL, elapsed, p.launch.window_slots);
+    let q = swap_quote(500 * USDC, rq, rb, fee_bps).unwrap();
+    set_score(&mut env, rita.kp.pubkey(), RETAIL);
+    let before = token_balance(&env.svm, &rita.base);
+    swap(&mut env, &rita, 500 * USDC, 1, false).unwrap();
+    assert_eq!(token_balance(&env.svm, &rita.base) - before, q.amount_out, "swap must price off LP reserves, excluding the creator's share");
+
+    // the sniper sells (base in, TOXIC): the creator's share accrues in base too
+    let sell = token_balance(&env.svm, &sniper.base) / 2;
+    swap(&mut env, &sniper, sell, 1, true).unwrap();
+    let p = pool_state(&env);
+    assert!(p.creator_owed_base > 0);
+
+    // permissionless claim, but only into token accounts owned by the creator
+    let (bm, qm) = (env.base_mint, env.quote_mint);
+    let stranger = new_user(&mut env.svm);
+    let (sb, sq) = (set_token_account(&mut env.svm, &bm, &stranger.pubkey(), 0), set_token_account(&mut env.svm, &qm, &stranger.pubkey(), 0));
+    let ix = claim_creator_ix(&env, stranger.pubkey(), sb, sq);
+    assert!(send(&mut env.svm, &[ix], &stranger, &[]).is_err());
+    let creator_key = p.creator;
+    let (cb, cq) = (set_token_account(&mut env.svm, &bm, &creator_key, 0), set_token_account(&mut env.svm, &qm, &creator_key, 0));
+    let (owed_b, owed_q) = (p.creator_owed_base, p.creator_owed_quote);
+    let ix = claim_creator_ix(&env, stranger.pubkey(), cb, cq);
+    send(&mut env.svm, &[ix], &stranger, &[]).unwrap();
+    assert_eq!((token_balance(&env.svm, &cb), token_balance(&env.svm, &cq)), (owed_b, owed_q));
+    let p = pool_state(&env);
+    assert_eq!((p.creator_owed_base, p.creator_owed_quote), (0, 0));
+    assert_eq!((p.creator_earned_base, p.creator_earned_quote), (owed_b, owed_q));
+    // the protocol's share is untouched by the creator claim
+    assert!(p.protocol_owed_quote > 0);
+}
+
+#[test]
+fn creator_share_is_configurable_and_bounded() {
+    // share + protocol fee (15%) must not exceed 100% of the premium
+    let (mut env, _lp) = seeded();
+    let admin = env.admin.insecure_clone();
+    let ix = configure_launch_share_ix(env.pool, admin.pubkey(), 0, WINDOW, None, Some(9_000));
+    let err = send(&mut env.svm, &[ix], &admin, &[]).unwrap_err();
+    assert!(err.contains("InvalidCreatorShare") || err.contains("Custom(60"), "{err}");
+    // 0% = the creator opts out: the whole non-protocol premium stays with LPs
+    let ix = configure_launch_share_ix(env.pool, admin.pubkey(), 0, WINDOW, None, Some(0));
+    send(&mut env.svm, &[ix], &admin, &[]).unwrap();
+    let sniper = new_trader(&mut env);
+    set_score(&mut env, sniper.kp.pubkey(), TOXIC);
+    launch_buy(&mut env, &sniper, 1_000 * USDC);
+    let p = pool_state(&env);
+    assert_eq!((p.creator_share_bps, p.creator_owed_quote), (0, 0));
+    assert!(p.protocol_owed_quote > 0);
+    // the Config default is bounded the same way
+    let mut l = config_state(&env).launch;
+    l.creator_premium_share_bps = 8_600;
+    assert!(update_config(&mut env, ConfigUpdate { launch: Some(l), ..Default::default() }).is_err());
+    l.creator_premium_share_bps = 8_500;
+    update_config(&mut env, ConfigUpdate { launch: Some(l), ..Default::default() }).unwrap();
+    assert!(update_config(&mut env, ConfigUpdate { protocol_fee_bps: Some(1_600), ..Default::default() }).is_err());
 }

@@ -117,6 +117,97 @@
       ]
     },
     {
+      "name": "claim_creator_fees",
+      "docs": [
+        "Permissionless: pay the creator's accrued share of the TOXIC premium into token accounts owned by the pool creator."
+      ],
+      "discriminator": [
+        0,
+        23,
+        125,
+        234,
+        156,
+        118,
+        134,
+        89
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "anyone may crank: the destinations must be owned by the pool creator"
+          ],
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.base_mint",
+                "account": "Pool"
+              },
+              {
+                "kind": "account",
+                "path": "pool.quote_mint",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "base_mint",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "quote_mint",
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "base_vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "quote_vault",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "creator_base",
+          "writable": true
+        },
+        {
+          "name": "creator_quote",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "claim_protocol_fees",
       "docs": [
         "Permissionless: move the protocol's accrued share of swap fees into the treasury's token accounts."
@@ -319,7 +410,8 @@
       "name": "configure_launch",
       "docs": [
         "Make the pool a fair launch: trading opens at `launch_slot` (0 = now) and, for `window_slots` (0 = default), the fee",
-        "follows the per-tier decay curve (None = the Config default). Creator or admin, before the first swap."
+        "follows the per-tier decay curve (None = the Config default). Creator or admin, before the first swap.",
+        "`creator_share_bps` (None = Config default 50%): share of the TOXIC premium paid to the pool creator."
       ],
       "discriminator": [
         4,
@@ -428,6 +520,12 @@
                 "name": "LaunchCurveParams"
               }
             }
+          }
+        },
+        {
+          "name": "creator_share_bps",
+          "type": {
+            "option": "u16"
           }
         }
       ]
@@ -1776,6 +1874,11 @@
       "code": 6028,
       "name": "TwapUnavailable",
       "msg": "The pool TWAP does not cover this trade's markout window"
+    },
+    {
+      "code": 6029,
+      "name": "InvalidCreatorShare",
+      "msg": "Creator share + protocol fee must be at most 100% of the premium"
     }
   ],
   "types": [
@@ -1989,6 +2092,13 @@
               "SOL paid by the creator to the treasury when a launch is configured (0 = free)"
             ],
             "type": "u64"
+          },
+          {
+            "name": "creator_premium_share_bps",
+            "docs": [
+              "default share of the TOXIC premium paid to the pool creator on launch pools (bps of the premium, 5000 = 50%)"
+            ],
+            "type": "u16"
           }
         ]
       }
@@ -2446,6 +2556,32 @@
                 "name": "PoolTwap"
               }
             }
+          },
+          {
+            "name": "creator_share_bps",
+            "docs": [
+              "bps of the TOXIC premium paid to the creator (set by `configure_launch`; 0 on non-launch pools)"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "creator_owed_base",
+            "type": "u64"
+          },
+          {
+            "name": "creator_owed_quote",
+            "type": "u64"
+          },
+          {
+            "name": "creator_earned_base",
+            "docs": [
+              "cumulative creator payouts (claimed or not)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "creator_earned_quote",
+            "type": "u64"
           }
         ]
       }

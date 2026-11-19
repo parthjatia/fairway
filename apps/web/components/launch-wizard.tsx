@@ -5,12 +5,12 @@ import { ArrowLeft, ArrowRight, Rocket } from 'lucide-react';
 import { decayedFee, DEFAULT_LAUNCH_CONFIG } from '@fairway/sim/launch';
 import { MODE } from '@/lib/client/state';
 import { saveMyLaunch } from '@/lib/client/launch-store';
-import { newLaunchId, SLOT_SEC, type LaunchSpec } from '@/lib/launches';
+import { DEFAULT_CREATOR_SHARE_PCT, MAX_CREATOR_SHARE_PCT, newLaunchId, SLOT_SEC, type LaunchSpec } from '@/lib/launches';
 import { usd } from '@/lib/format';
 import { Card, TierBadge } from './ui';
 import { LiveCreate } from './live/live-launch';
 
-type Form = { name: string; symbol: string; supplyM: number; poolPct: number; liquidityUsd: number; windowMin: number };
+type Form = { name: string; symbol: string; supplyM: number; poolPct: number; liquidityUsd: number; windowMin: number; creatorSharePct: number };
 const STEPS = ['Token', 'Liquidity', 'Launch window', 'Review'] as const;
 const C = DEFAULT_LAUNCH_CONFIG.fairwayCurve;
 
@@ -25,6 +25,7 @@ function valid(f: Form, step: number): string | null {
     if (!(f.liquidityUsd >= 500 && f.liquidityUsd <= 5_000_000)) return 'Starting liquidity: $500 to $5M.';
   }
   if (step === 2 && !(f.windowMin >= 1 && f.windowMin <= 60)) return 'Window: 1–60 minutes.';
+  if (step === 2 && !(f.creatorSharePct >= 0 && f.creatorSharePct <= MAX_CREATOR_SHARE_PCT)) return `Creator share: 0–${MAX_CREATOR_SHARE_PCT}% of the sniper premium.`;
   return null;
 }
 
@@ -33,7 +34,7 @@ const field = 'mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2.
 export function LaunchWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [f, setF] = useState<Form>({ name: 'My Fair Token', symbol: 'FAIR', supplyM: 1_000, poolPct: 80, liquidityUsd: 20_000, windowMin: 5 });
+  const [f, setF] = useState<Form>({ name: 'My Fair Token', symbol: 'FAIR', supplyM: 1_000, poolPct: 80, liquidityUsd: 20_000, windowMin: 5, creatorSharePct: DEFAULT_CREATOR_SHARE_PCT });
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
   const err = valid(f, step);
   const listing = f.liquidityUsd / ((f.supplyM * 1e6 * f.poolPct) / 100);
@@ -48,6 +49,7 @@ export function LaunchWizard() {
       poolPct: f.poolPct,
       liquidityUsd: f.liquidityUsd,
       windowMin: f.windowMin,
+      creatorSharePct: f.creatorSharePct,
       // who shows up is seeded from the token, so the same form gives the same launch
       seed: (Array.from(f.name + f.symbol).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % 200) + 1,
       createdBy: 'you',
@@ -87,7 +89,14 @@ export function LaunchWizard() {
       )}
       {step === 2 && (
         <div className="space-y-4">
-          <label className="block max-w-xs text-[13px] font-medium text-ink">Launch window (minutes)<input type="number" className={field} value={f.windowMin} min={1} max={60} onChange={(e) => set('windowMin', Number(e.target.value))} /></label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-[13px] font-medium text-ink">Launch window (minutes)<input type="number" className={field} value={f.windowMin} min={1} max={60} onChange={(e) => set('windowMin', Number(e.target.value))} /></label>
+            <label className="block text-[13px] font-medium text-ink">
+              Your share of the sniper premium (%)
+              <input type="number" className={field} value={f.creatorSharePct} min={0} max={MAX_CREATOR_SHARE_PCT} onChange={(e) => set('creatorSharePct', Number(e.target.value))} />
+              <span className="mt-1 block text-[12px] font-normal text-muted">Paid to you directly from what known snipers pay above the fresh-wallet fee, even if your liquidity is locked. Default {DEFAULT_CREATOR_SHARE_PCT}%; the protocol takes 15%; LPs keep the rest.</span>
+            </label>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] text-left text-[13px]">
               <thead className="text-[11px] uppercase tracking-wide text-muted">
@@ -125,6 +134,7 @@ export function LaunchWizard() {
             ['In the pool', `${f.poolPct}% + ${usd(f.liquidityUsd)} USDC`],
             ['Listing price', `$${listing.toPrecision(3)}`],
             ['Launch window', `${f.windowMin} min (${windowSlots} slots)`],
+            ['Your share of the sniper premium', `${f.creatorSharePct}%`],
             ['Launch fee', '0.05 SOL to the protocol treasury'],
           ].map(([k, v]) => (
             <div key={k} className="flex justify-between gap-4 border-b border-line py-1.5">
@@ -151,7 +161,7 @@ export function LaunchWizard() {
             <Rocket size={15} /> Launch (simulated)
           </button>
         ) : (
-          <LiveCreate supply={f.supplyM * 1e6} poolPct={f.poolPct} liquidityQuote={f.liquidityUsd} windowSlots={windowSlots} />
+          <LiveCreate supply={f.supplyM * 1e6} poolPct={f.poolPct} liquidityQuote={f.liquidityUsd} windowSlots={windowSlots} creatorShareBps={Math.round(f.creatorSharePct * 100)} />
         )}
       </div>
     </Card>

@@ -148,6 +148,9 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
     // protocol revenue = a share of the toxic PREMIUM only (the fee above what STANDARD would have paid): LPs keep all other fees
     let premium_in = if tier == TIER_TOXIC { toxic_premium(q.fee, amount_in, fee_for(TIER_STANDARD)).m()? } else { 0 };
     let cut = protocol_share(premium_in, a.config.protocol_fee_bps).m()?;
+    // launch pools: the creator gets its share of the same premium (capped so creator + protocol ≤ premium)
+    let creator_cut = fairway_math::launch::creator_share(premium_in, a.pool.creator_share_bps, cut).m()?;
+    let off_reserves = cut.checked_add(creator_cut).ok_or(FairwayError::Overflow)?;
     let premium_q = quote_equivalent(premium_in, a_to_b, rb, rq).m()?;
     let rebate_q = if rebate_bps > 0 {
         quote_equivalent(fee_on_input(amount_in, base_fee_bps).m()?.saturating_sub(q.fee), a_to_b, rb, rq).m()?
@@ -168,17 +171,21 @@ pub fn handle_swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64, a_to
         p.fees_base[t] = p.fees_base[t].saturating_add(q.fee);
         p.protocol_owed_base = p.protocol_owed_base.checked_add(cut).ok_or(FairwayError::Overflow)?;
         p.protocol_earned_base = p.protocol_earned_base.saturating_add(cut);
+        p.creator_owed_base = p.creator_owed_base.checked_add(creator_cut).ok_or(FairwayError::Overflow)?;
+        p.creator_earned_base = p.creator_earned_base.saturating_add(creator_cut);
     } else {
         p.fees_quote[t] = p.fees_quote[t].saturating_add(q.fee);
         p.protocol_owed_quote = p.protocol_owed_quote.checked_add(cut).ok_or(FairwayError::Overflow)?;
         p.protocol_earned_quote = p.protocol_earned_quote.saturating_add(cut);
+        p.creator_owed_quote = p.creator_owed_quote.checked_add(creator_cut).ok_or(FairwayError::Overflow)?;
+        p.creator_earned_quote = p.creator_earned_quote.saturating_add(creator_cut);
     }
     p.swaps[t] = p.swaps[t].saturating_add(1);
     // post-trade LP reserves → TWAP accumulator (and the reference price for TWAP-scored trades)
     let (nb, nq) = if a_to_b {
-        (rb.checked_add(amount_in - cut).ok_or(FairwayError::Overflow)?, rq - q.amount_out)
+        (rb.checked_add(amount_in - off_reserves).ok_or(FairwayError::Overflow)?, rq - q.amount_out)
     } else {
-        (rb - q.amount_out, rq.checked_add(amount_in - cut).ok_or(FairwayError::Overflow)?)
+        (rb - q.amount_out, rq.checked_add(amount_in - off_reserves).ok_or(FairwayError::Overflow)?)
     };
     let (bd0, qd0) = (ctx.accounts.base_mint.decimals, ctx.accounts.quote_mint.decimals);
     let p = &mut ctx.accounts.pool;

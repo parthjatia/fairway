@@ -68,6 +68,11 @@ pub fn handle_create_pool(ctx: Context<CreatePool>) -> Result<()> {
     p.rebate_total_q = 0;
     p.creator = ctx.accounts.payer.key();
     p.launch = crate::state::PoolLaunch::default();
+    p.creator_share_bps = 0;
+    p.creator_owed_base = 0;
+    p.creator_owed_quote = 0;
+    p.creator_earned_base = 0;
+    p.creator_earned_quote = 0;
     // twap: the account is zero-initialised (= empty accumulator); not assigned here to keep 1.5 KB off the stack
     Ok(())
 }

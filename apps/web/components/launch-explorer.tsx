@@ -5,7 +5,7 @@ import type { LaunchStudy } from '@fairway/sim';
 import { Card, Stat } from './ui';
 import { usd } from '@/lib/format';
 
-export type LaunchStudyData = Pick<LaunchStudy, 'regimes' | 'keyChart' | 'paired' | 'schedules' | 'launches'> & { windowSlots: number; knownShare: number; historyShare: number };
+export type LaunchStudyData = Pick<LaunchStudy, 'regimes' | 'keyChart' | 'paired' | 'schedules' | 'launches' | 'creatorShare'> & { windowSlots: number; knownShare: number; historyShare: number };
 
 export const LAUNCH_COLOR: Record<string, string> = {
   flat: 'var(--s-flat5)',
@@ -114,6 +114,39 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
         </ResponsiveContainer>
         <p className="mt-2 text-[13px] text-ink-2">
           {M.note} {M.better === 'low' ? 'Lower is better for buyers.' : 'Higher is better for the receiver.'}
+        </p>
+      </Card>
+
+      <Card title="Creator revenue: the share of the sniper premium" subtitle={`Per launch, Fairway regime, mean of ${data.launches} launches. Default: ${data.creatorShare.defaultBps / 100}% of the TOXIC premium goes to the creator, 15% to the protocol, the rest stays with LPs.`}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-left text-[13px]">
+            <thead className="text-[11px] uppercase tracking-wide text-muted">
+              <tr>
+                <th className="py-2 pr-3 font-medium">Creator share</th>
+                <th className="py-2 pr-3 text-right font-medium">Paid to creator directly</th>
+                <th className="py-2 pr-3 text-right font-medium">LP fees</th>
+                <th className="py-2 pr-3 text-right font-medium">Creator total if sole LP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.creatorShare.rows.map((r) => (
+                <tr key={r.shareBps} className={`border-t border-line ${r.shareBps === data.creatorShare.defaultBps ? 'font-semibold text-ink' : 'text-ink-2'}`}>
+                  <td className="py-2 pr-3">
+                    {r.shareBps / 100}%{r.shareBps === data.creatorShare.defaultBps ? ' (default)' : ''}
+                  </td>
+                  <td className="py-2 pr-3 text-right tnum">{usd(r.creatorDirectUsd, 2)}</td>
+                  <td className="py-2 pr-3 text-right tnum">{usd(r.lpFeesUsd)}</td>
+                  <td className="py-2 pr-3 text-right tnum">{usd(r.creatorIfSoleLpUsd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+          Honest read: the premium is only {usd(data.creatorShare.premiumUsd, 2)} per launch, because deterrence works. Known snipers mostly skip the launch, so there is little premium to share. The share moves money from LPs to the
+          creator; it does not create any. It matters when the creator&apos;s liquidity is locked or burned (common for launches) or other LPs join later. A creator who is the only LP earns{' '}
+          {usd(data.creatorShare.rows[0]!.creatorIfSoleLpUsd)} either way, versus {usd(data.creatorShare.decayCreatorIfSoleLpUsd)} under time-decay-only, where humans pay most of the fees. Fairway trades fee income for a fairer
+          distribution.
         </p>
       </Card>
 

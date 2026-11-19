@@ -18,6 +18,8 @@ export type LaunchSpec = {
   windowMin: number;
   /** scenario seed (who shows up) */
   seed: number;
+  /** creator share of the TOXIC (known-sniper) premium, % (default 50; onchain `configure_launch` creator_share_bps) */
+  creatorSharePct?: number;
   createdBy: 'demo' | 'you';
   createdAt: number;
 };
@@ -32,7 +34,28 @@ export const DEMO_LAUNCHES: LaunchSpec[] = [
 ];
 
 export const SLOT_SEC = 0.4;
-export const specConfig = (s: LaunchSpec): LaunchSimConfig => ({ ...DEFAULT_LAUNCH_CONFIG, poolTokens: (s.supply * s.poolPct) / 100, windowSlots: Math.max(1, Math.round((s.windowMin * 60) / SLOT_SEC)) });
+export const DEFAULT_CREATOR_SHARE_PCT = DEFAULT_LAUNCH_CONFIG.creatorPremiumShareBps / 100;
+/** creator + protocol share of the premium may not exceed 100% (the program enforces the same bound) */
+export const MAX_CREATOR_SHARE_PCT = 100 - DEFAULT_LAUNCH_CONFIG.protocolPremiumShareBps / 100;
+export const specConfig = (s: LaunchSpec): LaunchSimConfig => ({
+  ...DEFAULT_LAUNCH_CONFIG,
+  poolTokens: (s.supply * s.poolPct) / 100,
+  windowSlots: Math.max(1, Math.round((s.windowMin * 60) / SLOT_SEC)),
+  creatorPremiumShareBps: Math.round((s.creatorSharePct ?? DEFAULT_CREATOR_SHARE_PCT) * 100),
+});
+
+/** Where the launch's fees went up to `slot` (Fairway run), and what the same launch paid under time-decay-only. */
+export function revenueAt(v: LaunchSimView, slot: number) {
+  const upTo = (r: LaunchRun) => r.trades.filter((t) => t.slot <= slot);
+  const fw = upTo(v.fairway);
+  const fees = fw.reduce((a, t) => a + t.feeUsd, 0);
+  const premium = fw.reduce((a, t) => a + t.premiumUsd, 0);
+  const protocol = (premium * v.cfg.protocolPremiumShareBps) / 10_000;
+  const creator = Math.min((premium * v.cfg.creatorPremiumShareBps) / 10_000, premium - protocol);
+  const fromSnipers = fw.filter((t) => t.agent === 'sniper' || t.agent === 'bundler').reduce((a, t) => a + t.feeUsd, 0);
+  const decayFees = upTo(v.decay).reduce((a, t) => a + t.feeUsd, 0);
+  return { fees, premium, protocol, creator, lp: fees - protocol - creator, fromSnipers, decayFees, sharePct: v.cfg.creatorPremiumShareBps / 100 };
+}
 
 /** Where a buyer's tier comes from: verified onchain by settle_markout, bootstrapped from history (Streams), or a fresh wallet. */
 export type ScoreSource = 'onchain' | 'bootstrap' | 'none';

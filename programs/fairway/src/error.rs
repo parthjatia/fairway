@@ -60,6 +60,8 @@ pub enum FairwayError {
     InvalidLaunchParams,
     #[msg("The pool TWAP does not cover this trade's markout window")]
     TwapUnavailable,
+    #[msg("Creator share + protocol fee must be at most 100% of the premium")]
+    InvalidCreatorShare,
 }
 
 impl From<fairway_math::MathError> for FairwayError {

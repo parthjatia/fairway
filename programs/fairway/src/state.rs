@@ -55,6 +55,8 @@ pub struct LaunchConfig {
     pub twap_window_slots: u64,
     /// SOL paid by the creator to the treasury when a launch is configured (0 = free)
     pub launch_fee_lamports: u64,
+    /// default share of the TOXIC premium paid to the pool creator on launch pools (bps of the premium, 5000 = 50%)
+    pub creator_premium_share_bps: u16,
 }
 
 impl Default for LaunchConfig {
@@ -64,6 +66,7 @@ impl Default for LaunchConfig {
             default_window_slots: fairway_math::launch::DEFAULT_LAUNCH_WINDOW_SLOTS,
             twap_window_slots: fairway_math::twap::DEFAULT_TWAP_WINDOW_SLOTS,
             launch_fee_lamports: 50_000_000,
+            creator_premium_share_bps: fairway_math::launch::DEFAULT_CREATOR_PREMIUM_SHARE_BPS,
         }
     }
 }
@@ -250,12 +253,24 @@ pub struct Pool {
     pub launch: PoolLaunch,
     /// pool price accumulator, updated on every swap and liquidity change
     pub twap: PoolTwap,
+    // ---- creator share of the TOXIC premium (M16 step 10). Like the protocol share: stays in the vaults, excluded from
+    // LP reserves, paid out by the permissionless `claim_creator_fees` to token accounts owned by `creator`.
+    /// bps of the TOXIC premium paid to the creator (set by `configure_launch`; 0 on non-launch pools)
+    pub creator_share_bps: u16,
+    pub creator_owed_base: u64,
+    pub creator_owed_quote: u64,
+    /// cumulative creator payouts (claimed or not)
+    pub creator_earned_base: u64,
+    pub creator_earned_quote: u64,
 }
 
 impl Pool {
-    /// reserves that belong to LPs and price the curve: vault balance minus unclaimed protocol fees
+    /// reserves that belong to LPs and price the curve: vault balance minus unclaimed protocol and creator fees
     pub fn lp_reserves(&self, base_vault_amount: u64, quote_vault_amount: u64) -> Option<(u64, u64)> {
-        Some((base_vault_amount.checked_sub(self.protocol_owed_base)?, quote_vault_amount.checked_sub(self.protocol_owed_quote)?))
+        Some((
+            base_vault_amount.checked_sub(self.protocol_owed_base)?.checked_sub(self.creator_owed_base)?,
+            quote_vault_amount.checked_sub(self.protocol_owed_quote)?.checked_sub(self.creator_owed_quote)?,
+        ))
     }
 
     /// Record the pool's spot price (quote per base, 1e12) in the TWAP accumulator. Zero reserves record nothing.

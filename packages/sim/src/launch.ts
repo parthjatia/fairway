@@ -54,6 +54,8 @@ export type LaunchSimConfig = {
   /** protocol: launch fee (USD) + share of the TOXIC premium (fee above the STANDARD fee), as onchain */
   launchFeeUsd: number;
   protocolPremiumShareBps: number;
+  /** creator: share of the TOXIC premium paid straight to the creator (onchain `Pool.creator_share_bps`, default 50%) */
+  creatorPremiumShareBps: number;
 };
 
 export const DEFAULT_LAUNCH_CONFIG: LaunchSimConfig = {
@@ -73,6 +75,7 @@ export const DEFAULT_LAUNCH_CONFIG: LaunchSimConfig = {
   highFeeBps: 100,
   launchFeeUsd: 7.5,
   protocolPremiumShareBps: 1_500,
+  creatorPremiumShareBps: 5_000,
 };
 
 export const LAUNCH_REGIMES: { id: LaunchRegime; label: string; short: string }[] = [
@@ -182,6 +185,8 @@ export type LaunchTrade = {
   feeUsd: number;
   /** average execution price incl. fee, USD per token */
   price: number;
+  /** TOXIC premium in USD (fee above what STANDARD would pay); 0 for other tiers and outside Fairway regimes */
+  premiumUsd: number;
 };
 
 export type LaunchMetrics = {
@@ -204,8 +209,14 @@ export type LaunchMetrics = {
   knownSniperFeeBps: number;
   knownSniperFeesUsd: number;
   knownSniperNotionalUsd: number;
-  /** LP fees kept by the creator (all fees minus the protocol share) */
+  /** creator income when the creator is the pool's only LP: LP fees + the creator share of the premium (= all fees − protocol share) */
   creatorFeesUsd: number;
+  /** TOXIC premium collected (fee above the STANDARD fee); 0 outside Fairway regimes */
+  premiumUsd: number;
+  /** creator share of the premium, paid out directly (claimable even if the creator's LP position is locked or burned) */
+  creatorPremiumUsd: number;
+  /** fees that stay in the pool for LPs (all fees − protocol share − creator share) */
+  lpFeesUsd: number;
   /** launch fee + protocol share of the TOXIC premium */
   protocolUsd: number;
   /** realised + marked-to-market PnL of snipers and bundlers */
@@ -249,8 +260,8 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
     premiumUsd: 0,
   };
   const standardFee = (slot: number) => launchFee(cfg, regime, 1, slot);
-  const book = (t: Omit<LaunchTrade, 'price'>) => {
-    if (opts.recordTrades) trades.push({ ...t, price: t.side === 'buy' ? t.usd / t.tokens : t.usd / t.tokens });
+  const book = (t: Omit<LaunchTrade, 'price' | 'premiumUsd'> & { premiumUsd?: number }) => {
+    if (opts.recordTrades) trades.push({ ...t, premiumUsd: t.premiumUsd ?? 0, price: t.usd / t.tokens });
   };
   const known = new Set(sc.bots.filter((b) => b.known).map((b) => b.id));
   const buy = (slot: number, wallet: string, agent: LaunchAgent, tier: TierIdx, spendUsd: number) => {
@@ -261,7 +272,8 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
     usd += spendUsd; // the fee stays in the pool (LP = creator)
     tok -= out;
     m.feesUsd += feeUsd;
-    if (tier === 2 && regime !== 'flat' && regime !== 'decay' && regime !== 'decayHigh') m.premiumUsd += (spendUsd * Math.max(0, fee - standardFee(slot))) / 10_000;
+    const premiumUsd = tier === 2 && regime !== 'flat' && regime !== 'decay' && regime !== 'decayHigh' ? (spendUsd * Math.max(0, fee - standardFee(slot))) / 10_000 : 0;
+    m.premiumUsd += premiumUsd;
     if (slot < cfg.windowSlots) {
       m.winTok += out;
       if (agent === 'sniper' || agent === 'bundler') m.winBotTok += out;
@@ -284,7 +296,7 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
         m.kNotional += spendUsd;
       }
     }
-    book({ slot, wallet, agent, tier, side: 'buy', usd: spendUsd, tokens: out, feeBps: fee, feeUsd });
+    book({ slot, wallet, agent, tier, side: 'buy', usd: spendUsd, tokens: out, feeBps: fee, feeUsd, premiumUsd });
     return out;
   };
   const sell = (slot: number, wallet: string, agent: LaunchAgent, tier: TierIdx, tokens: number) => {
@@ -297,14 +309,15 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
     usd -= out;
     const feeUsd = feeTok * p;
     m.feesUsd += feeUsd;
-    if (tier === 2 && regime !== 'flat' && regime !== 'decay' && regime !== 'decayHigh') m.premiumUsd += (tokens * p * Math.max(0, fee - standardFee(slot))) / 10_000;
+    const premiumUsd = tier === 2 && regime !== 'flat' && regime !== 'decay' && regime !== 'decayHigh' ? (tokens * p * Math.max(0, fee - standardFee(slot))) / 10_000 : 0;
+    m.premiumUsd += premiumUsd;
     m.bFeeUsd += feeUsd;
     m.bNotional += tokens * p;
     if (known.has(wallet)) {
       m.kFeeUsd += feeUsd;
       m.kNotional += tokens * p;
     }
-    book({ slot, wallet, agent, tier, side: 'sell', usd: out, tokens, feeBps: fee, feeUsd });
+    book({ slot, wallet, agent, tier, side: 'sell', usd: out, tokens, feeBps: fee, feeUsd, premiumUsd });
     return out;
   };
 
@@ -344,7 +357,10 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
   }
   const finalPrice = price();
   const sniperPnlUsd = pos.reduce((a, p) => a + (p.state === 'skipped' || p.state === 'waiting' ? 0 : p.proceeds + p.tokens * finalPrice - p.cost), 0);
-  const protocolUsd = cfg.launchFeeUsd + (m.premiumUsd * cfg.protocolPremiumShareBps) / 10_000;
+  const protocolCut = (m.premiumUsd * cfg.protocolPremiumShareBps) / 10_000;
+  const protocolUsd = cfg.launchFeeUsd + protocolCut;
+  // same cap as fairway_math::launch::creator_share: creator + protocol never exceed the premium
+  const creatorPremiumUsd = Math.min((m.premiumUsd * cfg.creatorPremiumShareBps) / 10_000, m.premiumUsd - protocolCut);
   const metrics: LaunchMetrics = {
     sniperShareOfWindowSupply: m.winTok > 0 ? m.winBotTok / m.winTok : 0,
     retailEntryPremiumPct: m.rTok > 0 ? (m.rUsd / m.rTok / listingPrice - 1) * 100 : 0,
@@ -358,7 +374,10 @@ export function runLaunch(cfg: LaunchSimConfig, sc: LaunchScenario, regime: Laun
     humanHighFeeShare: m.rBuys > 0 ? m.rHigh / m.rBuys : 0,
     humanFeesUsd: m.rFeeUsd,
     sniperFeesUsd: m.bFeeUsd,
-    creatorFeesUsd: m.feesUsd - (m.premiumUsd * cfg.protocolPremiumShareBps) / 10_000,
+    creatorFeesUsd: m.feesUsd - protocolCut,
+    premiumUsd: m.premiumUsd,
+    creatorPremiumUsd,
+    lpFeesUsd: m.feesUsd - protocolCut - creatorPremiumUsd,
     protocolUsd,
     sniperPnlUsd,
     sniperParticipation: pos.length ? pos.filter((p) => p.state !== 'skipped' && p.state !== 'waiting').length / pos.length : 0,
@@ -391,6 +410,19 @@ export type LaunchStudy = {
   paired: { humanFeeCutPct: number; sniperFeeRatio: number; knownSniperFeeRatio: number; launchesWhereHumansPayLess: number; launchesWhereSnipersPayAtLeastAsMuch: number };
   /** fee schedules, sampled every 25 slots */
   schedules: { slot: number; flat: number; decay: number; decayHigh: number; fairwayRetail: number; fairwayStandard: number; fairwayToxic: number }[];
+  /**
+   * Creator share of the TOXIC premium, per launch (Fairway regime, mean). The share does not change any fee a trader pays,
+   * so agent behaviour and every other metric are identical across rows: it only moves premium between the creator and LPs.
+   * `creatorIfSoleLpUsd` is the same in every row (the creator owns all LP fees anyway); the share matters when the creator's
+   * LP position is locked or burned, or other LPs join after the launch.
+   */
+  creatorShare: {
+    defaultBps: number;
+    premiumUsd: number;
+    rows: { shareBps: number; creatorDirectUsd: number; lpFeesUsd: number; protocolUsd: number; creatorIfSoleLpUsd: number }[];
+    /** time-decay-only: no premium exists, so a creator with locked liquidity gets nothing */
+    decayCreatorIfSoleLpUsd: number;
+  };
   /** one representative launch, traded under Fairway and under time-decay-only (for the UI's launch view) */
   example: { seed: number; listingPrice: number; liquidityUsd: number; fairway: LaunchRun; decay: LaunchRun };
 };
@@ -447,6 +479,19 @@ export function runLaunchStudy(cfg: LaunchSimConfig = DEFAULT_LAUNCH_CONFIG, see
       fairwayStandard: launchFee(cfg, 'fairway', 1, s),
       fairwayToxic: launchFee(cfg, 'fairway', 2, s),
     });
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+  const premium = mean(fw.map((x) => x.premiumUsd));
+  const fees = mean(fw.map((x) => x.creatorFeesUsd)) + (premium * cfg.protocolPremiumShareBps) / 10_000;
+  const creatorShare = {
+    defaultBps: cfg.creatorPremiumShareBps,
+    premiumUsd: premium,
+    rows: [0, 2_500, 5_000, 7_500, 8_500].map((shareBps) => {
+      const protocolCut = (premium * cfg.protocolPremiumShareBps) / 10_000;
+      const creatorDirectUsd = Math.min((premium * shareBps) / 10_000, premium - protocolCut);
+      return { shareBps, creatorDirectUsd, lpFeesUsd: fees - protocolCut - creatorDirectUsd, protocolUsd: cfg.launchFeeUsd + protocolCut, creatorIfSoleLpUsd: fees - protocolCut };
+    }),
+    decayCreatorIfSoleLpUsd: mean(dc.map((x) => x.creatorFeesUsd)),
+  };
   const exSc = makeLaunchScenario(cfg, exampleSeed);
   const example = {
     seed: exampleSeed,
@@ -455,5 +500,5 @@ export function runLaunchStudy(cfg: LaunchSimConfig = DEFAULT_LAUNCH_CONFIG, see
     fairway: runLaunch(cfg, exSc, 'fairway', { recordTrades: true }),
     decay: runLaunch(cfg, exSc, 'decay', { recordTrades: true }),
   };
-  return { synthetic: true, config: cfg, launches: seeds.length, regimes, keyChart, paired, schedules, example };
+  return { synthetic: true, config: cfg, launches: seeds.length, regimes, keyChart, paired, schedules, creatorShare, example };
 }

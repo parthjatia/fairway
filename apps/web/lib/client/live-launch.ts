@@ -25,7 +25,7 @@ async function confirm(connection: Connection, sig: string) {
  * Three transactions, all signed by the connected wallet (it pays and becomes the pool creator):
  *  1. create the mint (6 decimals) and mint the whole supply to the creator;
  *  2. create the Fairway pool, add the starting liquidity (needs that much quote token in the wallet),
- *  3. configure_launch: trading opens now, window in slots, the program's default fee curve. A non-admin creator pays the
+ *  3. configure_launch: trading opens now, window in slots, the program's default fee curve, the creator's premium share. A non-admin creator pays the
  *     launch fee (Config.launch.launch_fee_lamports) to the treasury.
  * Token name/symbol are not written onchain (no Metaplex metadata in this prototype).
  */
@@ -38,6 +38,8 @@ export async function createLaunchLive(p: {
   liquidityQuote: number;
   quoteDecimals: number;
   windowSlots: number;
+  /** creator share of the TOXIC premium, bps (omitted = Config default 5000) */
+  creatorShareBps?: number;
   sendTransaction: Send;
 }) {
   const mint = Keypair.generate();
@@ -59,7 +61,7 @@ export async function createLaunchLive(p: {
     addLiquidityIx({ owner: p.creator, baseMint: mint.publicKey, quoteMint: p.quoteMint, maxBase: poolRaw, maxQuote: quoteRaw, minLp: 0n }),
   );
   await confirm(p.connection, await p.sendTransaction(tx2, p.connection));
-  const tx3 = new Transaction().add(configureLaunchIx({ authority: p.creator, baseMint: mint.publicKey, quoteMint: p.quoteMint, launchSlot: 0, windowSlots: p.windowSlots }));
+  const tx3 = new Transaction().add(configureLaunchIx({ authority: p.creator, baseMint: mint.publicKey, quoteMint: p.quoteMint, launchSlot: 0, windowSlots: p.windowSlots, creatorShareBps: p.creatorShareBps }));
   await confirm(p.connection, await p.sendTransaction(tx3, p.connection));
   return mint.publicKey;
 }

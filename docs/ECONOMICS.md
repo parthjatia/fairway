@@ -231,11 +231,33 @@ How to read it:
 
 | Who | Gets | Gives up |
 |---|---|---|
-| **Creators** | A fairer distribution (sniper share 27% vs 49%), buyers who are actual holders, a launch story ("snipers pay 10%") | **Fee income:** $591 vs $1,399 per launch under time-decay, because time-decay income comes mostly from humans. Still 2.7× a flat-30 pool. The creator chooses the curve (`configure_launch` accepts a custom one), so a creator who wants more income can raise the STANDARD start. |
+| **Creators** | A fairer distribution (sniper share 27% vs 49%), buyers who are actual holders, a launch story ("snipers pay 10%"), and **50% of the sniper premium paid to them directly** (§8.4b; ~$3.63 per launch on average, because most known snipers stay out) | **Fee income:** $591 vs $1,399 per launch under time-decay, because time-decay income comes mostly from humans. Still 2.7× a flat-30 pool. The creator chooses the curve (`configure_launch` accepts a custom one), so a creator who wants more income can raise the STANDARD start. |
 | **Retail (humans)** | 94 bps instead of ~200 in the window; only a third of human buys pay ≥ 100 bps (vs 84%); a lower average entry price | Nothing vs time-decay. New wallets pay the time-decay curve, exactly as today. |
 | **LPs / creators** | On a launch pool the creator is usually the only LP, so LP income = creator fees above. Later LPs get all swap fees except the protocol's premium share, and a pool whose early price was not set by snipers | The same trade-off as the creator. |
 | **Protocol** | The **0.05 SOL launch fee** (~$7.50) on every non-admin launch, plus **15% of the toxic premium** (the TOXIC fee above STANDARD) on launch and liquid pools: $8.59 per simulated launch in total | Rent sponsorship for first swaps (about 0.0023 SOL per new wallet) when the treasury can afford it. |
 | **Known snipers** | — | Most of their edge: profit falls 54% vs time-decay. |
+
+### 8.4b Creator share of the sniper premium (default 50%)
+
+The **premium** is what a TOXIC wallet pays above the STANDARD (fresh-wallet) fee at that moment. Onchain, `configure_launch(…, creator_share_bps)` sets the creator's share of it (default `Config.launch.creator_premium_share_bps` = 5000 = 50%; creator + protocol ≤ 100% is enforced, and `fairway_math::launch::creator_share` caps the cut at premium − protocol share even if the protocol fee is raised later). The swap books it in `Pool.creator_owed_*`, which is excluded from LP reserves like the protocol share. Anyone can call `claim_creator_fees`, but it pays only into token accounts owned by `Pool.creator`. Tested: `creator_gets_its_share_of_the_toxic_premium_excluded_from_reserves_and_claimable`, `creator_share_is_configurable_and_bounded`.
+
+Per launch, Fairway regime, mean of 200 launches (`launch.json` → `creatorShare`):
+
+| Creator share | Paid to the creator directly | LP fees | Creator total if it is the only LP |
+|---:|---:|---:|---:|
+| 0% | $0.00 | $591 | $591 |
+| 25% | $1.81 | $589 | $591 |
+| **50% (default)** | **$3.63** | **$587** | **$591** |
+| 75% | $5.44 | $585 | $591 |
+| 85% (max with a 15% protocol share) | $6.17 | $584 | $591 |
+| *Time-decay-only (no premium exists)* | $0 | $1,399 | $1,399 |
+
+The trade-off, stated plainly:
+
+- **The premium is small because deterrence works.** Known snipers face 1000 bps at block 0 and mostly don't buy, so the premium is only ~$7 per launch. Fairway cannot both keep snipers out and collect a lot of money from them. Every sniper it deters is premium it doesn't collect.
+- **The share moves money; it does not create any.** It changes no fee a trader pays, so supply share, human fees and sniper behaviour are identical across the rows. It moves premium from LPs to the creator. For a creator who is the pool's only LP, the total is $591 at any share.
+- **Why have it at all?** Launch liquidity is often locked or burned, and other LPs join after the window. In both cases the creator would otherwise earn nothing from snipers. The share makes "snipers pay you" true for the creator in every case. On a launch where known snipers do buy, the per-trade amounts are large: a $2,000 known-sniper buy at block 0 pays $200, $70 of it premium, so $35 goes to the creator.
+- **Fair distribution vs fee income.** A creator who is the only LP earns $591 per launch on Fairway vs $1,399 under time-decay-only, because time-decay income comes mostly from humans paying 200 bps. The creator gets a holder base with half the sniper share (27% vs 49%) and humans who paid 53% less. A creator who wants more income can raise the STANDARD start of the curve (`configure_launch` accepts a custom curve). That raises fresh-wallet fees for humans too, which is exactly the time-decay trade-off.
 
 ### 8.5 After the window: scoring without an oracle
 

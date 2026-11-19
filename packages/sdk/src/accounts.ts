@@ -24,12 +24,15 @@ export const DEFAULT_LAUNCH_CURVE: LaunchCurve = { startBps: [30, 300, 1_000], e
 export const DEFAULT_LAUNCH_WINDOW_SLOTS = 750n;
 export const DEFAULT_TWAP_WINDOW_SLOTS = 25n;
 export const DEFAULT_LAUNCH_FEE_LAMPORTS = 50_000_000n;
-export type LaunchConfig = { curve: LaunchCurve; defaultWindowSlots: bigint; twapWindowSlots: bigint; launchFeeLamports: bigint };
+/** Default creator share of the TOXIC premium on launch pools (bps of the premium; 5000 = 50%). */
+export const DEFAULT_CREATOR_PREMIUM_SHARE_BPS = 5_000;
+export type LaunchConfig = { curve: LaunchCurve; defaultWindowSlots: bigint; twapWindowSlots: bigint; launchFeeLamports: bigint; creatorPremiumShareBps: number };
 export const defaultLaunchConfig = (o: Partial<LaunchConfig> = {}): LaunchConfig => ({
   curve: DEFAULT_LAUNCH_CURVE,
   defaultWindowSlots: DEFAULT_LAUNCH_WINDOW_SLOTS,
   twapWindowSlots: DEFAULT_TWAP_WINDOW_SLOTS,
   launchFeeLamports: DEFAULT_LAUNCH_FEE_LAMPORTS,
+  creatorPremiumShareBps: DEFAULT_CREATOR_PREMIUM_SHARE_BPS,
   ...o,
 });
 const t3n = (r: Reader): [number, number, number] => [r.u16(), r.u16(), r.u16()];
@@ -39,8 +42,9 @@ export const writeLaunchCurve = (w: Writer, c: LaunchCurve): Writer => {
   c.endBps.forEach((f) => w.u16(f));
   return w;
 };
-export const readLaunchConfig = (r: Reader): LaunchConfig => ({ curve: readLaunchCurve(r), defaultWindowSlots: r.u64(), twapWindowSlots: r.u64(), launchFeeLamports: r.u64() });
-export const writeLaunchConfig = (w: Writer, l: LaunchConfig): Writer => writeLaunchCurve(w, l.curve).u64(l.defaultWindowSlots).u64(l.twapWindowSlots).u64(l.launchFeeLamports);
+export const readLaunchConfig = (r: Reader): LaunchConfig => ({ curve: readLaunchCurve(r), defaultWindowSlots: r.u64(), twapWindowSlots: r.u64(), launchFeeLamports: r.u64(), creatorPremiumShareBps: r.u16() });
+export const writeLaunchConfig = (w: Writer, l: LaunchConfig): Writer =>
+  writeLaunchCurve(w, l.curve).u64(l.defaultWindowSlots).u64(l.twapWindowSlots).u64(l.launchFeeLamports).u16(l.creatorPremiumShareBps);
 
 /** TWAP ring buffer size (fairway_math::twap::OBS_CAP). */
 export const OBS_CAP = 64;
@@ -156,6 +160,8 @@ export type PoolAccount = {
   creator: PublicKey;
   launch: PoolLaunch;
   twap: PoolTwap;
+  /** M16 step 10: creator share of the TOXIC premium (bps; 0 on non-launch pools), accrued in the vaults (excluded from LP reserves) */
+  creatorFees: { shareBps: number; owedBase: bigint; owedQuote: bigint; earnedBase: bigint; earnedQuote: bigint };
 };
 
 export type PendingTrade = { pool: PublicKey; /** 1e12 fixed point */ execPrice: bigint; slot: bigint; side: 'buy' | 'sell'; notional: bigint };
@@ -251,6 +257,7 @@ export function decodePool(data: Uint8Array): PoolAccount {
       const obsCum = Array.from({ length: OBS_CAP }, () => r.u128());
       return { ...h, obsSlot, obsCum };
     })(),
+    creatorFees: { shareBps: r.u16(), owedBase: r.u64(), owedQuote: r.u64(), earnedBase: r.u64(), earnedQuote: r.u64() },
   };
 }
 

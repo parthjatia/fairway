@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeSwapExecuted } from '@fairway/fixtures';
 import {
   configureLaunchIx,
+  claimCreatorFeesIx,
   decayedFeeBps,
   defaultLaunchConfig,
   DEFAULT_LAUNCH_CURVE,
@@ -83,6 +84,7 @@ describe('IDL parity', () => {
       treasury_transfer_tokens: treasuryTransferTokensIx({ admin: t, mint: base, to: k(), amount: 1n }),
       treasury_withdraw_sol: treasuryWithdrawSolIx({ admin: t, destination: k(), lamports: 1n }),
       configure_launch: configureLaunchIx({ authority: t, baseMint: base, quoteMint: quote }),
+      claim_creator_fees: claimCreatorFeesIx({ cranker: t, baseMint: base, quoteMint: quote, creator: k() }),
     };
     for (const i of idl.instructions) {
       const ix = built[i.name]!;
@@ -132,7 +134,7 @@ describe('account decoders', () => {
     cw.u16(1500).u64(9000n).u16(1000).u16(5);
     writeLaunchConfig(cw, defaultLaunchConfig({ launchFeeLamports: 7n }));
     const cfg = cw.toBytes();
-    expect(decodeConfig(cfg).launch).toEqual({ curve: { startBps: [30, 300, 1000], endBps: [5, 30, 80] }, defaultWindowSlots: 750n, twapWindowSlots: 25n, launchFeeLamports: 7n });
+    expect(decodeConfig(cfg).launch).toEqual({ curve: { startBps: [30, 300, 1000], endBps: [5, 30, 80] }, defaultWindowSlots: 750n, twapWindowSlots: 25n, launchFeeLamports: 7n, creatorPremiumShareBps: 5000 });
     expect(decodeConfig(cfg).protocolFeeBps).toBe(1500);
     expect(decodeConfig(cfg).rebate).toEqual({ epochSlots: 9000n, shareBps: 1000, floorBps: 5 });
     expect(decodeConfig(cfg)).toMatchObject({ feeBps: [5, 30, 80], defaultTier: 1, scoreTtlSlots: 1000n, bump: 254 });
@@ -154,7 +156,9 @@ describe('account decoders', () => {
     w.u64(1_010n).u64(5n).u64(0n).u64(0n).u16(1).u16(2); // twap header: lastSlot, lastPrice, cum (u128), head, count
     for (let i = 0; i < OBS_CAP; i++) w.u64(i === 1 ? 1_010n : i === 0 ? 1_000n : 0n);
     for (let i = 0; i < OBS_CAP; i++) w.u64(0n).u64(0n);
+    w.u16(5000).u64(21n).u64(22n).u64(23n).u64(24n); // creator share of the premium
     const pool = decodePool(w.toBytes());
+    expect(pool.creatorFees).toEqual({ shareBps: 5000, owedBase: 21n, owedQuote: 22n, earnedBase: 23n, earnedQuote: 24n });
     expect(pool.creator.equals(creator)).toBe(true);
     expect(pool.launch).toEqual({ launchSlot: 1_000n, windowSlots: 750n, curve: DEFAULT_LAUNCH_CURVE, twapScoring: true });
     expect(pool.twap).toMatchObject({ lastSlot: 1_010n, lastPrice: 5n, head: 1, count: 2 });
@@ -326,5 +330,17 @@ describe('verified addresses (2026-11-19)', () => {
   it('uses exactly the verified devnet Pyth SOL/USD account', async () => {
     const c = await import('../src/constants');
     expect(c.PYTH_SOL_USD_PRICE_ACCOUNT_DEVNET).toBe('7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE');
+  });
+});
+
+describe('creator share (M16 step 10)', () => {
+  it('configureLaunchIx encodes the optional creator share after the curve', () => {
+    const [base, quote, t] = [k(), k(), k()];
+    const none = configureLaunchIx({ authority: t, baseMint: base, quoteMint: quote });
+    const some = configureLaunchIx({ authority: t, baseMint: base, quoteMint: quote, creatorShareBps: 2_500 });
+    // disc(8) + u64 + u64 + Option<curve>=None(1) + Option<u16>
+    expect(none.data.length).toBe(8 + 8 + 8 + 1 + 1);
+    expect(some.data.length).toBe(8 + 8 + 8 + 1 + 3);
+    expect(Array.from(some.data.subarray(-3))).toEqual([1, 2_500 & 0xff, 2_500 >> 8]);
   });
 });

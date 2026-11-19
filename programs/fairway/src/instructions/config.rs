@@ -69,6 +69,7 @@ pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) ->
     }
     if let Some(p) = update.protocol_fee_bps {
         require!(p <= MAX_PROTOCOL_FEE_BPS, FairwayError::InvalidProtocolFee);
+        require!(p as u32 + c.launch.creator_premium_share_bps as u32 <= 10_000, FairwayError::InvalidCreatorShare);
         c.protocol_fee_bps = p;
     }
     if let Some(r) = update.rebate {
@@ -88,6 +89,7 @@ pub fn handle_update_config(ctx: Context<UpdateConfig>, update: ConfigUpdate) ->
                 && l.twap_window_slots <= c.markout.markout_slots,
             FairwayError::InvalidLaunchParams
         );
+        require!(l.creator_premium_share_bps as u32 + c.protocol_fee_bps as u32 <= 10_000, FairwayError::InvalidCreatorShare);
         c.launch = l;
     }
     if let Some(t) = update.score_ttl_slots {

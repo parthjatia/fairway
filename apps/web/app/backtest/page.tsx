@@ -6,7 +6,7 @@ export const metadata = { title: 'Backtest — Fairway' };
 
 export default function BacktestPage() {
   const { backtest, sweep, sensitivity, lpfirst, launch } = simOutputs();
-  const launchData = { regimes: launch.regimes, keyChart: launch.keyChart, paired: launch.paired, schedules: launch.schedules, launches: launch.launches, windowSlots: launch.config.windowSlots, knownShare: launch.config.sniper.knownShare, historyShare: launch.config.retail.historyShare };
+  const launchData = { regimes: launch.regimes, keyChart: launch.keyChart, paired: launch.paired, schedules: launch.schedules, creatorShare: launch.creatorShare, launches: launch.launches, windowSlots: launch.config.windowSlots, knownShare: launch.config.sniper.knownShare, historyShare: launch.config.retail.historyShare };
   const maxDiscount = {
     sweep: { toxic: sweep.toxic, retail: sweep.retail, cells: sweep.cells, flatCurve: sweep.flatCurve, baseline: sweep.baseline, context: sweep.context, recommended: sweep.recommended, stalenessBoundBps: sweep.stalenessBoundBps, hours: sweep.config.hours, seeds: sweep.seeds.length },
     series: backtest.series,

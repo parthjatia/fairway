@@ -15,7 +15,7 @@ import { QUOTE_MINT } from './live-provider';
 
 const QUOTE_DECIMALS = 6;
 
-export function LiveCreate(p: { supply: number; poolPct: number; liquidityQuote: number; windowSlots: number }) {
+export function LiveCreate(p: { supply: number; poolPct: number; liquidityQuote: number; windowSlots: number; creatorShareBps?: number }) {
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
   const router = useRouter();
@@ -80,7 +80,8 @@ export function LiveLaunchView({ mint }: { mint: string }) {
         <h1 className="font-mono text-2xl font-semibold text-ink">{short(mint, 6)}</h1>
         <p className="mt-2 text-[14px] text-ink-2">
           {l.windowSlots === 0n ? 'Not a launch pool (normal tier fees).' : `Opened at slot ${l.launchSlot}, window ${l.windowSlots} slots. Now slot ${data.slot} (${elapsed >= 0n ? `${elapsed} slots in` : 'not open yet'}).`} TWAP scoring:{' '}
-          {l.twapScoring ? 'on' : 'off'}.
+          {l.twapScoring ? 'on' : 'off'}. Creator share of the sniper premium: {data.pool.creatorFees.shareBps / 100}% (owed now: {String(data.pool.creatorFees.owedQuote)} quote + {String(data.pool.creatorFees.owedBase)} token units, raw; claim with{' '}
+          <span className="font-mono">claimCreatorFeesIx</span>).
         </p>
       </div>
       <div className="grid grid-cols-3 gap-3">

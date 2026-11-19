@@ -15,6 +15,15 @@ pub struct LaunchCurve {
 pub const DEFAULT_LAUNCH_CURVE: LaunchCurve = LaunchCurve { start_bps: [30, 300, 1_000], end_bps: [5, 30, 80] };
 /// Default launch window: 750 slots ≈ 5 minutes at 400 ms.
 pub const DEFAULT_LAUNCH_WINDOW_SLOTS: u64 = 750;
+/// Default creator share of the TOXIC premium on a launch pool (5000 bps = 50%).
+pub const DEFAULT_CREATOR_PREMIUM_SHARE_BPS: u16 = 5_000;
+
+/// Creator's cut of a TOXIC premium: `floor(premium × share_bps / 10_000)`, capped so creator + protocol never exceed the
+/// premium (a later protocol-fee change can never take LP reserves below zero). Rounds down (LP-favourable).
+pub fn creator_share(premium: u64, share_bps: u16, protocol_cut: u64) -> crate::MathResult<u64> {
+    let raw = crate::protocol_share(premium, share_bps)?;
+    Ok(raw.min(premium.saturating_sub(protocol_cut)))
+}
 
 /// Valid curve: every tier decays (start ≥ end), tiers are ordered RETAIL ≤ STANDARD ≤ TOXIC at both ends, all ≤ MAX_FEE_BPS.
 /// Ordering at both ends implies ordering at every slot (linear interpolation preserves it).
@@ -142,5 +151,31 @@ mod tests {
         assert!(!valid_launch_curve(&LaunchCurve { start_bps: [400, 300, 1_000], end_bps: [5, 30, 80] })); // retail start > standard start
         assert!(!valid_launch_curve(&LaunchCurve { start_bps: [30, 20, 1_000], end_bps: [5, 30, 80] })); // standard rises
         assert!(valid_launch_curve(&LaunchCurve { start_bps: [5, 30, 80], end_bps: [5, 30, 80] })); // flat is fine
+    }
+}
+
+#[cfg(test)]
+mod creator_share_tests {
+    use super::*;
+
+    #[test]
+    fn creator_share_is_a_share_of_the_premium_rounded_down() {
+        assert_eq!(creator_share(1_000, 5_000, 150).unwrap(), 500);
+        assert_eq!(creator_share(999, 5_000, 0).unwrap(), 499);
+        assert_eq!(creator_share(0, 5_000, 0).unwrap(), 0);
+        assert_eq!(creator_share(1_000, 0, 0).unwrap(), 0);
+    }
+
+    #[test]
+    fn creator_plus_protocol_never_exceeds_the_premium() {
+        // 90% creator with a 15% protocol cut: capped at the 85% that is left
+        assert_eq!(creator_share(1_000, 9_000, 150).unwrap(), 850);
+        for premium in [0u64, 1, 7, 1_000, u64::MAX / 2] {
+            for bps in [0u16, 1, 5_000, 8_500, 10_000] {
+                let cut = crate::protocol_share(premium, 1_500).unwrap();
+                assert!(creator_share(premium, bps, cut).unwrap() + cut <= premium);
+            }
+        }
+        assert!(creator_share(1, 10_001, 0).is_err());
     }
 }
