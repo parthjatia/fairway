@@ -19,7 +19,8 @@
     "sim": "pnpm --filter @fairway/sim backtest",
     "charts": "pnpm --filter @fairway/scripts charts",
     "demo": "bash scripts/demo.sh",
-    "demo:local": "bash scripts/demo-local.sh"
+    "demo:local": "bash scripts/demo-local.sh",
+    "seed:local": "pnpm --filter @fairway/scripts seed:local"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

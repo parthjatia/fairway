@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { AppStateProvider } from '@/lib/client/state';
+import { LiveProvider } from '@/components/live/live-provider';
 import { Shell } from '@/components/shell';
 import { personas, poolView } from '@/lib/server/data';
 
@@ -21,7 +22,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <AppStateProvider personas={personas()} initialPool={p.reserves}>
-          <Shell>{children}</Shell>
+          {process.env.NEXT_PUBLIC_MODE === 'live' ? (
+            <LiveProvider>
+              <Shell>{children}</Shell>
+            </LiveProvider>
+          ) : (
+            <Shell>{children}</Shell>
+          )}
         </AppStateProvider>
       </body>
     </html>
