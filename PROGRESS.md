@@ -1,7 +1,7 @@
 # PROGRESS.md
 
 ## Current state / next step
-M0–M8 done. Next: M9 frontend. TODO referenced in STREAM_CONFIG: `pnpm seed:devnet`, GET /export.jsonl, sim replay CLI (--input).
+M0–M9 done. Next: M10 live wiring (wallet adapter + SDK calls, pnpm demo:local, pnpm demo). TODO referenced in STREAM_CONFIG: `pnpm seed:devnet`, GET /export.jsonl, sim replay CLI (--input).
 
 ## Milestones
 - [x] **M0 Setup:** toolchain detection and installs, monorepo scaffold, lint/format, CI-style `pnpm test` script, PROGRESS.md, DECISIONS.md, .gitignore, .env.example
@@ -13,10 +13,10 @@ M0–M8 done. Next: M9 frontend. TODO referenced in STREAM_CONFIG: `pnpm seed:de
 - [x] **M6 Parser and Streams filter:** shared logic, filter.js, tests against fixtures, STREAM_CONFIG.md
 - [x] **M7 Ingest service:** webhook, SQLite, recompute, read APIs, fixture mode, tests
 - [x] **M8 Keeper:** diffing, batching, dry-run/local/devnet modes, tests
-- [ ] **M9 Frontend:** all pages, mock mode, persona switcher, backtest interactivity, polished design
-- [x] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
-- [x] **M11 Docs:** README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts embedded
-- [x] **M12 Hardening pass:** full test, build and lint; fresh-clone check; fix everything; final UI review; README accuracy check
+- [x] **M9 Frontend:** all pages, mock mode, persona switcher, backtest interactivity, polished design
+- [ ] **M10 Live wiring:** wallet adapter, SDK calls against the local validator, `pnpm demo:local`
+- [ ] **M11 Docs:** README, ECONOMICS, RISKS, PITCH, DEMO_SCRIPT, SETUP_REMAINING, charts embedded
+- [ ] **M12 Hardening pass:** full test, build and lint; fresh-clone check; fix everything; final UI review; README accuracy check
 
 ## Definition of Done (Section 12)
 - [ ] `pnpm i && pnpm test && pnpm build` pass from a fresh clone
@@ -30,7 +30,6 @@ M0–M8 done. Next: M9 frontend. TODO referenced in STREAM_CONFIG: `pnpm seed:de
 - [ ] README covers all required sections
 - [ ] PITCH.md (15 Q&As), DEMO_SCRIPT.md, SETUP_REMAINING.md complete
 - [ ] All work committed locally; no secrets in git
-- [ ] PROGRESS.md starts with `STATUS: DONE`
 
 ## Toolchain (detected/installed 2026-11-19)
 - node v24.22.3, pnpm 12.21.0, typescript 6.0.3

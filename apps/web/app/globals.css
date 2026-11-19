@@ -1,0 +1,111 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-retail: var(--retail);
+  --color-standard: var(--standard);
+  --color-toxic: var(--toxic);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+}
+
+:root {
+  color-scheme: light;
+  --bg: #f6f5f1;
+  --surface: #fcfcfb;
+  --surface-2: #efeee9;
+  --line: rgba(11, 11, 11, 0.1);
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #7a7873;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --retail: #1baf7a;
+  --standard: #2a78d6;
+  --toxic: #eb6834;
+  --good: #006300;
+  --bad: #c23434;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  /* regime series (validated categorical order) */
+  --s-fairway: #2a78d6;
+  --s-flat30: #eb6834;
+  --s-rotation: #1baf7a;
+  --s-flat5: #eda100;
+  --s-flat80: #e87ba4;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --line: rgba(255, 255, 255, 0.1);
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #8f8d87;
+  --accent: #3987e5;
+  --accent-ink: #ffffff;
+  --retail: #199e70;
+  --standard: #3987e5;
+  --toxic: #d95926;
+  --good: #0ca30c;
+  --bad: #e66767;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --s-fairway: #3987e5;
+  --s-flat30: #d95926;
+  --s-rotation: #199e70;
+  --s-flat5: #c98500;
+  --s-flat80: #d55181;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recharts: recessive axes and grid */
+.recharts-cartesian-axis-tick-value {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.recharts-cartesian-grid line {
+  stroke: var(--grid);
+}
+.recharts-default-tooltip {
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px;
+  color: var(--ink);
+}
+
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
