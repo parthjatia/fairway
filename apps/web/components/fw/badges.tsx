@@ -61,3 +61,21 @@ export function TokenIcon({ symbol, size = 32, image }: { symbol: string; size?:
   );
   return image ? <TokenImage src={image} size={size} fallback={letters} /> : letters;
 }
+
+export const VENUES: Record<string, { label: string; title: string }> = {
+  pumpfun: { label: 'Pump.fun', title: 'Launched on Pump.fun (bonding curve, then PumpSwap).' },
+  launchlab: { label: 'LetsBonk', title: 'Launched on Raydium LaunchLab, the program behind LetsBonk.' },
+  'meteora-dbc': { label: 'Bags · Believe · Jupiter', title: 'Launched on the Meteora Dynamic Bonding Curve, the program behind Bags, Jupiter Studio and Believe.' },
+  raydium: { label: 'Raydium', title: 'Normal DEX trading: Raydium SOL-USDC swaps.' },
+};
+
+/** Where a token launched, or which venues a wallet rating is based on. */
+export function VenueBadge({ venue, className = '' }: { venue?: string; className?: string }) {
+  const v = venue ? VENUES[venue] : undefined;
+  if (!v) return null;
+  return (
+    <span title={v.title} className={`inline-flex items-center whitespace-nowrap rounded-[3px] border border-line px-1.5 py-px font-mono text-[10px] font-medium uppercase tracking-wider text-ink-2 ${className}`}>
+      {v.label}
+    </span>
+  );
+}

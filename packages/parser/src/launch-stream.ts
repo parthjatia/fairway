@@ -5,15 +5,16 @@
  */
 import { parseFundingPayload, MIN_FUNDING_SOL, type FundingRecord } from './funding';
 import { parsePumpPayload, PUMP_PROGRAMS, type LaunchTradeRecord, type PumpPrograms } from './pumpfun';
+import { LAUNCHPADS, parseLaunchPayload, type Launchpad } from './launchpads';
 
 export type LaunchStreamOutput = { launchTrades: LaunchTradeRecord[]; fundings: FundingRecord[] };
 
 /** null when the payload has neither, as a Streams filter must return for "nothing to deliver". */
-export function parseLaunchStream(data: any, programs: PumpPrograms = PUMP_PROGRAMS, minFundingSol: number = MIN_FUNDING_SOL): LaunchStreamOutput | null {
-  const launchTrades = parsePumpPayload(data, programs);
+export function parseLaunchStream(data: any, programs: PumpPrograms = PUMP_PROGRAMS, minFundingSol: number = MIN_FUNDING_SOL, pads: Launchpad[] = LAUNCHPADS): LaunchStreamOutput | null {
+  const launchTrades = parseLaunchPayload(data, programs, pads);
   const fundings = parseFundingPayload(data, minFundingSol);
   if (!launchTrades.length && !fundings.length) return null;
   return { launchTrades, fundings };
 }
 
-export { parsePumpPayload, parseFundingPayload };
+export { parsePumpPayload, parseLaunchPayload, parseFundingPayload };

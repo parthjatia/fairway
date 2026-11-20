@@ -3,7 +3,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import { DEFAULT_CHECK_CONFIG, type CheckBuyer, type RiskGrade, type TokenCheck, type WalletCheck } from '@fairway/scoring';
 import { Card, DataBadge, TierBadge } from '../ui';
 import { CopyButton } from './client';
-import { TokenIcon } from '../fw/badges';
+import { TokenIcon, VenueBadge } from '../fw/badges';
 import { short } from '@/lib/format';
 
 const GRADE: Record<RiskGrade, { text: string; bar: string; ring: string }> = {
@@ -224,7 +224,7 @@ export function MintHeader({ eyebrow, title, mint, source, children, symbol, ima
   );
 }
 
-export function TokenReport({ r, name, source, unit = 'SOL', embedded = false, symbol, image }: { r: TokenCheck; name?: string; source: Src; unit?: string; embedded?: boolean; symbol?: string; image?: string | null }) {
+export function TokenReport({ r, name, source, unit = 'SOL', embedded = false, symbol, image }: { r: TokenCheck & { venue?: string }; name?: string; source: Src; unit?: string; embedded?: boolean; symbol?: string; image?: string | null }) {
   const sec = (slots: number) => Math.round(slots * SLOT_SEC);
   return (
     <div className="space-y-6">
@@ -235,6 +235,7 @@ export function TokenReport({ r, name, source, unit = 'SOL', embedded = false, s
           <p className="text-lg font-semibold text-ink">{r.verdict}</p>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-ink-2">
             {r.fairLaunchVerified && <FairLaunchBadge />}
+            <VenueBadge venue={r.venue} />
             <span>
               First {sec(r.earlyWindowSlots)} s after launch, {r.earlyBuyers} early buyer{r.earlyBuyers === 1 ? '' : 's'}.
             </span>
@@ -263,7 +264,7 @@ export function TokenReport({ r, name, source, unit = 'SOL', embedded = false, s
   );
 }
 
-export function WalletReport({ r, source }: { r: WalletCheck; source: Src }) {
+export function WalletReport({ r, source }: { r: WalletCheck & { venues?: Record<string, number> }; source: Src }) {
   const mk = r.avgMarkoutBps;
   return (
     <div className="space-y-6">
@@ -275,6 +276,17 @@ export function WalletReport({ r, source }: { r: WalletCheck; source: Src }) {
         <div className="min-w-0">
           <p className="text-lg font-semibold text-ink">{r.verdict}</p>
           {r.bundle && <p className="mt-2 text-sm text-ink-2">Flagged as funded by a known bundler.</p>}
+          {r.venues && Object.keys(r.venues).length > 0 && (
+            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-ink-2">
+              Rating based on trades from:
+              {Object.entries(r.venues).map(([v, n]) => (
+                <span key={v} className="inline-flex items-center gap-1">
+                  <VenueBadge venue={v} />
+                  <span className="tnum text-xs text-muted">{n}</span>
+                </span>
+              ))}
+            </p>
+          )}
         </div>
       </Card>
       <div className="flush grid grid-cols-2 lg:grid-cols-4">

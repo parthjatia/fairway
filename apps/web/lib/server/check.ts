@@ -54,7 +54,7 @@ async function ingest<T>(path: string): Promise<CheckResult<T> | null> {
 }
 
 /** Real mainnet snapshot exported from a live ingest DB (scripts/snapshot-real.ts). Absent until the Stream has run. */
-export type Snapshot = { source: 'live'; updatedAt: number; slot: number; tokens: NamedToken[]; wallets?: Record<string, WalletCheck> };
+export type Snapshot = { source: 'live'; updatedAt: number; slot: number; tokens: NamedToken[]; wallets?: Record<string, WalletCheck & { venues?: Record<string, number> }> };
 export function snapshot(): Snapshot | null {
   const p = join(/*turbopackIgnore: true*/ repoRoot(), 'apps', 'web', 'data', 'real-snapshot.json');
   if (!existsSync(p)) return null;
@@ -66,7 +66,7 @@ export function snapshot(): Snapshot | null {
   }
 }
 
-export type NamedToken = TokenCheck & { name?: string; symbol?: string; image?: string | null };
+export type NamedToken = TokenCheck & { name?: string; symbol?: string; image?: string | null; venue?: 'pumpfun' | 'launchlab' | 'meteora-dbc' };
 const notFound = <T>(): CheckResult<T> => ({ status: 200, body: { found: false } as never });
 
 /**

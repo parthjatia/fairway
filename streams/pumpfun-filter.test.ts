@@ -45,3 +45,17 @@ describe('streams/pumpfun-filter.js', () => {
     expect(toxic).toEqual(new Set(fx.meta.snipers));
   });
 });
+
+describe('launch filter covers LaunchLab and Meteora DBC (real mainnet transactions)', () => {
+  it('launch-filter.js and pumpfun-filter.js are identical and output the venues', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const a = readFileSync(join(__dirname, 'launch-filter.js'), 'utf8');
+    expect(a).toBe(readFileSync(join(__dirname, 'pumpfun-filter.js'), 'utf8'));
+    const m = new Function(`${a}\nreturn main;`)() as (s: { data: unknown[] }) => { launchTrades: { venue: string }[] } | null;
+    const blocks = JSON.parse(readFileSync(join(__dirname, '..', 'packages', 'fixtures', 'data', 'launchpads.json'), 'utf8')).blocks;
+    const venues = new Set(m({ data: blocks })!.launchTrades.map((t) => t.venue));
+    expect(venues.has('launchlab') && venues.has('meteora-dbc')).toBe(true);
+    expect(m({ data: blocks })!.launchTrades).toEqual((await import('@fairway/parser')).parseLaunchPayload(blocks));
+  });
+});

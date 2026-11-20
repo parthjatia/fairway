@@ -212,9 +212,17 @@ describe('Fairway Check (M18)', () => {
     const pure = checkContextFrom(trades, bundled);
     const mints = [...new Set(trades.map((t) => t.mint))];
     expect(mints.length).toBeGreaterThanOrEqual(20);
-    for (const m of mints) expect(checkTokenFromDb(ctx.db, m)).toEqual(checkToken(trades, m, pure));
+    for (const m of mints) {
+      const { venue, ...db } = checkTokenFromDb(ctx.db, m);
+      expect(db).toEqual(checkToken(trades, m, pure));
+      expect(venue === undefined || ['pumpfun', 'launchlab', 'meteora-dbc'].includes(venue)).toBe(true);
+    }
     const wallets = [...new Set(trades.filter((t) => t.kind === 'buy').map((t) => t.trader))].slice(0, 60);
-    for (const w of wallets) expect(checkWalletFromDb(ctx.db, w)).toEqual(checkWallet(trades, w, pure));
+    for (const w of wallets) {
+      const { venues, ...db } = checkWalletFromDb(ctx.db, w);
+      expect(db).toEqual(checkWallet(trades, w, pure));
+      expect(Object.keys(venues).length).toBeGreaterThan(0);
+    }
   });
   it('unknown and malformed ids', async () => {
     const { createContext } = await import('../src');

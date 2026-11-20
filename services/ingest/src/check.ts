@@ -35,7 +35,21 @@ function labelsOf(db: Db, wallets: readonly string[]): { snipers: Map<string, Sn
   return { snipers, bundled };
 }
 
-export function checkTokenFromDb(db: Db, mint: string, cfg: CheckConfig = DEFAULT_CHECK_CONFIG): TokenCheck {
+/** Where a token launched: Pump.fun / PumpSwap are one family; LaunchLab (LetsBonk) and Meteora DBC (Bags, Jupiter Studio, Believe) are their own. */
+export type LaunchVenue = 'pumpfun' | 'launchlab' | 'meteora-dbc';
+export function venueOfMint(db: Db, mint: string): LaunchVenue | null {
+  const r = db.prepare("SELECT venue FROM launch_trades WHERE mint = ? ORDER BY (kind = 'create') DESC, slot LIMIT 1").get(mint) as { venue: string } | undefined;
+  if (!r) return null;
+  return r.venue === 'launchlab' || r.venue === 'meteora-dbc' ? r.venue : 'pumpfun';
+}
+
+export function checkTokenFromDb(db: Db, mint: string, cfg: CheckConfig = DEFAULT_CHECK_CONFIG): TokenCheck & { venue?: LaunchVenue } {
+  const base = checkTokenCore(db, mint, cfg);
+  const venue = venueOfMint(db, mint);
+  return venue ? { ...base, venue } : base;
+}
+
+function checkTokenCore(db: Db, mint: string, cfg: CheckConfig): TokenCheck {
   const trades = tradesOfMint(db, mint);
   const launchSlot = launchSlotOf(trades, mint);
   if (launchSlot === null) return emptyTokenCheck(mint, cfg);
@@ -59,7 +73,26 @@ export function checkTokenFromDb(db: Db, mint: string, cfg: CheckConfig = DEFAUL
   );
 }
 
-export function checkWalletFromDb(db: Db, wallet: string): WalletCheck {
+/** Trades behind a wallet's rating, per venue: launchpads (launch_trades) and normal DEX swaps (Raydium SOL-USDC markouts). */
+export function venuesOfWallet(db: Db, wallet: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of db.prepare("SELECT venue, COUNT(*) AS n FROM launch_trades WHERE trader = ? AND kind != 'create' GROUP BY venue").all(wallet) as { venue: string; n: number }[]) {
+    const v = r.venue === 'launchlab' || r.venue === 'meteora-dbc' ? r.venue : 'pumpfun';
+    out[v] = (out[v] || 0) + Number(r.n);
+  }
+  try {
+    for (const r of db.prepare('SELECT venue, COUNT(*) AS n FROM swaps WHERE trader = ? GROUP BY venue').all(wallet) as { venue: string; n: number }[]) out[r.venue] = (out[r.venue] || 0) + Number(r.n);
+  } catch {
+    /* swaps table not created yet */
+  }
+  return out;
+}
+
+export function checkWalletFromDb(db: Db, wallet: string): WalletCheck & { venues: Record<string, number> } {
+  return { ...checkWalletCore(db, wallet), venues: venuesOfWallet(db, wallet) };
+}
+
+function checkWalletCore(db: Db, wallet: string): WalletCheck {
   ensureLaunchSchema(db);
   const mints = (db.prepare("SELECT DISTINCT mint FROM launch_trades WHERE trader = ? AND kind != 'create'").all(wallet) as any[]).map((r) => r.mint as string);
   const trades: LaunchTrade[] = [];
@@ -73,16 +106,17 @@ export function checkWalletFromDb(db: Db, wallet: string): WalletCheck {
 }
 
 /** The most recent launches with their grade: example chips and the /check index. */
-export function listTokenChecks(db: Db, limit = 12, cfg: CheckConfig = DEFAULT_CHECK_CONFIG): TokenCheck[] {
+export function listTokenChecks(db: Db, limit = 12, cfg: CheckConfig = DEFAULT_CHECK_CONFIG, venue?: string): TokenCheck[] {
   ensureLaunchSchema(db);
-  // real launches first: the Pump.fun create was captured (PumpSwap "create" is a new pool for an existing token) and the early window has fully elapsed (so the report is complete),
+  // real launches first: the Pump.fun, LaunchLab or Meteora DBC create was captured (PumpSwap "create" is a new pool for an existing token) and the early window has fully elapsed (so the report is complete),
   // newest first; then any other mints (e.g. tokens created before the capture began) to fill the list
   const tip = (db.prepare('SELECT MAX(slot) AS s FROM launch_trades').get() as { s: number | null }).s ?? 0;
+  const venues = venue === 'launchlab' || venue === 'meteora-dbc' || venue === 'pumpfun' ? [venue] : ['pumpfun', 'launchlab', 'meteora-dbc'];
   const launched = (
-    db.prepare("SELECT mint, MIN(slot) AS launch FROM launch_trades WHERE kind = 'create' AND venue = 'pumpfun' GROUP BY mint HAVING launch <= ? ORDER BY launch DESC LIMIT ?").all(tip - cfg.earlyWindowSlots, limit) as any[]
+    db.prepare(`SELECT mint, MIN(slot) AS launch FROM launch_trades WHERE kind = 'create' AND venue IN (${venues.map(() => '?').join(',')}) GROUP BY mint HAVING launch <= ? ORDER BY launch DESC LIMIT ?`).all(...venues, tip - cfg.earlyWindowSlots, limit) as any[]
   ).map((r) => r.mint as string);
   const rest =
-    launched.length < limit
+    launched.length < limit && !venue
       ? (db.prepare('SELECT mint, MIN(slot) AS launch FROM launch_trades GROUP BY mint ORDER BY launch DESC LIMIT ?').all(limit * 4) as any[]).map((r) => r.mint as string).filter((m) => !launched.includes(m))
       : [];
   return [...launched, ...rest].slice(0, limit).map((m) => checkTokenFromDb(db, m, cfg));

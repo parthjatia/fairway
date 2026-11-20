@@ -4,6 +4,7 @@ import { parsePayload } from './core';
 
 export * from './core';
 export * from './pumpfun';
+export * from './launchpads';
 export * from './funding';
 export * from './launch-stream';
 

@@ -5,10 +5,10 @@ import { useEffect, useState } from 'react';
 import type { TokenCheck } from '@fairway/scoring';
 import { ago, localNames, useFairwayTokens, type FwToken } from '@/lib/client/fairway';
 import { short } from '@/lib/format';
-import { DevnetBadge, MainnetBadge, RiskBadge, TokenIcon } from './badges';
+import { DevnetBadge, MainnetBadge, RiskBadge, TokenIcon, VenueBadge, VENUES } from './badges';
 
-type Pump = { via: 'ingest' | 'snapshot'; updatedAt: number; slot: number | null; tokens: (TokenCheck & { name?: string; symbol?: string; image?: string | null })[] } | null;
-type Row = { key: string; href: string; symbol: string; name: string; mint: string; check: TokenCheck; age: string; extra?: string; image?: string | null };
+type Pump = { via: 'ingest' | 'snapshot'; updatedAt: number; slot: number | null; tokens: (TokenCheck & { name?: string; symbol?: string; image?: string | null; venue?: string })[] } | null;
+type Row = { key: string; href: string; symbol: string; name: string; mint: string; check: TokenCheck; age: string; extra?: string; image?: string | null; venue?: string };
 
 const pct = (x: number) => `${Math.round(x)}%`;
 
@@ -34,7 +34,10 @@ function Table({ rows, extraLabel }: { rows: Row[]; extraLabel?: string }) {
                 <Link href={r.href} className="flex min-w-0 items-center gap-3" onClick={(e) => e.stopPropagation()}>
                   <TokenIcon symbol={r.symbol} image={r.image} />
                   <span className="min-w-0">
-                    <span className="block truncate font-semibold text-ink">{r.symbol}</span>
+                    <span className="flex items-center gap-2 truncate font-semibold text-ink">
+                      {r.symbol}
+                      <VenueBadge venue={r.venue} />
+                    </span>
                     <span className="block truncate text-xs text-ink-2">
                       {r.name !== r.symbol && r.name !== short(r.mint) ? `${r.name} · ` : ''}
                       <span className="font-mono">{short(r.mint)}</span>
@@ -59,6 +62,7 @@ const fmtPrice = (v: number) => (v >= 1 ? v.toLocaleString('en-US', { maximumFra
 
 export function Explore({ pump, initialTab }: { pump: Pump; initialTab: 'fairway' | 'pump' }) {
   const [tab, setTab] = useState(initialTab);
+  const [venue, setVenue] = useState<string>('all');
   const { data, error } = useFairwayTokens();
   const [names, setNames] = useState<Record<string, { symbol: string; name: string }>>({});
   useEffect(() => setNames(localNames()), []);
@@ -80,11 +84,14 @@ export function Explore({ pump, initialTab }: { pump: Pump; initialTab: 'fairway
     };
   });
   const pumpRows: Row[] = (pump?.tokens ?? []).map((t) => ({
-    key: t.mint, href: `/check/${t.mint}`, mint: t.mint, symbol: t.symbol || t.mint.slice(0, 4), name: t.name || `${t.mint.slice(0, 4)}…${t.mint.slice(-4)}`, image: t.image, check: t,
+    key: t.mint, href: `/check/${t.mint}`, mint: t.mint, venue: t.venue, symbol: t.symbol || t.mint.slice(0, 4), name: t.name || `${t.mint.slice(0, 4)}…${t.mint.slice(-4)}`, image: t.image, check: t,
     // the snapshot/ingest knows the launch slot; 400 ms per slot gives the age
     age: pump?.slot && t.launchSlot ? ago(pump.updatedAt - (pump.slot - t.launchSlot) * 0.4, pump.via === 'ingest' ? now : pump.updatedAt) : '—',
   }));
 
+  const venueCounts: Record<string, number> = {};
+  for (const r of pumpRows) venueCounts[r.venue || 'pumpfun'] = (venueCounts[r.venue || 'pumpfun'] || 0) + 1;
+  const shownPump = venue === 'all' ? pumpRows : pumpRows.filter((r) => (r.venue || 'pumpfun') === venue);
   const tabCls = (on: boolean) => `rounded-[4px] px-3 py-1.5 text-sm font-semibold ${on ? 'bg-surface-2 text-ink' : 'text-ink-2 hover:text-ink'}`;
   return (
     <div>
@@ -94,7 +101,7 @@ export function Explore({ pump, initialTab }: { pump: Pump; initialTab: 'fairway
             On Fairway
           </button>
           <button role="tab" aria-selected={tab === 'pump'} onClick={() => choose('pump')} className={tabCls(tab === 'pump')}>
-            Live on Pump.fun
+            Live launches
           </button>
         </div>
         {tab === 'fairway' ? <DevnetBadge /> : pump ? <MainnetBadge updatedAt={pump.updatedAt} /> : null}
@@ -110,7 +117,16 @@ export function Explore({ pump, initialTab }: { pump: Pump; initialTab: 'fairway
           <Table rows={fwRows} extraLabel="Price" />
         )
       ) : pump && pumpRows.length ? (
-        <Table rows={pumpRows} />
+        <>
+          <div role="group" aria-label="Launchpad" className="mb-3 flex flex-wrap gap-1.5">
+            {[['all', 'All launchpads', pumpRows.length] as const, ...(['pumpfun', 'launchlab', 'meteora-dbc'] as const).map((v) => [v, VENUES[v]!.label, venueCounts[v] || 0] as const)].map(([v, label, n]) => (
+              <button key={v} onClick={() => setVenue(v)} aria-pressed={venue === v} className={`rounded-[4px] border px-2.5 py-1 text-xs font-semibold ${venue === v ? 'border-ink bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`}>
+                {label} <span className="tnum text-muted">{n}</span>
+              </button>
+            ))}
+          </div>
+          {shownPump.length ? <Table rows={shownPump} /> : <p className="rounded-md border border-dashed border-line p-6 text-sm text-ink-2">No launches from this launchpad in the current data.</p>}
+        </>
       ) : (
         <div className="rounded-md border border-dashed border-line p-6 text-sm text-ink-2">
           <p className="font-semibold text-ink">No real Pump.fun data connected yet.</p>

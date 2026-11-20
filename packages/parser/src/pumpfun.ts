@@ -24,14 +24,14 @@ export const PUMP_PROGRAMS: PumpPrograms = {
 };
 
 export const WSOL_MINT = 'So11111111111111111111111111111111111111112';
-const IGNORED_MINTS: Record<string, boolean> = { [WSOL_MINT]: true, EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: true };
+export const IGNORED_MINTS: Record<string, boolean> = { [WSOL_MINT]: true, EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: true };
 
 export type LaunchTradeRecord = {
   sig: string;
   slot: number;
   ts: number;
   mint: string;
-  venue: 'pumpfun' | 'pumpswap';
+  venue: 'pumpfun' | 'pumpswap' | 'launchlab' | 'meteora-dbc';
   trader: string;
   kind: 'create' | 'buy' | 'sell';
   /** token amount (UI units), 0 for a create without a dev buy */
@@ -55,7 +55,7 @@ function rawOf(b: Bal | undefined): { raw: number; dec: number } {
 }
 
 /** Per (mint, owner) token delta in UI units, computed from raw integer amounts (no float drift). */
-function tokenDeltas(meta: any): { delta: Record<string, Record<string, number>> } {
+export function tokenDeltas(meta: any): { delta: Record<string, Record<string, number>> } {
   const pre: Bal[] = meta.preTokenBalances || [];
   const post: Bal[] = meta.postTokenBalances || [];
   const byIdx: Record<number, { mint: string; owner: string; a: number; b: number; dec: number }> = {};
@@ -88,7 +88,7 @@ function tokenDeltas(meta: any): { delta: Record<string, Record<string, number>>
   return { delta };
 }
 
-const EPS = 1e-12;
+export const EPS = 1e-12;
 
 export function parsePumpTransaction(tx: any, slot: number, ts: number, programs: PumpPrograms = PUMP_PROGRAMS): LaunchTradeRecord[] {
   const out: LaunchTradeRecord[] = [];

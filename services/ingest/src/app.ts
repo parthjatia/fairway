@@ -1,7 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { explainTier, makeConfig, type ScoringConfig, type Swap, type Tier } from '@fairway/scoring';
-import { parseFundingPayload, parsePayload, parsePumpPayload, type FundingRecord, type LaunchTradeRecord, type ParserPool } from '@fairway/parser';
+import { parseFundingPayload, parsePayload, parseLaunchPayload, type FundingRecord, type LaunchTradeRecord, type ParserPool } from '@fairway/parser';
 import { verifyDelivery } from './auth';
 import { allSwaps, countSwaps, getScore, lastDeliveries, listScores, logDelivery, maxTs, swapsOfPool, tierCounts, upsertSwaps, validSwap, type Db } from './db';
 import { getSniper, listBundleFlags, listBundleFunders, listSnipers, recomputeBundles, recomputeSnipers, upsertFundings, upsertLaunchTrades, validFunding, validLaunchTrade } from './launches';
@@ -164,7 +164,7 @@ export function buildApp(o: AppOptions): FastifyInstance {
       if (tooBig) return reply.code(413).send({ error: tooBig });
     }
     const filtered = kind === 'filtered';
-    const incoming: LaunchTradeRecord[] = filtered ? (Array.isArray(body.launchTrades) ? body.launchTrades : []) : parsePumpPayload(body);
+    const incoming: LaunchTradeRecord[] = filtered ? (Array.isArray(body.launchTrades) ? body.launchTrades : []) : parseLaunchPayload(body);
     const fundingsIn: FundingRecord[] = filtered ? (Array.isArray(body.fundings) ? body.fundings : []) : parseFundingPayload(body);
     const valid = incoming.filter(validLaunchTrade);
     const validFundings = fundingsIn.filter(validFunding);
@@ -214,8 +214,8 @@ export function buildApp(o: AppOptions): FastifyInstance {
     return { source, ...checkWalletFromDb(o.db, address) };
   });
   app.get('/check/tokens', async (req) => {
-    const q = req.query as { limit?: string };
-    return { source, tokens: listTokenChecks(o.db, Math.min(400, Math.max(1, Number(q.limit) || 12))) };
+    const q = req.query as { limit?: string; venue?: string };
+    return { source, tokens: listTokenChecks(o.db, Math.min(400, Math.max(1, Number(q.limit) || 12)), undefined, q.venue) };
   });
 
   /** Cross-launch sniper scores (bootstrap TOXIC from Pump.fun history). */

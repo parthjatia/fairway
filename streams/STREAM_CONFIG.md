@@ -45,10 +45,23 @@ Solana devnet  ──► Stream B (Block) ──► filter.js ──────
 | Dataset | **Block** (transaction details full, with meta: the filter needs `pre/postTokenBalances`, `pre/postBalances`, `logMessages` and `loadedAddresses`). |
 | Start | *Backfill:* ~1–3 days back (Pump.fun sees thousands of launches a day, so even a few hours finds the repeat snipers). *Live:* "Latest block". |
 | End | Empty for live; the end slot for a bounded backfill. |
-| Filter | Paste all of `streams/pumpfun-filter.js`. |
+| Filter | Paste all of **`streams/launch-filter.js`** (Pump.fun, PumpSwap, LaunchLab, Meteora DBC + fundings). `streams/pumpfun-filter.js` is the identical file under the old name, so an existing Stream keeps working. |
 | Destination | **Webhook** → `https://<your-host>/streams/pumpfun`, same security token as Stream A (`QN_STREAM_TOKEN`). |
 | Batch size | 1–10 blocks. Compression off or gzip. |
 | Reorgs | Default handling; ingest is idempotent on `(sig, mint, kind)`. |
+
+### Launchpads covered by `launch-filter.js` (2026-11-20)
+
+| Venue (`venue` field) | Program | Powers | Records in the ingest DB |
+|---|---|---|---|
+| `pumpfun` / `pumpswap` | Pump.fun `6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`, PumpSwap `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA` | Pump.fun | 359,362 trades (235,511 buys, 123,851 sells), 380 launches with a captured create, 3,633 tokens seen (PumpSwap creates counted as launches) |
+| `launchlab` | Raydium LaunchLab `LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj` | LetsBonk | 369 trades (237 buys, 132 sells), 6 launches with a captured create, 18 tokens seen |
+| `meteora-dbc` | Meteora Dynamic Bonding Curve `dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN` | Bags, Jupiter Studio, Believe | 896 trades (610 buys, 286 sells), 27 launches with a captured create, 54 tokens seen |
+| `raydium` (swaps) | Raydium AMM v4 SOL-USDC pool `58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2` (`streams/filter.js`) | normal DEX trading | 399 swaps by 177 wallets, scored with pool-implied markouts |
+
+**How LaunchLab and Meteora DBC are parsed.** Both programs keep every launch's token vault and WSOL quote vault under one program-derived authority (LaunchLab `WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh`, seed `vault_auth_seed`; Meteora DBC `FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM`, seed `pool_authority`; both checked against the PDA derivation and against real blocks). A trade is the fee payer's token delta against that authority, and the SOL amount is the authority's WSOL delta (pre-fee). Requiring the authority also drops the many Jupiter-routed transactions that only touch the program as one hop. Create is detected from the program-scoped instruction log: Meteora `InitializeVirtualPoolWithSplToken` / `InitializeVirtualPoolWithToken2022` (seen on real blocks); LaunchLab `InitializeWithToken2022` (seen on real launches; `Initialize` and `InitializeV2` are accepted from the IDL but were not seen). **Only SOL-quoted launches are covered.** USDC-quoted launches (some Bags / Believe and LaunchLab configs) are skipped, creates included, because they have no WSOL leg at the authority. Validated on real mainnet blocks (`getBlock`, `maxSupportedTransactionVersion` 1, QuickNode RPC) on 2026-11-20; fixtures with real transactions: `packages/fixtures/data/launchpads.json`, tests `packages/parser/test/launchpads.test.ts` and `streams/pumpfun-filter.test.ts`.
+
+Final filter to paste into the Stream: **`streams/launch-filter.js`** (15.9 KB, standalone, ES2018). The webhook can stay `https://<your-host>/streams/solana` (ingest routes by payload shape) or `/streams/pumpfun`.
 
 ### Program IDs (verified 2026-11-19)
 
