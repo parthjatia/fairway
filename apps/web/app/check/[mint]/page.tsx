@@ -13,7 +13,7 @@ type Params = { params: Promise<{ mint: string }>; searchParams: Promise<{ demo?
 export async function generateMetadata({ params, searchParams }: Params): Promise<Metadata> {
   const { mint } = await params;
   const r = await tokenCheck(mint, (await searchParams).demo === '1');
-  const b = r.body as { found?: boolean; grade?: string; verdict?: string; name?: string };
+  const b = r.body as { found?: boolean; grade?: string; verdict?: string; name?: string; symbol?: string };
   if (r.status === 200 && b.found) {
     return { title: `${b.grade} risk · ${b.name ?? short(mint, 4)}`, description: b.verdict, openGraph: { title: `Fairway Check: ${b.grade} risk`, description: b.verdict } };
   }
@@ -44,7 +44,7 @@ export default async function CheckReport({ params, searchParams }: Params) {
   if (tb.found)
     return (
       <div className="space-y-6">
-        <TokenReport r={tb as never} name={(tb as { name?: string }).name} source={tb.source} unit={tb.source === 'devnet' ? 'USDC' : 'SOL'} />
+        <TokenReport r={tb as never} name={(tb as { name?: string }).name} symbol={(tb as { symbol?: string }).symbol} image={(tb as { image?: string | null }).image} source={tb.source} unit={tb.source === 'devnet' ? 'USDC' : 'SOL'} />
         {tb.source === 'devnet' && (
           <p className="text-sm">
             <Link href={`/launch/${mint}`} className="font-semibold text-accent hover:underline">Trade this token on Fairway →</Link>

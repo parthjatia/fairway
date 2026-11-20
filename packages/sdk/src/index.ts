@@ -9,3 +9,4 @@ export * from './math';
 export * from './client';
 export * from './feetier';
 export * from './check';
+export * from './metadata';

@@ -1,3 +1,4 @@
+import { TokenImage } from './token-image';
 import type { RiskGrade, TokenCheck } from '@fairway/scoring';
 
 const DOT: Record<RiskGrade, string> = { Low: 'bg-good', Medium: 'bg-warn', High: 'bg-bad' };
@@ -46,10 +47,10 @@ export function RiskBadge({ check, className = '' }: { check: Pick<TokenCheck, '
   );
 }
 
-export function TokenIcon({ symbol, size = 32 }: { symbol: string; size?: number }) {
+export function TokenIcon({ symbol, size = 32, image }: { symbol: string; size?: number; image?: string | null }) {
   let h = 0;
   for (const c of symbol) h = (h * 31 + c.charCodeAt(0)) % 360;
-  return (
+  const letters = (
     <span
       aria-hidden
       className="inline-flex shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-medium text-white"
@@ -58,4 +59,5 @@ export function TokenIcon({ symbol, size = 32 }: { symbol: string; size?: number
       {symbol.slice(0, 3)}
     </span>
   );
+  return image ? <TokenImage src={image} size={size} fallback={letters} /> : letters;
 }

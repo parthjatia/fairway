@@ -7,8 +7,8 @@ import { ago, localNames, useFairwayTokens, type FwToken } from '@/lib/client/fa
 import { short } from '@/lib/format';
 import { DevnetBadge, MainnetBadge, RiskBadge, TokenIcon } from './badges';
 
-type Pump = { via: 'ingest' | 'snapshot'; updatedAt: number; slot: number | null; tokens: (TokenCheck & { name?: string })[] } | null;
-type Row = { key: string; href: string; symbol: string; name: string; mint: string; check: TokenCheck; age: string; extra?: string };
+type Pump = { via: 'ingest' | 'snapshot'; updatedAt: number; slot: number | null; tokens: (TokenCheck & { name?: string; symbol?: string; image?: string | null })[] } | null;
+type Row = { key: string; href: string; symbol: string; name: string; mint: string; check: TokenCheck; age: string; extra?: string; image?: string | null };
 
 const pct = (x: number) => `${Math.round(x)}%`;
 
@@ -32,11 +32,11 @@ function Table({ rows, extraLabel }: { rows: Row[]; extraLabel?: string }) {
             <tr key={r.key} onClick={() => router.push(r.href)} className="cursor-pointer border-t border-line first:border-t-0 hover:bg-surface-2">
               <td className="px-4 py-3">
                 <Link href={r.href} className="flex min-w-0 items-center gap-3" onClick={(e) => e.stopPropagation()}>
-                  <TokenIcon symbol={r.symbol} />
+                  <TokenIcon symbol={r.symbol} image={r.image} />
                   <span className="min-w-0">
                     <span className="block truncate font-semibold text-ink">{r.symbol}</span>
                     <span className="block truncate text-xs text-ink-2">
-                      {r.name !== r.symbol ? `${r.name} · ` : ''}
+                      {r.name !== r.symbol && r.name !== short(r.mint) ? `${r.name} · ` : ''}
                       <span className="font-mono">{short(r.mint)}</span>
                     </span>
                   </span>
@@ -80,7 +80,7 @@ export function Explore({ pump, initialTab }: { pump: Pump; initialTab: 'fairway
     };
   });
   const pumpRows: Row[] = (pump?.tokens ?? []).map((t) => ({
-    key: t.mint, href: `/check/${t.mint}`, mint: t.mint, symbol: t.name?.split(' ')[0]?.slice(0, 8) || t.mint.slice(0, 4).toUpperCase(), name: t.name ?? 'Pump.fun launch', check: t,
+    key: t.mint, href: `/check/${t.mint}`, mint: t.mint, symbol: t.symbol || t.mint.slice(0, 4), name: t.name || `${t.mint.slice(0, 4)}…${t.mint.slice(-4)}`, image: t.image, check: t,
     // the snapshot/ingest knows the launch slot; 400 ms per slot gives the age
     age: pump?.slot && t.launchSlot ? ago(pump.updatedAt - (pump.slot - t.launchSlot) * 0.4, pump.via === 'ingest' ? now : pump.updatedAt) : '—',
   }));

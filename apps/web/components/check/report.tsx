@@ -3,6 +3,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import { DEFAULT_CHECK_CONFIG, type CheckBuyer, type RiskGrade, type TokenCheck, type WalletCheck } from '@fairway/scoring';
 import { Card, DataBadge, TierBadge } from '../ui';
 import { CopyButton } from './client';
+import { TokenIcon } from '../fw/badges';
 import { short } from '@/lib/format';
 
 const GRADE: Record<RiskGrade, { text: string; bar: string; ring: string }> = {
@@ -198,14 +199,20 @@ function HowComputedDevnet() {
   );
 }
 
-export function MintHeader({ eyebrow, title, mint, source, children }: { eyebrow: string; title: string; mint: string; source: Src; children?: React.ReactNode }) {
+export function MintHeader({ eyebrow, title, mint, source, children, symbol, image }: { eyebrow: string; title: string; mint: string; source: Src; children?: React.ReactNode; symbol?: string; image?: string | null }) {
   return (
     <header>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="label">{eyebrow}</span>
         <DataBadge source={source} />
       </div>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{title}</h1>
+      <div className="mt-2 flex min-w-0 items-center gap-3">
+        {(image || symbol) && <TokenIcon symbol={symbol ?? title} image={image} size={44} />}
+        <div className="min-w-0">
+          <h1 className="truncate text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{title}</h1>
+          {symbol && symbol !== title && <p className="tnum text-sm text-ink-2">${symbol}</p>}
+        </div>
+      </div>
       <div className="mt-3 flex min-w-0 items-center gap-2">
         <code className="min-w-0 truncate rounded-[4px] bg-surface-2 px-3 py-1.5 font-mono text-sm text-ink-2" title={mint}>
           {mint}
@@ -217,11 +224,11 @@ export function MintHeader({ eyebrow, title, mint, source, children }: { eyebrow
   );
 }
 
-export function TokenReport({ r, name, source, unit = 'SOL', embedded = false }: { r: TokenCheck; name?: string; source: Src; unit?: string; embedded?: boolean }) {
+export function TokenReport({ r, name, source, unit = 'SOL', embedded = false, symbol, image }: { r: TokenCheck; name?: string; source: Src; unit?: string; embedded?: boolean; symbol?: string; image?: string | null }) {
   const sec = (slots: number) => Math.round(slots * SLOT_SEC);
   return (
     <div className="space-y-6">
-      {!embedded && <MintHeader eyebrow="Fairway Check · Token" title={name ?? `Token ${short(r.mint, 4)}`} mint={r.mint} source={source} />}
+      {!embedded && <MintHeader eyebrow="Fairway Check · Token" title={name ?? `Token ${short(r.mint, 4)}`} mint={r.mint} source={source} symbol={symbol} image={image} />}
       <Card className="flex flex-col gap-6 sm:flex-row sm:items-center">
         <GradeMark grade={r.grade} className="shrink-0" />
         <div className="min-w-0">

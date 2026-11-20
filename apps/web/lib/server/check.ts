@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { parseFundingPayload, parsePumpPayload } from '@fairway/parser';
 import { fairwayToken } from './fairway';
 import { metaOf } from '../registry';
+import { withTokenMeta } from './token-meta';
 import { checkContextFrom, checkToken, checkWallet, detectBundles, listChecks, type CheckContext, type LaunchTrade, type TokenCheck, type WalletCheck } from '@fairway/scoring';
 
 export type CheckSource = 'live' | 'simulated' | 'devnet';
@@ -65,7 +66,7 @@ export function snapshot(): Snapshot | null {
   }
 }
 
-export type NamedToken = TokenCheck & { name?: string };
+export type NamedToken = TokenCheck & { name?: string; symbol?: string; image?: string | null };
 const notFound = <T>(): CheckResult<T> => ({ status: 200, body: { found: false } as never });
 
 /**
@@ -81,9 +82,15 @@ export async function tokenCheck(mint: string, demo = false): Promise<CheckResul
   const fw = await fairwayToken(mint).catch(() => null);
   if (fw) return { status: 200, body: { source: 'devnet', name: `${metaOf(mint).name}`, ...fw.token.check, found: true } };
   const live = await ingest<NamedToken>(`/token/${mint}`);
-  if (live) return live;
+  if (live) {
+    if (live.status === 200 && 'found' in live.body && live.body.found) {
+      const [named] = await withTokenMeta([live.body as NamedToken & { source: CheckSource }]);
+      return { status: 200, body: named! };
+    }
+    return live;
+  }
   const t = snapshot()?.tokens.find((x) => x.mint === mint);
-  if (t) return { status: 200, body: { source: 'live', ...t } };
+  if (t) return { status: 200, body: { source: 'live', ...(await withTokenMeta([t]))[0]! } };
   return notFound();
 }
 
@@ -105,10 +112,10 @@ export async function pumpTokens(limit = 50): Promise<{ source: 'live'; via: 'in
   const live = await ingest<{ tokens: NamedToken[] }>(`/tokens?limit=${limit}`);
   if (live && live.status === 200 && 'tokens' in live.body) {
     const slot = await mainnetSlot();
-    return { source: 'live', via: 'ingest', updatedAt: Math.floor(Date.now() / 1000), slot, tokens: live.body.tokens };
+    return { source: 'live', via: 'ingest', updatedAt: Math.floor(Date.now() / 1000), slot, tokens: await withTokenMeta(live.body.tokens) };
   }
   const s = snapshot();
-  return s ? { source: 'live', via: 'snapshot', updatedAt: s.updatedAt, slot: s.slot, tokens: s.tokens.slice(0, limit) } : null;
+  return s ? { source: 'live', via: 'snapshot', updatedAt: s.updatedAt, slot: s.slot, tokens: await withTokenMeta(s.tokens.slice(0, limit)) } : null;
 }
 
 async function mainnetSlot(): Promise<number | null> {
