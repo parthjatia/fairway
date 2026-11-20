@@ -4,7 +4,7 @@
 
 A Solana launch pool whose fee depends on **who** is buying, not only **when**. Wallets with a record of sniping past launches pay more, wallets with a record of normal trading pay less, and the fee is enforced by an Anchor program.
 
-[**▶ Live app**](https://fairway1.vercel.app) · [**🎬 Demo video**](<VIDEO_URL>) · [**Program on Solana Explorer (devnet)**](https://explorer.solana.com/address/8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk?cluster=devnet)
+[**▶ Live app**](https://fairway1.vercel.app) · [**🎬 Demo video**](https://drive.google.com/file/d/124ORZar8CIRSo_y1b3nanEYzSxd5T2G9/view?usp=sharing) · [**Program on Solana Explorer (devnet)**](https://explorer.solana.com/address/8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk?cluster=devnet)
 
 ## TL;DR
 
@@ -45,7 +45,7 @@ A fresh-wallet sniper isn't caught. It pays exactly the time-decay curve, which 
 | **Product & UX** | Swap with a token picker that shows your tier, the reason and your fee in $. A launch feed with a 3-transaction "Create token" wizard. Launch pages with buyers and their tiers. Fairway Check reports for any covered token. The default experience reads devnet data. | [Live app](https://fairway1.vercel.app), [screenshots](#screenshots), [`apps/web/`](apps/web) |
 | **Innovation** | The launch fee keys on the **wallet's history across past launches**, found by a Stream before the token exists. Tokens with no oracle are scored onchain against the pool's own TWAP, measured after the trade's own price impact. | [How it works](#how-it-works), [`sniper.ts`](packages/scoring/src/sniper.ts), [`docs/ECONOMICS.md` §8](docs/ECONOMICS.md#8-launch-economics-m16) |
 | **Impact & potential** | Simulated: humans pay 53% less than under time-decay, and the sniper share falls from 49% to 27%. Revenue: a 0.05 SOL launch fee plus 15% of the toxic premium. The scores are public PDAs that any DEX can read with one call. | [Launch economics](#simulated-results), [`docs/RISKS.md`](docs/RISKS.md), [`getFeeTier`](packages/sdk/src/feetier.ts) |
-| **Demo** | `pnpm demo` runs everything offline in one command, and the live app runs on devnet. There is a shot-by-shot video script and a 5-minute pitch with Q&A. | [Demo video](<VIDEO_URL>), [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`docs/PITCH.md`](docs/PITCH.md) |
+| **Demo** | `pnpm demo` runs everything offline in one command, and the live app runs on devnet. There is a shot-by-shot video script and a 5-minute pitch with Q&A. | [Demo video](https://drive.google.com/file/d/124ORZar8CIRSo_y1b3nanEYzSxd5T2G9/view?usp=sharing), [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`docs/PITCH.md`](docs/PITCH.md) |
 
 ## Prize checklists
 
