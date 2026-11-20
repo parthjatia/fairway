@@ -20,7 +20,7 @@ export function WalletSearch() {
         <input
           value={v}
           onChange={(e) => setV(e.target.value)}
-          placeholder="Paste a wallet address (base58)"
+          placeholder="Paste a wallet address"
           aria-label="Wallet address"
           className="w-full rounded-xl border border-line bg-surface py-2.5 pl-9 pr-3 font-mono text-sm text-ink outline-none focus:border-accent"
         />

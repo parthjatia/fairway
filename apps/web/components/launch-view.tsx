@@ -180,7 +180,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           <Empty>No buys yet. Press play.</Empty>
         ) : (
           <div className="max-h-[420px] overflow-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[520px] whitespace-nowrap text-left text-sm">
               <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th className="py-2 pr-3 font-semibold">Time</th>

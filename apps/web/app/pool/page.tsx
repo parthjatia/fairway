@@ -61,7 +61,8 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
             <TierStackClient data={p.daily} />
           </Card>
           <Card title="Volume and fees by tier">
-            <table className="w-full text-sm tnum">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] whitespace-nowrap text-sm tnum">
               <thead className="text-left text-xs uppercase tracking-wide text-muted">
                 <tr><th className="py-2">Tier</th><th>Fee</th><th>Swaps</th><th>Volume</th><th>Fees</th></tr>
               </thead>
@@ -77,12 +78,13 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         </div>
         {key === 'bonk' && (
           <Card title="Snipers score TOXIC fastest on memecoins" subtitle="Settled Fairway trades until a wallet's running onchain score first reaches TOXIC (≥ 10 bps, shrunk with K = 2,000). Test mint, synthetic data.">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm tnum">
+              <table className="w-full min-w-[420px] whitespace-nowrap text-left text-sm tnum">
                 <thead className="text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Wallet</th><th>Here (BONK-test)</th><th>On SOL / USDC</th></tr></thead>
                 <tbody className="divide-y divide-line">
                   {sniperRows.map((r) => (
@@ -119,7 +121,7 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
         </Card>
         <Card title="Recent swaps">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm tnum">
+            <table className="w-full min-w-[560px] whitespace-nowrap text-left text-sm tnum">
               <thead className="text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Time (UTC)</th><th>Trader</th><th>Side</th><th>Size</th><th>Tier</th><th>Fee</th></tr></thead>
               <tbody className="divide-y divide-line">
                 {p.recent.map((s) => (

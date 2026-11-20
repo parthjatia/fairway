@@ -45,11 +45,11 @@ function PersonaSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-semibold text-ink hover:bg-surface-2"
+        className="flex items-center gap-2 whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-semibold text-ink hover:bg-surface-2"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="text-muted">Demo as</span>
+        <span className="hidden text-muted sm:inline">Demo as</span>
         <span>{persona.name}</span>
         <ChevronDown size={14} className="text-muted" />
       </button>

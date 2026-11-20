@@ -3,7 +3,7 @@ import type { Tier } from '@fairway/scoring';
 
 export function Card({ children, className = '', title, subtitle, action }: { children: ReactNode; className?: string; title?: ReactNode; subtitle?: ReactNode; action?: ReactNode }) {
   return (
-    <section className={`rounded-xl border border-line bg-surface p-6 ${className}`}>
+    <section className={`min-w-0 rounded-xl border border-line bg-surface p-6 ${className}`}>
       {(title || action) && (
         <header className="mb-6 flex items-start justify-between gap-4">
           <div>
