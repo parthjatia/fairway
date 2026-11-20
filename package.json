@@ -23,7 +23,8 @@
     "seed:local": "pnpm --filter @fairway/scripts seed:local",
     "seed:devnet": "pnpm --filter @fairway/scripts seed:devnet",
     "screenshots": "node scripts/screenshots.mjs",
-    "snapshot:real": "pnpm --filter @fairway/scripts snapshot:real"
+    "snapshot:real": "pnpm --filter @fairway/scripts snapshot:real",
+    "capture:pump": "pnpm --filter @fairway/scripts capture:pump --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

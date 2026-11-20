@@ -75,6 +75,15 @@ export function checkWalletFromDb(db: Db, wallet: string): WalletCheck {
 /** The most recent launches with their grade: example chips and the /check index. */
 export function listTokenChecks(db: Db, limit = 12, cfg: CheckConfig = DEFAULT_CHECK_CONFIG): TokenCheck[] {
   ensureLaunchSchema(db);
-  const mints = (db.prepare("SELECT mint, MIN(slot) AS launch FROM launch_trades GROUP BY mint ORDER BY launch DESC LIMIT ?").all(limit) as any[]).map((r) => r.mint as string);
-  return mints.map((m) => checkTokenFromDb(db, m, cfg));
+  // real launches first: the Pump.fun create was captured (PumpSwap "create" is a new pool for an existing token) and the early window has fully elapsed (so the report is complete),
+  // newest first; then any other mints (e.g. tokens created before the capture began) to fill the list
+  const tip = (db.prepare('SELECT MAX(slot) AS s FROM launch_trades').get() as { s: number | null }).s ?? 0;
+  const launched = (
+    db.prepare("SELECT mint, MIN(slot) AS launch FROM launch_trades WHERE kind = 'create' AND venue = 'pumpfun' GROUP BY mint HAVING launch <= ? ORDER BY launch DESC LIMIT ?").all(tip - cfg.earlyWindowSlots, limit) as any[]
+  ).map((r) => r.mint as string);
+  const rest =
+    launched.length < limit
+      ? (db.prepare('SELECT mint, MIN(slot) AS launch FROM launch_trades GROUP BY mint ORDER BY launch DESC LIMIT ?').all(limit * 4) as any[]).map((r) => r.mint as string).filter((m) => !launched.includes(m))
+      : [];
+  return [...launched, ...rest].slice(0, limit).map((m) => checkTokenFromDb(db, m, cfg));
 }

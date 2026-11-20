@@ -9,7 +9,8 @@
     "seed:local": "tsx seed-local.ts",
     "seed:devnet": "SEED_NETWORK=devnet tsx seed-local.ts",
     "snapshot:real": "tsx snapshot-real.ts",
-    "devnet:swaps": "tsx devnet-swaps.ts"
+    "devnet:swaps": "tsx devnet-swaps.ts",
+    "capture:pump": "tsx capture-pump.ts"
   },
   "dependencies": {
     "@fairway/fixtures": "workspace:*",

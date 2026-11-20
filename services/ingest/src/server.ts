@@ -3,7 +3,8 @@ import { buildApp } from './app';
 import { createContext } from './context';
 
 const ctx = createContext(process.env);
-const app = buildApp({ ...ctx, logger: true });
+// Streams retry and eventually stop on slow or failing deliveries: store synchronously, rescore in the background
+const app = buildApp({ ...ctx, logger: true, asyncRecompute: process.env.INGEST_SYNC_RECOMPUTE !== '1' });
 const port = Number(process.env.INGEST_PORT || 8787);
 const host = process.env.INGEST_HOST || '0.0.0.0';
 app

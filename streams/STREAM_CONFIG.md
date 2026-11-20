@@ -165,7 +165,20 @@ For **markouts on real data**, the ingest service uses the `PoolImpliedMidPrice`
 
 ## Webhook security
 
-QuickNode signs every delivery: `x-qn-signature` = hex(HMAC-SHA256(security token, `nonce + timestamp + body`)), with the `x-qn-nonce` and `x-qn-timestamp` headers. The ingest service verifies this signature when `QN_STREAM_TOKEN` is set. It also accepts a simple `x-fairway-token: <QN_STREAM_TOKEN>` header for local testing (curl) and for setups that add a custom header. Unsigned requests are rejected with 401 when a token is configured.
+QuickNode signs every delivery: `x-qn-signature` = hex(HMAC-SHA256(security token, `nonce + timestamp + body`)), with the `x-qn-nonce` and `x-qn-timestamp` headers. The ingest service accepts a delivery when **either** the custom header `x-fairway-token` equals `QN_STREAM_TOKEN` **or** the signature verifies with `QN_STREAM_TOKEN` (i.e. the Stream's security token was set to the same value). Anything else gets 401, and the ingest log prints `REJECTED Stream delivery (401): <reason>` with the `x-*` header names it received.
+
+### Troubleshooting: the Stream stops after a few blocks (2026-11-20)
+
+Seen on 2026-11-20: every delivery got **401** (10 POSTs about 1 s apart, all answered in < 90 ms), then QuickNode stopped the Stream, because Streams stop after repeated non-2xx responses. Cause: the old ingest checked `x-qn-signature` first and never looked at `x-fairway-token`; QuickNode signs with the Stream's *own* security token, which was not `QN_STREAM_TOKEN`. Fixed in ingest (the custom header now wins). In the QuickNode dashboard:
+
+1. Destination → **Custom headers**: `x-fairway-token` = the exact `QN_STREAM_TOKEN` from `.env.local` (no quotes, no trailing space).
+2. Optional, stricter: set the destination's **security token** to the same value, so the HMAC signature also verifies.
+3. Use **Test destination** first: ingest must answer 200 (`kind: "empty"` for a null body). Then **restart** the Stream (a stopped Stream does not resume by itself) from a recent block.
+4. Keep the filter (`pumpfun-filter.js`) on the Stream: unfiltered Block payloads are megabytes and get 413.
+
+Ingest answers each delivery right after storing (about 5–15 ms per batch measured today); sniper and bundle rescoring run in the background, so slow scoring can never time a delivery out. Batched deliveries (an array of filter outputs, or `{ data: [...] }`) and `null` bodies are accepted.
+
+**Mainnet blocks now contain version-1 transactions.** `getBlock` with `maxSupportedTransactionVersion: 0` fails on them (`Transaction version (1) is not supported`), so `scripts/capture-pump.ts` requests version 1.
 
 Note: QuickNode's guide says to verify against the **decompressed** body when gzip is enabled. The ingest service decompresses first, then verifies. If verification fails with gzip on, switch compression off.
 

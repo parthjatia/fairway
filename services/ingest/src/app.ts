@@ -17,6 +17,8 @@ export type AppOptions = {
   mode: 'fixture' | 'live';
   /** recompute affected wallets right after each delivery (default true) */
   recomputeOnIngest?: boolean;
+  /** answer Stream POSTs right after storing and run rescoring in the background (server default; tests keep it sync) */
+  asyncRecompute?: boolean;
   scoring?: ScoringConfig;
   logger?: boolean;
   /** fixture mode: show these labels on wallet pages */
@@ -34,11 +36,49 @@ export const MAX_BODY_BYTES = 16 * 1024 * 1024;
 /** Raw (unfiltered) block payloads are rejected above this size: a Stream without a filter sends whole blocks (tens of MB). */
 export const MAX_RAW_BLOCK_BYTES = 2 * 1024 * 1024;
 
-const isLaunchShape = (b: any): boolean => !!b && !Array.isArray(b.swaps) && (Array.isArray(b.launchTrades) || Array.isArray(b.fundings));
+const isLaunchShape = (b: any): boolean => !!b && !Array.isArray(b) && !Array.isArray(b.swaps) && (Array.isArray(b.launchTrades) || Array.isArray(b.fundings));
+/** Batches: an array of filter outputs, or `{ data: [outputs] }`, merged into one `{ launchTrades, fundings }`. */
+function mergeLaunchBatch(b: any): any {
+  const items = Array.isArray(b) ? b : Array.isArray(b?.data) && b.data.length && b.data.every(isLaunchShape) ? b.data : null;
+  if (!items || !items.length || !items.every((x: any) => x === null || isLaunchShape(x))) return b;
+  const xs = items.filter(Boolean);
+  return { launchTrades: xs.flatMap((x: any) => x.launchTrades ?? []), fundings: xs.flatMap((x: any) => x.fundings ?? []) };
+}
+/** QuickNode sends `null` (filter returned nothing) for empty blocks in some setups: acknowledge it. */
+const isEmptyDelivery = (b: any) => b === null || b === undefined || (typeof b === 'object' && !Array.isArray(b) && Object.keys(b).length === 0);
 
 export function buildApp(o: AppOptions): FastifyInstance {
   const app = Fastify({ logger: o.logger ?? false, bodyLimit: MAX_BODY_BYTES });
   const cfg = o.scoring ?? makeConfig();
+
+  // background rescoring (asyncRecompute): coalesced, one run at a time, errors logged and never thrown at the Stream
+  let pending: { launch: boolean; bundles: boolean; traders: Set<string> } = { launch: false, bundles: false, traders: new Set() };
+  let timer: NodeJS.Timeout | null = null;
+  const runBackground = () => {
+    timer = null;
+    const job = pending;
+    pending = { launch: false, bundles: false, traders: new Set() };
+    const t0 = Date.now();
+    try {
+      const snipers = job.launch ? recomputeSnipers(o.db) : null;
+      const b = job.bundles ? recomputeBundles(o.db) : null;
+      const w = job.traders.size ? recompute(o.db, o.mids, [...job.traders], cfg).wallets : 0;
+      app.log.info({ snipers, bundles: b && { bundles: b.bundles, flagged: b.flagged }, wallets: w, ms: Date.now() - t0 }, 'background rescoring done');
+    } catch (e) {
+      app.log.error({ err: e }, 'background rescoring failed');
+    }
+  };
+  const schedule = (j: { launch?: boolean; bundles?: boolean; traders?: string[] }) => {
+    pending.launch ||= !!j.launch;
+    pending.bundles ||= !!j.bundles;
+    for (const t of j.traders ?? []) pending.traders.add(t);
+    timer ??= setTimeout(runBackground, 1_000);
+  };
+  app.addHook('onClose', async () => {
+    if (timer) clearTimeout(timer);
+  });
+  const deny = (req: { log: FastifyInstance['log']; headers: Record<string, unknown>; url: string }, reason: string) =>
+    req.log.warn({ url: req.url, reason, headers: Object.keys(req.headers).filter((h) => h.startsWith('x-')) }, `REJECTED Stream delivery (401): ${reason}`);
 
   // keep the raw (decompressed) body for HMAC verification
   app.removeContentTypeParser('application/json');
@@ -80,9 +120,13 @@ export function buildApp(o: AppOptions): FastifyInstance {
   /** QuickNode Streams webhook. Accepts filter output `{swaps:[...]}` or raw blocks (parsed server-side). */
   app.post('/streams/solana', async (req, reply) => {
     const auth = verifyDelivery(o.token, req.headers, req.rawBody ?? '');
-    if (!auth.ok) return reply.code(401).send({ error: auth.reason });
-    const body = req.body as any;
-    if (isLaunchShape(body)) return ingestLaunch(body, reply);
+    if (!auth.ok) {
+      deny(req, auth.reason);
+      return reply.code(401).send({ error: auth.reason });
+    }
+    if (isEmptyDelivery(req.body)) return { ok: true, kind: 'empty', received: 0, stored: 0 };
+    const body = mergeLaunchBatch(req.body as any);
+    if (isLaunchShape(body)) return ingestLaunch(body, reply, undefined, req.log);
     let kind: 'filtered' | 'raw-blocks';
     let incoming: Array<Swap & { source?: string }>;
     if (body && Array.isArray(body.swaps)) {
@@ -98,7 +142,10 @@ export function buildApp(o: AppOptions): FastifyInstance {
     const { stored, traders } = upsertSwaps(o.db, valid);
     logDelivery(o.db, kind, incoming.length, stored);
     let recomputed = 0;
-    if ((o.recomputeOnIngest ?? true) && traders.length) recomputed = recompute(o.db, o.mids, traders, cfg).wallets;
+    if ((o.recomputeOnIngest ?? true) && traders.length) {
+      if (o.asyncRecompute) schedule({ traders });
+      else recomputed = recompute(o.db, o.mids, traders, cfg).wallets;
+    }
     req.log.info({ kind, received: incoming.length, stored, recomputed }, `stored ${stored} swaps`);
     return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, recomputed };
   });
@@ -109,7 +156,8 @@ export function buildApp(o: AppOptions): FastifyInstance {
       : null;
 
   /** Shared by /streams/pumpfun and /streams/solana (when a Stream sends the Pump.fun filter's output). */
-  function ingestLaunch(body: any, reply: FastifyReply, raw?: string) {
+  function ingestLaunch(body: any, reply: FastifyReply, raw?: string, log?: FastifyInstance['log']) {
+    const t0 = Date.now();
     const kind = body && Array.isArray(body.launchTrades) ? 'filtered' : Array.isArray(body?.fundings) ? 'filtered' : 'raw-blocks';
     if (kind === 'raw-blocks') {
       const tooBig = rawTooLarge(raw);
@@ -123,17 +171,30 @@ export function buildApp(o: AppOptions): FastifyInstance {
     const stored = upsertLaunchTrades(o.db, valid);
     const storedFundings = upsertFundings(o.db, validFundings);
     logDelivery(o.db, `launch-${kind}`, incoming.length + fundingsIn.length, stored + storedFundings);
-    const snipers = stored ? recomputeSnipers(o.db) : null;
-    const b = stored || storedFundings ? recomputeBundles(o.db) : null;
-    const bundles = b ? { bundles: b.bundles, flagged: b.flagged, knownBundlers: b.knownBundlers } : null;
+    let snipers: ReturnType<typeof recomputeSnipers> | 'queued' | null;
+    let bundles: { bundles: number; flagged: number; knownBundlers: number } | 'queued' | null;
+    if (o.asyncRecompute) {
+      if (stored || storedFundings) schedule({ launch: !!stored, bundles: true });
+      snipers = stored ? 'queued' : null;
+      bundles = stored || storedFundings ? 'queued' : null;
+    } else {
+      snipers = stored ? recomputeSnipers(o.db) : null;
+      const b = stored || storedFundings ? recomputeBundles(o.db) : null;
+      bundles = b ? { bundles: b.bundles, flagged: b.flagged, knownBundlers: b.knownBundlers } : null;
+    }
+    log?.info({ kind, launchTrades: incoming.length, fundings: fundingsIn.length, stored, storedFundings, invalid: incoming.length - valid.length, ms: Date.now() - t0 }, `launch delivery stored ${stored} trades, ${storedFundings} fundings`);
     return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, fundings: { received: fundingsIn.length, invalid: fundingsIn.length - validFundings.length, stored: storedFundings }, snipers, bundles, launches: launchCounts(o.db) };
   }
 
   /** QuickNode Streams webhook for launches: streams/pumpfun-filter.js output `{launchTrades:[...], fundings:[...]}` or raw blocks. */
   app.post('/streams/pumpfun', async (req, reply) => {
     const auth = verifyDelivery(o.token, req.headers, req.rawBody ?? '');
-    if (!auth.ok) return reply.code(401).send({ error: auth.reason });
-    return ingestLaunch(req.body as any, reply, req.rawBody);
+    if (!auth.ok) {
+      deny(req, auth.reason);
+      return reply.code(401).send({ error: auth.reason });
+    }
+    if (isEmptyDelivery(req.body)) return { ok: true, kind: 'empty', received: 0, stored: 0 };
+    return ingestLaunch(mergeLaunchBatch(req.body as any), reply, req.rawBody, req.log);
   });
 
   /** Bundle detection: wallets funded by one source shortly before a launch (and new wallets of known bundlers). */

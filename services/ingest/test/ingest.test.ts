@@ -242,6 +242,39 @@ describe('POST /streams/solana with the Pump.fun filter shape + size guard', () 
     expect(h.launch.launches).toBeGreaterThan(0);
     expect((await post(app, body)).json().stored).toBe(0);
   });
+  it('accepts a valid x-fairway-token even when QuickNode adds its own x-qn-signature (the 401 that stopped the Stream)', async () => {
+    const db = openDb(':memory:');
+    const app = buildApp({ db, pools, mids, mode: 'fixture', token: 'tok' });
+    const body = { launchTrades: [], fundings: [] };
+    const r = await post(app, body, { 'x-fairway-token': 'tok', 'x-qn-signature': 'deadbeef', 'x-qn-nonce': 'n', 'x-qn-timestamp': '1' });
+    expect(r.statusCode).toBe(200);
+    expect((await post(app, body, { 'x-fairway-token': 'nope', 'x-qn-signature': 'deadbeef' })).json().error).toMatch(/does not match/);
+  });
+  it('merges batched filter outputs and acknowledges empty deliveries', async () => {
+    const { loadPumpfun } = await import('@fairway/fixtures/node');
+    const { parsePumpPayload } = await import('@fairway/parser');
+    const trades = parsePumpPayload(loadPumpfun().blocks);
+    const half = Math.floor(trades.length / 2);
+    const { app } = fresh();
+    const r = await post(app, [{ launchTrades: trades.slice(0, half), fundings: [] }, null, { launchTrades: trades.slice(half) }]);
+    expect(r.json()).toMatchObject({ kind: 'filtered', stored: trades.length });
+    expect((await post(app, 'null')).json()).toMatchObject({ ok: true, kind: 'empty' });
+  });
+  it('asyncRecompute answers right after storing and rescoring runs in the background', async () => {
+    const { loadPumpfun } = await import('@fairway/fixtures/node');
+    const { parsePumpPayload } = await import('@fairway/parser');
+    const pf = loadPumpfun();
+    const db = openDb(':memory:');
+    const app = buildApp({ db, pools, mids, mode: 'fixture', asyncRecompute: true });
+    const t0 = Date.now();
+    const r = await post(app, { launchTrades: parsePumpPayload(pf.blocks) });
+    expect(Date.now() - t0).toBeLessThan(2_000);
+    expect(r.json()).toMatchObject({ stored: expect.any(Number), snipers: 'queued' });
+    await new Promise((res) => setTimeout(res, 1_500));
+    const toxic = (await app.inject({ url: '/snipers?tier=TOXIC' })).json() as Array<{ wallet: string }>;
+    expect(new Set(toxic.map((s) => s.wallet))).toEqual(new Set(pf.meta.snipers));
+    await app.close();
+  });
   it('rejects oversized raw-block payloads with 413 and a clear error', async () => {
     const { app } = fresh();
     const blocks = JSON.parse(JSON.stringify(fx.blocks)) as unknown[];
