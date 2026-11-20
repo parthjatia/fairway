@@ -3,9 +3,10 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 @theme {
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, monospace;
-  /* type scale: 12 / 14 / 16 / 20 / 28 / 40 */
+  --font-sans: var(--font-plex-sans), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-serif: var(--font-newsreader), Georgia, 'Times New Roman', serif;
+  /* type scale: 12 / 14 / 16 / 20 / 28 / 40 (display sizes are set per page in the serif) */
   --text-xs: 12px;
   --text-xs--line-height: 16px;
   --text-sm: 14px;
@@ -26,14 +27,18 @@
   --text-5xl--line-height: 44px;
   --text-6xl: 40px;
   --text-6xl--line-height: 44px;
-  --radius-md: 6px;
-  --radius-lg: 4px;
-  --radius-xl: 6px;
-  --radius-2xl: 6px;
-  --radius-3xl: 6px;
+  /* the paper look is square: every radius is 0 */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-sky: var(--sky);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-accent-hover: var(--accent-hover);
@@ -51,63 +56,74 @@
 }
 
 /*
- * Design tokens: Geist-style monochrome. Hierarchy comes from 1px hairlines and small luminance shifts, never shadows.
- * The primary action is the ink colour itself (black on light, white on dark). Colour carries status only:
- * green = Low risk / RETAIL, amber = Medium risk, red = High risk / TOXIC, muted and desaturated.
- * Every text/background pair below is >= 4.5:1 (WCAG AA).
+ * Design tokens: "paper" (Fairway.dc.html). Warm paper and ink, hairline rules, square corners, no shadows.
+ * Primary actions are ink-blue. Colour carries status: green = Low risk / RETAIL, ochre = Medium / STANDARD,
+ * red = High risk / TOXIC. Every text/background pair is >= 4.5:1 (WCAG AA); the light ochre is a shade darker
+ * than the design's #a8770f (3.45:1) to pass.
  */
 :root {
   color-scheme: light;
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #fafafa;
-  --line: #eaeaea;
-  --line-strong: #d4d4d4;
-  --ink: #0a0a0a;
-  --ink-2: #4d4d4d;
-  --muted: #666666;
-  --accent: #000000;
-  --accent-hover: #262626;
-  --accent-ink: #ffffff;
-  --good: #1a7f45;
-  --warn: #8a5a00;
-  --bad: #c13a32;
+  --bg: #f3efe6; /* paper */
+  --surface: #f3efe6;
+  --surface-2: #ebe5d8; /* plate */
+  --sky: #e3e9f1;
+  --line: #d6cfbf; /* rule */
+  --line-strong: #15140f;
+  --ink: #15140f;
+  --ink-2: #5d594f;
+  --muted: #5d594f;
+  --accent: #1f4f86;
+  --accent-hover: #183f6c;
+  --accent-ink: #f3efe6;
+  --good: #2e6a4a;
+  --warn: #8c620a;
+  --bad: #c2361c;
   --retail: var(--good);
-  --standard: var(--ink-2);
+  --standard: var(--warn);
   --toxic: var(--bad);
-  --grid: #f0f0f0;
-  --axis: #d4d4d4;
+  --grid: #e3ddd0;
+  --axis: #d6cfbf;
+  /* Marshal the hawk */
+  --hawk-body: #2b2925;
+  --hawk-dark: #15140f;
+  --hawk-belly: #e6dfd0;
+  --hawk-beak: #c9962a;
   /* chart series (categorical, data only) */
-  --s-fairway: #0a0a0a;
+  --s-fairway: #1f4f86;
   --s-flat30: #c2662f;
-  --s-rotation: #2f8a5b;
-  --s-flat5: #a8862a;
+  --s-rotation: #2e6a4a;
+  --s-flat5: #a8770f;
   --s-flat80: #b04a72;
   --s-bundle: #6b5bb0;
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --bg: #000000;
-  --surface: #0a0a0a;
-  --surface-2: #111111;
-  --line: #262626;
-  --line-strong: #404040;
-  --ink: #ededed;
-  --ink-2: #a1a1a1;
-  --muted: #8f8f8f;
-  --accent: #ffffff;
-  --accent-hover: #e5e5e5;
-  --accent-ink: #000000;
-  --good: #52a875;
-  --warn: #c99a45;
-  --bad: #e0675f;
-  --grid: #1a1a1a;
-  --axis: #333333;
-  --s-fairway: #ededed;
+  --bg: #13120f;
+  --surface: #13120f;
+  --surface-2: #1d1b17;
+  --sky: #1a2230;
+  --line: #34302a;
+  --line-strong: #ece6d9;
+  --ink: #ece6d9;
+  --ink-2: #9d968a;
+  --muted: #9d968a;
+  --accent: #7fa6d9;
+  --accent-hover: #9bbbe4;
+  --accent-ink: #13120f;
+  --good: #72b28c;
+  --warn: #d8a840;
+  --bad: #e5674c;
+  --grid: #24211c;
+  --axis: #34302a;
+  --hawk-body: #cfc7b6;
+  --hawk-dark: #ece6d9;
+  --hawk-belly: #3a362f;
+  --hawk-beak: #c9962a;
+  --s-fairway: #7fa6d9;
   --s-flat30: #d47a4c;
-  --s-rotation: #52a875;
-  --s-flat5: #c99a45;
+  --s-rotation: #72b28c;
+  --s-flat5: #d8a840;
   --s-flat80: #d0749c;
   --s-bundle: #9a8ad8;
 }
@@ -120,36 +136,89 @@ body {
 
 body {
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 15px;
+  line-height: 22px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  transition: background-color 300ms ease, color 300ms ease;
 }
 
-/* visible keyboard focus everywhere (in the base layer, so utilities such as focus-visible:outline-none can override it) */
+/* visible keyboard focus everywhere (base layer, so utilities such as focus-visible:outline-none can override it) */
 @layer base {
   :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--ink);
     outline-offset: 2px;
+  }
+  a:hover {
+    text-decoration-color: currentColor;
+  }
+  input::placeholder {
+    color: var(--ink-2);
   }
 }
 a,
 button,
 input,
 summary {
-  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
 }
-h1,
+
+/* page titles are set in Newsreader, regular weight, tight */
+h1 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
 h2,
 h3 {
-  letter-spacing: -0.025em;
+  letter-spacing: -0.01em;
 }
+.display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+@keyframes fw-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fw-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes fw-blip {
+  50% {
+    opacity: 0.25;
+  }
+}
+.fw-in {
+  animation: fw-in 0.4s ease both;
+}
+.fw-bar {
+  transform-origin: left;
+  animation: fw-bar 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.fw-blip {
+  animation: fw-blip 1.8s steps(2) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
@@ -157,7 +226,6 @@ h3 {
 .skeleton {
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 4px;
   animation: fw-pulse 1.4s ease-in-out infinite;
 }
 @keyframes fw-pulse {
@@ -169,34 +237,42 @@ h3 {
 .tnum {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
 }
 
 /* metadata labels: small, mono, uppercase, tracked (components layer, so colour utilities can still override) */
 @layer components {
-.label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
+  .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+  /* square status swatch used before tiers and grades */
+  .swatch {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    flex: none;
+    background: currentColor;
+  }
 }
 
 /* Recharts: recessive axes and grid */
 .recharts-cartesian-axis-tick-value {
   fill: var(--muted);
   font-size: 11px;
+  font-family: var(--font-mono);
 }
 .recharts-cartesian-grid line {
   stroke: var(--grid);
 }
 .recharts-default-tooltip {
   background: var(--surface) !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 4px;
+  border: 1px solid var(--ink) !important;
+  border-radius: 0;
   box-shadow: none !important;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -208,16 +284,15 @@ input[type='range'] {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  background: color-mix(in srgb, var(--warn) 35%, transparent);
 }
 
-/* flush grid: cells share 1px hairlines instead of floating apart (gap-px over the line colour) */
+/* flush grid: cells share 1px hairlines instead of floating apart (gap-px over the rule colour) */
 @layer components {
   .flush {
     gap: 1px;
     background: var(--line);
     border: 1px solid var(--line);
-    border-radius: 6px;
     overflow: hidden;
   }
   .flush > * {

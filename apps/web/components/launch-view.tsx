@@ -84,7 +84,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="mb-1 flex items-center gap-2 label">
-            Launch {spec.createdBy === 'you' && <span className="rounded-[3px] border border-line bg-surface-2 px-2 py-0.5 normal-case tracking-normal">created by you</span>}
+            Launch {spec.createdBy === 'you' && <span className="rounded-none border border-line bg-surface-2 px-2 py-0.5 normal-case tracking-normal">created by you</span>}
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
             {spec.name} <span className="text-muted">${spec.symbol}</span>
@@ -102,7 +102,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           </button>
           <div className="flex rounded-md border border-line p-0.5 text-xs">
             {SPEEDS.map((s) => (
-              <button key={s} onClick={() => setSpeed(s)} aria-pressed={s === speed} className={`rounded-[4px] px-2.5 py-1.5 font-semibold ${s === speed ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
+              <button key={s} onClick={() => setSpeed(s)} aria-pressed={s === speed} className={`rounded-none px-2.5 py-1.5 font-semibold ${s === speed ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
                 {s === 10 ? '1×' : s === 25 ? '2.5×' : '6×'}
               </button>
             ))}
@@ -115,7 +115,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           <div className="text-sm text-ink-2">
             <span className="font-mono text-lg font-semibold text-ink tnum">{clock(slot)}</span> since launch · slot {slot}
           </div>
-          <span className={`rounded-[3px] px-2.5 py-1 text-xs font-semibold ${inWindow ? 'bg-toxic/15 text-toxic' : 'bg-retail/15 text-retail'}`}>{inWindow ? `Launch window: ${clock(W - slot)} left` : 'Window over: normal tier fees'}</span>
+          <span className={`rounded-none px-2.5 py-1 text-xs font-semibold ${inWindow ? 'bg-toxic/15 text-toxic' : 'bg-retail/15 text-retail'}`}>{inWindow ? `Launch window: ${clock(W - slot)} left` : 'Window over: normal tier fees'}</span>
           <input type="range" min={0} max={end} value={slot} onChange={(e) => { setSlot(Number(e.target.value)); setPlaying(false); }} className="min-w-[180px] flex-1" aria-label="Time since launch" />
         </div>
       </Card>
@@ -169,7 +169,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         action={
           <div className="flex rounded-md border border-line p-0.5 text-xs" role="tablist" aria-label="Fee model">
             {(['fairway', 'bundle', 'decay'] as const).map((c) => (
-              <button key={c} role="tab" aria-selected={c === compare} onClick={() => setCompare(c)} className={`rounded-[4px] px-2.5 py-1.5 font-semibold ${c === compare ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
+              <button key={c} role="tab" aria-selected={c === compare} onClick={() => setCompare(c)} className={`rounded-none px-2.5 py-1.5 font-semibold ${c === compare ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
                 {COMPARE_LABEL[c]}
               </button>
             ))}
@@ -212,7 +212,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           </div>
         )}
         {compare === 'bundle' && bundleKeptOut > 0 && (
-          <p className="mt-3 rounded-[4px] border border-[color:var(--s-bundle)] px-3 py-2 text-sm text-ink-2">
+          <p className="mt-3 rounded-none border border-[color:var(--s-bundle)] px-3 py-2 text-sm text-ink-2">
             <span className="font-semibold text-[color:var(--s-bundle)]">{bundleKeptOut} bundle wallets kept out.</span> Their funder bundled earlier launches, so the keeper flagged them before the launch and they face
             the TOXIC curve. Under plain Fairway they buy as fresh STANDARD wallets.
           </p>
@@ -261,7 +261,7 @@ function BundleBadge({ charged }: { charged: string }) {
   return (
     <span
       title={`Bundle: funded by the same source wallet as other early buyers within the lookback before the launch. Pays at least STANDARD; charged ${charged} here.`}
-      className="ml-1.5 inline-flex items-center rounded-[3px] border border-[color:var(--s-bundle)] px-2 py-0.5 label text-[color:var(--s-bundle)]"
+      className="ml-1.5 inline-flex items-center rounded-none border border-[color:var(--s-bundle)] px-2 py-0.5 label text-[color:var(--s-bundle)]"
     >
       bundle
     </span>
@@ -292,7 +292,7 @@ function TwoWalletsLaunch({ buyUsd, setBuyUsd, fees, decayFee }: { buyUsd: numbe
     <Card title="Same buy, two wallets" subtitle="The identical buy, right now, from two different wallets.">
       <label className="mb-3 flex items-center gap-2 text-sm text-ink-2">
         Buy
-        <input type="number" min={1} value={buyUsd} onChange={(e) => setBuyUsd(Math.max(0, Number(e.target.value)))} className="w-24 rounded-[4px] border border-line bg-surface-2 px-2 py-1 text-ink tnum" aria-label="Buy amount in USD" />
+        <input type="number" min={1} value={buyUsd} onChange={(e) => setBuyUsd(Math.max(0, Number(e.target.value)))} className="w-24 rounded-none border border-line bg-surface-2 px-2 py-1 text-ink tnum" aria-label="Buy amount in USD" />
         USDC of the token
       </label>
       <div className="space-y-2">

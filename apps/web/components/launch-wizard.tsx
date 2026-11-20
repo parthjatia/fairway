@@ -65,7 +65,7 @@ export function LaunchWizard() {
       <ol className="mb-6 flex flex-wrap gap-2" aria-label="Steps">
         {STEPS.map((s, i) => (
           <li key={s}>
-            <button onClick={() => i < step && setStep(i)} disabled={i > step} aria-current={i === step ? 'step' : undefined} className={`rounded-[3px] border px-3 py-1.5 text-xs font-semibold ${i === step ? 'border-accent bg-surface-2 text-ink' : i < step ? 'border-line text-ink-2 hover:text-ink' : 'border-line text-muted'}`}>
+            <button onClick={() => i < step && setStep(i)} disabled={i > step} aria-current={i === step ? 'step' : undefined} className={`rounded-none border px-3 py-1.5 text-xs font-semibold ${i === step ? 'border-accent bg-surface-2 text-ink' : i < step ? 'border-line text-ink-2 hover:text-ink' : 'border-line text-muted'}`}>
               {i + 1}. {s}
             </button>
           </li>

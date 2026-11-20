@@ -52,7 +52,7 @@ function Picker({ opts, onPick, onClose, exclude }: { opts: Opt[]; onPick: (m: s
       <div role="dialog" aria-modal aria-label="Select a token" className="w-full max-w-md overflow-hidden rounded-md border border-line bg-surface">
         <div className="flex items-center justify-between px-4 pt-4">
           <h2 className="text-base font-semibold text-ink">Select a token</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-[4px] p-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink">
+          <button onClick={onClose} aria-label="Close" className="rounded-none p-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink">
             <X size={16} />
           </button>
         </div>
@@ -94,7 +94,7 @@ function Picker({ opts, onPick, onClose, exclude }: { opts: Opt[]; onPick: (m: s
 function TokenButton({ o, onClick }: { o: Opt | undefined; onClick: () => void }) {
   return (
     <button onClick={onClick} className="flex shrink-0 items-center gap-2 rounded-md border border-line bg-surface py-1 pl-1 pr-2.5 text-sm font-medium text-ink duration-150 hover:border-line-strong" aria-label={`Select token, current ${o?.symbol ?? 'none'}`}>
-      {o ? <TokenIcon symbol={o.symbol} size={26} /> : <span className="h-[26px] w-[26px] rounded-full bg-surface-2" />}
+      {o ? <TokenIcon symbol={o.symbol} size={26} /> : <span className="h-[26px] w-[26px] bg-surface-2" />}
       {o?.symbol ?? 'Select'}
       <ChevronDown size={14} className="text-muted" />
     </button>

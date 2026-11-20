@@ -34,7 +34,7 @@ type Pools = Record<PoolKey, MockPool>;
 export function AppStateProvider({ personas, pairs, initialPools, children }: { personas: Persona[]; pairs: PairMeta[]; initialPools: Pools; children: ReactNode }) {
   const [personaKey, setKey] = useState<Persona['key']>('rita');
   const [pairKey, setPair] = useState<PoolKey>('sol');
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>('light');
   const [pools, setPools] = useState<Pools>(initialPools);
   const [allTrades, setTrades] = useState<SessionTrade[]>([]);
 
@@ -43,7 +43,7 @@ export function AppStateProvider({ personas, pairs, initialPools, children }: { 
     if (k && personas.some((p) => p.key === k)) setKey(k);
     const pk = localStorage.getItem(KEYS.pair) as PoolKey | null;
     if (pk && pairs.some((p) => p.key === pk)) setPair(pk);
-    setTheme((document.documentElement.dataset.theme as Theme) || 'dark');
+    setTheme((document.documentElement.dataset.theme as Theme) || 'light');
     try {
       const p = JSON.parse(localStorage.getItem(KEYS.pools) || 'null');
       if (p && Object.values(p as Pools).every((x) => x && x.base > 0 && x.quote > 0)) setPools({ ...initialPools, ...p });

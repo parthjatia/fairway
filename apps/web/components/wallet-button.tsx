@@ -6,8 +6,8 @@ import { short } from '@/lib/format';
 export function WalletButton({ block = false }: { block?: boolean }) {
   const { wallets, wallet, publicKey, connecting, select, connect, disconnect } = useWallet();
   const cls = block
-    ? 'h-11 w-full rounded-md bg-accent text-sm font-medium text-accent-ink duration-150 hover:bg-accent-hover disabled:opacity-50'
-    : 'flex h-8 items-center whitespace-nowrap rounded-md border border-line px-3 text-sm font-medium text-ink duration-150 hover:border-line-strong';
+    ? 'h-[52px] w-full bg-accent text-[15px] font-medium text-accent-ink no-underline duration-150 hover:bg-accent-hover disabled:opacity-50'
+    : 'flex h-[34px] items-center whitespace-nowrap border border-accent bg-accent px-4 text-[13px] font-medium text-accent-ink no-underline duration-150 hover:bg-accent-hover hover:text-accent-ink';
   if (publicKey) {
     return (
       <button className={cls} onClick={() => void disconnect()} title="Disconnect">

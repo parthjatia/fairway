@@ -1,7 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Check, Copy, Search } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 
 /** Pulls a Solana address out of whatever was pasted (a bare address, or an explorer URL that contains one). */
 export function extractAddress(text: string): string | null {
@@ -25,7 +25,7 @@ export function CopyButton({ value, label = 'Copy address' }: { value: string; l
           /* clipboard blocked: nothing to do */
         }
       }}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-[4px] border border-line text-ink-2 hover:bg-surface-2 hover:text-ink"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-none border border-line text-ink-2 hover:bg-surface-2 hover:text-ink"
     >
       {done ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
     </button>
@@ -46,14 +46,13 @@ export function CheckSearch({ initial = '', autoFocus = false, size = 'lg' }: { 
     setErr(null);
     router.push(`/check/${a}`);
   };
-  const h = size === 'lg' ? 'h-14' : 'h-12';
+  const h = size === 'lg' ? 'h-[50px]' : 'h-11';
   return (
-    <form onSubmit={submit} role="search" className="w-full">
+    <form onSubmit={submit} role="search" className="w-full max-w-[520px]">
       <label htmlFor="check-input" className="sr-only">
         Token mint or wallet address
       </label>
-      <div className={`flex ${h} items-center gap-2 rounded-md border bg-surface pl-4 pr-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent ${err ? 'border-bad' : 'border-line'}`}>
-        <Search size={18} className="shrink-0 text-muted" aria-hidden />
+      <div className={`flex ${h} border bg-surface focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink ${err ? 'border-bad' : 'border-ink'}`}>
         <input
           id="check-input"
           value={v}
@@ -68,10 +67,10 @@ export function CheckSearch({ initial = '', autoFocus = false, size = 'lg' }: { 
           placeholder="Paste a token mint or wallet"
           aria-invalid={!!err}
           aria-describedby={err ? 'check-err' : undefined}
-          className="min-w-0 flex-1 bg-transparent font-mono text-sm text-ink outline-none placeholder:font-sans placeholder:text-muted focus-visible:outline-none"
+          className="min-w-0 flex-1 bg-transparent px-4 font-mono text-sm text-ink outline-none focus-visible:outline-none"
         />
-        <button type="submit" className="h-10 shrink-0 rounded-[4px] bg-accent px-4 text-sm font-semibold text-accent-ink hover:bg-accent-hover">
-          Check
+        <button type="submit" className="shrink-0 border-l border-accent bg-accent px-[22px] text-sm font-medium text-accent-ink hover:bg-accent-hover">
+          Check <span aria-hidden>⏎</span>
         </button>
       </div>
       {err && (

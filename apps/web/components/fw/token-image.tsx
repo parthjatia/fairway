@@ -14,7 +14,7 @@ export function TokenImage({ src, size, fallback }: { src: string; size: number;
       loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
-      className="shrink-0 rounded-full border border-line bg-surface-2 object-cover"
+      className="shrink-0 border border-line bg-surface-2 object-cover"
       style={{ width: size, height: size }}
     />
   );

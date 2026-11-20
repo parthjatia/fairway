@@ -67,7 +67,7 @@ export function FwLaunchDetail({ mint }: { mint: string }) {
           </div>
         </div>
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-sm">
-          <code className="min-w-0 max-w-full truncate rounded-[4px] bg-surface-2 px-3 py-1.5 font-mono text-xs text-ink-2" title={mint}>{mint}</code>
+          <code className="min-w-0 max-w-full truncate rounded-none bg-surface-2 px-3 py-1.5 font-mono text-xs text-ink-2" title={mint}>{mint}</code>
           <CopyButton value={mint} />
           <a href={explorerAddr(t.pool)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-ink-2 hover:text-ink">
             Pool on Explorer <ExternalLink size={12} />
@@ -86,7 +86,7 @@ export function FwLaunchDetail({ mint }: { mint: string }) {
             {[0, 1, 2].map((tier) => {
               const f = launchFeeBps(curve.curve, tier, curve.slot, curve.launchSlot, curve.windowSlots);
               return (
-                <div key={tier} className="rounded-[4px] border border-line px-3 py-2">
+                <div key={tier} className="rounded-none border border-line px-3 py-2">
                   <TierBadge tier={TIER_NAMES[tier] as Tier} />
                   <div className="mt-1 text-sm font-semibold text-ink tnum">{f === null ? '—' : `${(f / 100).toFixed(2)}%`}</div>
                 </div>

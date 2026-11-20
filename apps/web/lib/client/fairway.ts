@@ -68,11 +68,4 @@ export function saveLocalName(mint: string, symbol: string, name: string) {
   }
 }
 
-export function ago(ts: number | null | undefined, now = Date.now() / 1000): string {
-  if (!ts) return '—';
-  const s = Math.max(0, now - ts);
-  if (s < 60) return `${Math.floor(s)}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
+export { ago } from '../format';

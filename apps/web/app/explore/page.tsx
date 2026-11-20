@@ -9,7 +9,7 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
   const [pump, { tab }] = await Promise.all([pumpTokens(50), searchParams]);
   return (
     <>
-      <PageHeader eyebrow="Explore" title="Every token, graded for snipers">
+      <PageHeader eyebrow="03 · Explore" title="Every token, graded for snipers." ruled={false}>
         Tokens trading on Fairway, and real Pump.fun launches from Solana mainnet. Each one has a Fairway Check report: who bought in the first minute, and how much of the early supply snipers took.
       </PageHeader>
       <Explore pump={pump} initialTab={tab === 'pump' ? 'pump' : 'fairway'} />

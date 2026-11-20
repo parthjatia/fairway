@@ -81,7 +81,7 @@ export function SwapPanel() {
           <div className="mb-3 flex items-center justify-between">
             <span className="flex items-center gap-2 text-sm font-semibold text-ink">
               Swap
-              <span role="tablist" aria-label="Pair" className="flex rounded-[3px] border border-line bg-surface-2 p-0.5 text-xs font-semibold">
+              <span role="tablist" aria-label="Pair" className="flex rounded-none border border-line bg-surface-2 p-0.5 text-xs font-semibold">
                 {pairs.map((p) => (
                   <button
                     key={p.key}
