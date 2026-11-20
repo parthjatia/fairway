@@ -17,6 +17,15 @@ const claimed = new Map<string, number>();
 let solSent = 0;
 
 function faucetKey(): Keypair | null {
+  // Hosted deploys (Vercel) have no .keys/ folder: accept the keypair JSON array from an env var.
+  const inline = process.env.FAUCET_SECRET_KEY?.trim();
+  if (inline) {
+    try {
+      return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(inline) as number[]));
+    } catch {
+      return null;
+    }
+  }
   const candidates = [process.env.FAUCET_KEYPAIR, join(process.cwd(), '..', '..', '.keys', 'deployer.json'), join(process.cwd(), '.keys', 'deployer.json')].filter(Boolean) as string[];
   const p = candidates.find((c) => existsSync(c));
   return p ? Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, 'utf8')))) : null;
