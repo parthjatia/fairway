@@ -93,10 +93,10 @@ function Picker({ opts, onPick, onClose, exclude }: { opts: Opt[]; onPick: (m: s
 
 function TokenButton({ o, onClick }: { o: Opt | undefined; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex shrink-0 items-center gap-2 rounded-md border border-line bg-surface py-1 pl-1 pr-2.5 text-sm font-medium text-ink duration-150 hover:border-line-strong" aria-label={`Select token, current ${o?.symbol ?? 'none'}`}>
+    <button onClick={onClick} className="flex shrink-0 items-center gap-2 border border-ink bg-surface py-1 pl-1 pr-2.5 text-[15px] font-semibold text-ink duration-150 hover:bg-surface-2" aria-label={`Select token, current ${o?.symbol ?? 'none'}`}>
       {o ? <TokenIcon symbol={o.symbol} size={26} /> : <span className="h-[26px] w-[26px] bg-surface-2" />}
       {o?.symbol ?? 'Select'}
-      <ChevronDown size={14} className="text-muted" />
+      <ChevronDown size={14} className="text-ink" />
     </button>
   );
 }
@@ -234,9 +234,9 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
   const cta = !publicKey ? null : !pool ? 'No pool for this pair' : !quote ? 'Enter an amount' : tooMuch ? `Not enough ${payO?.symbol}` : busy ? 'Confirm in your wallet…' : 'Swap';
 
   return (
-    <div className="w-full min-w-0 rounded-md border border-line bg-surface p-4 sm:p-5">
+    <div className="w-full min-w-0 border border-ink bg-surface p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-ink">Swap</h2>
+        <h2 className="text-lg font-semibold text-ink">Swap</h2>
         <DevnetBadge />
       </div>
       {error && !data && <p className="mb-3 rounded-md bg-surface-2 p-3 text-sm text-bad">Could not load Fairway pools: {error}</p>}
@@ -244,10 +244,10 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
       {data && (
         <>
           <div className="rounded-md bg-surface-2 p-3">
-            <div className="flex items-center justify-between text-xs text-ink-2">
+            <div className="flex items-center justify-between text-sm font-medium text-ink">
               <span>You pay</span>
               {balance !== null && (
-                <button className="tnum hover:text-ink" onClick={() => setAmount(String(balance))}>
+                <button className="tnum font-normal text-ink-2 hover:text-ink" onClick={() => setAmount(String(balance))}>
                   Balance {fmtAmt(balance)}
                 </button>
               )}
@@ -263,48 +263,48 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
           <div className="relative z-10 -my-2 flex justify-center">
             <button
               aria-label="Switch direction" onClick={() => { setPay(get); setGet(pay); setResult(null); }}
-              className="rounded-md border border-line bg-surface p-1.5 text-ink-2 duration-150 hover:border-line-strong hover:text-ink"
+              className="border border-ink bg-surface p-1.5 text-ink duration-150 hover:bg-surface-2"
             >
               <ArrowDownUp size={16} />
             </button>
           </div>
           <div className="rounded-md bg-surface-2 p-3">
-            <div className="text-xs text-ink-2">You receive</div>
+            <div className="text-sm font-medium text-ink">You receive</div>
             <div className="mt-1 flex items-center gap-3">
               <span className={`min-w-0 flex-1 truncate text-3xl font-semibold tnum ${quote ? 'text-ink' : 'text-muted'}`}>{quote ? fmtAmt(quote.out) : '0'}</span>
               <TokenButton o={getO} onClick={() => setPicking('get')} />
             </div>
           </div>
 
-          <div className="mt-3 space-y-2 rounded-md border border-line p-3 text-sm">
+          <div className="mt-3 space-y-2.5 border border-line p-3.5 text-[15px]">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-ink-2">Your tier</span>
-              {publicKey ? <TierBadge tier={tier} /> : <span className="text-muted">—</span>}
+              <span className="font-medium text-ink">Your tier</span>
+              {publicKey ? <TierBadge tier={tier} size="lg" /> : <span className="text-ink-2">—</span>}
             </div>
-            <p className="text-xs leading-snug text-ink-2">{tierReason(publicKey ? fee : null)}</p>
+            <p className="text-sm leading-snug text-ink-2">{tierReason(publicKey ? fee : null)}</p>
             <div className="flex justify-between gap-3">
-              <span className="text-ink-2">Fee</span>
-              <span className="tnum text-ink">
-                {quote ? usd(quote.feeUsd) : '—'} <span className="text-muted">({(feeBps / 100).toFixed(2)}%)</span>
+              <span className="font-medium text-ink">Fee</span>
+              <span className="tnum font-medium text-ink">
+                {quote ? usd(quote.feeUsd) : '—'} <span className="font-normal text-ink-2">({(feeBps / 100).toFixed(2)}%)</span>
               </span>
             </div>
             {quote && fee && fee.tier !== 1 && !fee.launch && (
-              <div className="flex justify-between gap-3 text-xs">
-                <span className="text-muted">vs. standard 0.30%</span>
-                <span className={`tnum ${quote.feeUsd < quote.standardUsd ? 'text-good' : 'text-bad'}`}>
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-ink-2">vs. standard 0.30%</span>
+                <span className={`tnum font-medium ${quote.feeUsd < quote.standardUsd ? 'text-good' : 'text-bad'}`}>
                   {quote.feeUsd < quote.standardUsd ? 'you save ' : 'you pay '}
                   {usd(Math.abs(quote.standardUsd - quote.feeUsd))}
                   {quote.feeUsd < quote.standardUsd ? '' : ' more'}
                 </span>
               </div>
             )}
-            <div className="flex justify-between gap-3 text-xs">
-              <span className="text-muted">Rate</span>
-              <span className="tnum text-ink-2">{quote ? `1 ${payO?.symbol} = ${fmtAmt(quote.rate)} ${getO?.symbol}` : '—'}</span>
+            <div className="flex justify-between gap-3 text-sm">
+              <span className="text-ink-2">Rate</span>
+              <span className="tnum text-ink">{quote ? `1 ${payO?.symbol} = ${fmtAmt(quote.rate)} ${getO?.symbol}` : '—'}</span>
             </div>
-            <div className="flex justify-between gap-3 text-xs">
-              <span className="text-muted">Price impact · max slippage</span>
-              <span className={`tnum ${quote && quote.impact > 3 ? 'text-bad' : 'text-ink-2'}`}>{quote ? `${quote.impact.toFixed(2)}%` : '—'} · 1%</span>
+            <div className="flex justify-between gap-3 text-sm">
+              <span className="text-ink-2">Price impact · max slippage</span>
+              <span className={`tnum ${quote && quote.impact > 3 ? 'text-bad' : 'text-ink'}`}>{quote ? `${quote.impact.toFixed(2)}%` : '—'} · 1%</span>
             </div>
           </div>
 
@@ -322,7 +322,7 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
             {publicKey ? (
               <button
                 disabled={!quote || busy || tooMuch || !pool} onClick={() => void submit()}
-                className="h-11 w-full rounded-md bg-accent hover:bg-accent-hover text-sm font-medium text-accent-ink disabled:cursor-not-allowed disabled:opacity-40"
+                className="h-[52px] w-full bg-accent text-base font-semibold text-accent-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {cta}
               </button>
@@ -336,8 +336,8 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
             </div>
           )}
           {pool && !fixedMint && (
-            <p className="mt-3 text-xs text-muted">
-              <Link href={`/check/${pool.mint}`} className="hover:text-ink">
+            <p className="mt-3 text-sm text-ink-2">
+              <Link href={`/check/${pool.mint}`} className="font-medium text-accent hover:text-ink">
                 Fairway Check for {byMint.get(pool.mint)?.symbol} →
               </Link>
             </p>

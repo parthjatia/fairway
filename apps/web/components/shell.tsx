@@ -105,7 +105,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <HawkMark />
             <span className="font-serif text-[26px] leading-none tracking-[-0.01em] text-ink">Fairway</span>
           </Link>
-          <nav className="mr-auto hidden items-stretch font-mono text-xs uppercase tracking-[0.08em] md:flex" aria-label="Main">
+          <nav className="mr-auto hidden items-stretch font-mono text-[13px] font-bold uppercase tracking-[0.08em] md:flex" aria-label="Main">
             {LINKS.map((l) => (
               <Link
                 key={l.href}
@@ -113,7 +113,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 aria-current={active(l.href) ? 'page' : undefined}
                 className={`flex items-center gap-2 px-3.5 no-underline ${active(l.href) ? 'text-ink shadow-[inset_0_-2px_0_var(--accent)]' : 'text-ink-2 hover:text-ink'}`}
               >
-                <span className="text-ink-2">{l.n}</span>
+                <span className="font-normal text-ink-2">{l.n}</span>
                 {l.label}
               </Link>
             ))}
@@ -133,10 +133,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         {menu && (
-          <nav className="border-t border-line px-4 py-2 font-mono text-xs uppercase tracking-[0.08em] md:hidden" aria-label="Main">
+          <nav className="border-t border-line px-4 py-2 font-mono text-[13px] font-bold uppercase tracking-[0.08em] md:hidden" aria-label="Main">
             {LINKS.map((l) => (
               <Link key={l.href} href={l.href} className={`flex gap-2 px-3 py-2.5 no-underline hover:bg-surface-2 ${active(l.href) ? 'text-ink' : 'text-ink-2'}`}>
-                <span className="text-ink-2">{l.n}</span>
+                <span className="font-normal text-ink-2">{l.n}</span>
                 {l.label}
               </Link>
             ))}

@@ -12,6 +12,7 @@ const mono = localFont({
   src: [
     { path: './fonts/ibm-plex-mono-400-latin.woff2', weight: '400' },
     { path: './fonts/ibm-plex-mono-500-latin.woff2', weight: '500' },
+    { path: './fonts/ibm-plex-mono-700-latin.woff2', weight: '700' },
   ],
   variable: '--font-plex-mono',
   display: 'swap',
