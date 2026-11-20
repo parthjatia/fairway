@@ -54,21 +54,21 @@ export function TwoWallets({ amount, sellBase }: Props) {
             {cols.map((c) => (
               <div key={c.name} className="rounded-xl border border-line bg-surface-2 p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-semibold text-ink">{c.name}</span>
-                  {c.data ? <TierBadge tier={c.data.tier} /> : <span className="text-[12px] text-muted">{c.loading ? 'loading…' : '—'}</span>}
+                  <span className="text-sm font-semibold text-ink">{c.name}</span>
+                  {c.data ? <TierBadge tier={c.data.tier} /> : <span className="text-xs text-muted">{c.loading ? 'loading…' : '—'}</span>}
                 </div>
                 {c.data && <div className="mt-1"><ScoreSourceBadge source={c.data.scoreSource} /></div>}
-                <div className="mt-3 text-[12px] text-muted">Fee on this trade</div>
+                <div className="mt-3 text-xs text-muted">Fee on this trade</div>
                 <div className="text-3xl font-semibold tracking-tight text-ink tnum">{usd(c.q!.feeUsd, 2)}</div>
-                <div className="mt-1 text-[12px] text-ink-2 tnum">{c.q!.feeBps} bps of {usd(tradeUsd, 0)}</div>
-                <div className="mt-3 text-[12px] text-muted">You receive</div>
-                <div className="text-[15px] font-semibold text-ink tnum">
+                <div className="mt-1 text-xs text-ink-2 tnum">{c.q!.feeBps} bps of {usd(tradeUsd, 0)}</div>
+                <div className="mt-3 text-xs text-muted">You receive</div>
+                <div className="text-base font-semibold text-ink tnum">
                   {num(c.q!.out, buyDp)} {buySym}
                 </div>
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+          <p className="mt-3 text-sm leading-relaxed text-ink-2">
             The identical swap costs {a.data?.tier === 'RETAIL' ? 'Rita' : 'the first wallet'} <b className="text-ink tnum">{usd(qa.feeUsd, 2)}</b> and Arb Bot 7 <b className="text-ink tnum">{usd(qb.feeUsd, 2)}</b>:{' '}
             {qb.feeUsd > qa.feeUsd ? (
               <>

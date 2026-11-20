@@ -18,11 +18,11 @@ export function LaunchList({ demo }: { demo: LaunchSpec[] }) {
           <li key={l.id}>
             <Link href={`/launch/${l.id}`} className="flex items-center justify-between gap-3 py-3 hover:opacity-80">
               <div>
-                <div className="text-[15px] font-semibold text-ink">
+                <div className="text-base font-semibold text-ink">
                   {l.name} <span className="text-muted">${l.symbol}</span>
-                  {l.createdBy === 'you' && <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">yours</span>}
+                  {l.createdBy === 'you' && <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent">yours</span>}
                 </div>
-                <div className="text-[12px] text-ink-2">
+                <div className="text-xs text-ink-2">
                   {usd(l.liquidityUsd)} liquidity · {l.windowMin}-min window
                 </div>
               </div>

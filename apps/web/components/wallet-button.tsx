@@ -5,7 +5,7 @@ import { short } from '@/lib/format';
 /** Live-mode wallet connect (Wallet Standard wallets detected by wallet-adapter-react). */
 export function WalletButton() {
   const { wallets, wallet, publicKey, connecting, select, connect, disconnect } = useWallet();
-  const cls = 'rounded-full border border-line px-3 py-1.5 text-[13px] hover:bg-surface-2';
+  const cls = 'rounded-full border border-line px-3 py-1.5 text-sm hover:bg-surface-2';
   if (publicKey) {
     return (
       <button className={cls} onClick={() => void disconnect()} title="Disconnect">
@@ -16,7 +16,7 @@ export function WalletButton() {
   const installed = wallets.filter((w) => w.readyState === 'Installed' || w.readyState === 'Loadable');
   if (!installed.length) {
     return (
-      <span className="rounded-full border border-line px-3 py-1.5 text-[13px] text-muted" title="Install Phantom, Solflare or Backpack">
+      <span className="rounded-full border border-line px-3 py-1.5 text-sm text-muted" title="Install Phantom, Solflare or Backpack">
         No wallet detected
       </span>
     );

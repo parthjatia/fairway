@@ -38,7 +38,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
   const fw = by('fairway').metrics;
   const dc = by('decay').metrics;
   const key = (id: string) => data.keyChart.find((k) => k.id === id)!;
-  const chip = (on: boolean) => `rounded-full border px-3 py-1.5 text-[13px] font-semibold ${on ? 'border-accent bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`;
+  const chip = (on: boolean) => `rounded-full border px-3 py-1.5 text-sm font-semibold ${on ? 'border-accent bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`;
   const keyRows = data.keyChart.map((k) => ({ name: k.short, Humans: k.humanFeeBps, Snipers: k.sniperFeeBps, 'Known snipers': k.knownSniperFeeBps }));
   const metricRows = data.regimes.map((r) => ({ id: r.id, name: r.short, value: r.metrics[metric].mean, p10: r.metrics[metric].p10, p90: r.metrics[metric].p90 }));
   return (
@@ -50,7 +50,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
         <Stat label="Creator fees / launch" value={usd(fw.creatorFeesUsd.mean)} tone="bad" hint={`vs ${usd(dc.creatorFeesUsd.mean)} time-decay: humans pay less, so creators earn less in fees`} />
       </div>
 
-      <p className="text-[14px] leading-relaxed text-ink-2">
+      <p className="text-sm leading-relaxed text-ink-2">
         <strong className="text-ink">Humans pay {data.paired.humanFeeCutPct.toFixed(0)}% less than under a time-decay-only fee, and the sniper share of early supply falls from {pct(dc.sniperShareOfWindowSupply.mean)} to{' '}
         {pct(fw.sniperShareOfWindowSupply.mean)}.</strong> Snipers pay about the same in total ({data.paired.sniperFeeRatio.toFixed(2)}×). That is deterrence, not a failure: a known sniper faces a 10% fee at block 0, so most
         of them skip the launch, and the supply they would have taken goes to humans.
@@ -75,7 +75,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+        <p className="mt-3 text-sm leading-relaxed text-ink-2">
           Under time-decay-only, everyone pays the same early tax, so humans pay about as much as snipers. Fairway charges by tier: humans with a clean history pay the RETAIL curve (30→5 bps) from block 0, and known snipers pay
           the TOXIC curve (1000→80). Most known snipers then skip the launch or wait, so pooled over all snipers they pay about the same as under time-decay ({data.paired.sniperFeeRatio.toFixed(2)}×). Per dollar traded,
           the snipers Fairway knows pay {data.paired.knownSniperFeeRatio.toFixed(2)}×. The <strong className="text-ink">rotation</strong> bars are the worst case: every sniper uses a fresh wallet. They then pay exactly the
@@ -113,7 +113,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        <p className="mt-2 text-[13px] text-ink-2">
+        <p className="mt-2 text-sm text-ink-2">
           {M.note} {M.better === 'low' ? 'Lower is better for buyers.' : 'Higher is better for the receiver.'}
         </p>
       </Card>
@@ -123,13 +123,13 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
         subtitle={`The ${data.bundleDetection.launchesWithBundle} launches with a bundle: one entity funding 3–8 fresh wallets shortly before the launch. Assumption: ${pct(data.bundleDetection.detectShare)} of bundles come from a funder already known as a bundler, detected in time to write TOXIC scores before the launch.`}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-left text-[13px]">
-            <thead className="text-[11px] uppercase tracking-wide text-muted">
+          <table className="w-full min-w-[480px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-muted">
               <tr>
-                <th className="py-2 pr-3 font-medium">Regime</th>
-                <th className="py-2 pr-3 text-right font-medium">Bundle share of early supply</th>
-                <th className="py-2 pr-3 text-right font-medium">Snipers + bundles share</th>
-                <th className="py-2 pr-3 text-right font-medium">Bundle wallets&apos; fee</th>
+                <th className="py-2 pr-3 font-semibold">Regime</th>
+                <th className="py-2 pr-3 text-right font-semibold">Bundle share of early supply</th>
+                <th className="py-2 pr-3 text-right font-semibold">Snipers + bundles share</th>
+                <th className="py-2 pr-3 text-right font-semibold">Bundle wallets&apos; fee</th>
               </tr>
             </thead>
             <tbody>
@@ -144,7 +144,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+        <p className="mt-3 text-sm leading-relaxed text-ink-2">
           Honest read: without detection, Fairway gives bundles <em>more</em> of the early supply than time-decay ({pct(data.bundleDetection.bundlerShare.fairway)} vs {pct(data.bundleDetection.bundlerShare.decay)}),
           because the known snipers it keeps out leave room for fresh wallets. Flagged bundle wallets always pay at least STANDARD. When the funder is a known bundler they pay the TOXIC curve, and most of them then skip the
           launch, like known snipers. The bundle fee barely moves because the ones that still buy are the undetected ones. Humans pay the same ({b0(by('fairwayBundle').metrics.humanFeeBps.mean)}). A bundler who funds through an
@@ -154,13 +154,13 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
 
       <Card title="Creator revenue: the share of the sniper premium" subtitle={`Per launch, Fairway regime, mean of ${data.launches} launches. Default: ${data.creatorShare.defaultBps / 100}% of the TOXIC premium goes to the creator, 15% to the protocol, the rest stays with LPs.`}>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-left text-[13px]">
-            <thead className="text-[11px] uppercase tracking-wide text-muted">
+          <table className="w-full min-w-[480px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-muted">
               <tr>
-                <th className="py-2 pr-3 font-medium">Creator share</th>
-                <th className="py-2 pr-3 text-right font-medium">Paid to creator directly</th>
-                <th className="py-2 pr-3 text-right font-medium">LP fees</th>
-                <th className="py-2 pr-3 text-right font-medium">Creator total if sole LP</th>
+                <th className="py-2 pr-3 font-semibold">Creator share</th>
+                <th className="py-2 pr-3 text-right font-semibold">Paid to creator directly</th>
+                <th className="py-2 pr-3 text-right font-semibold">LP fees</th>
+                <th className="py-2 pr-3 text-right font-semibold">Creator total if sole LP</th>
               </tr>
             </thead>
             <tbody>
@@ -177,7 +177,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+        <p className="mt-3 text-sm leading-relaxed text-ink-2">
           Honest read: the premium is only {usd(data.creatorShare.premiumUsd, 2)} per launch, because deterrence works. Known snipers mostly skip the launch, so there is little premium to share. The share moves money from LPs to the
           creator; it does not create any. It matters when the creator&apos;s liquidity is locked or burned (common for launches) or other LPs join later. A creator who is the only LP earns{' '}
           {usd(data.creatorShare.rows[0]!.creatorIfSoleLpUsd)} either way, versus {usd(data.creatorShare.decayCreatorIfSoleLpUsd)} under time-decay-only, where humans pay most of the fees. Fairway trades fee income for a fairer
@@ -203,7 +203,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
       </Card>
 
       <Card title="Assumptions (synthetic)" subtitle="What the simulation models, and what it does not.">
-        <ul className="list-disc space-y-1.5 pl-5 text-[13px] leading-relaxed text-ink-2">
+        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-2">
           <li>{data.launches} launches, 15 minutes each. Snipers arrive at block 0, and {pct(data.knownShare)} of them are already known TOXIC (scored from Pump.fun history). A sniper buys only when the fee is below its expected edge (150–700 bps), and waits at most 30–300 slots.</li>
           <li>
             Bundlers: one entity funding 3–8 fresh wallets (in 50% of launches). Fresh wallets pay STANDARD, so plain Fairway charges bundlers the same curve as time-decay. &quot;Fairway + bundle detection&quot; adds the Streams funding check:

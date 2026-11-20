@@ -3,7 +3,7 @@
 // under Fairway (tier × time) and under time-decay-only, so every number on the page is reproducible. Simulated data.
 import { base58Encode, Rng } from '@fairway/fixtures';
 import { DEFAULT_LAUNCH_CONFIG, launchFee, makeLaunchScenario, runLaunch, type LaunchAgent, type LaunchRun, type LaunchSimConfig, type TierIdx } from '@fairway/sim/launch';
-import type { Tier } from '@fairway/scoring';
+import { buildTokenCheck, DEFAULT_CHECK_CONFIG, type TokenCheck, type Tier } from '@fairway/scoring';
 
 export type LaunchSpec = {
   id: string;
@@ -193,4 +193,28 @@ export const decayFeeNow = (v: LaunchSimView, slot: number) => launchFee(v.cfg, 
 
 export function newLaunchId(): string {
   return `my-${Date.now().toString(36)}`;
+}
+
+/**
+ * The Fairway Check report (same engine as /check) for this simulated launch, using the trades up to `slot`.
+ * Sniper = a wallet the run resolves to TOXIC; "new wallet" = no score source (a fresh wallet). The sim trades in USD, so
+ * `earlyBuyVolumeSol` of this report holds USD (the launch page does not show it).
+ */
+export function launchCheck(v: LaunchSimView, run: LaunchRun, slot: number): TokenCheck {
+  const tier = new Map<string, TierIdx>();
+  const bundle = new Set<string>();
+  const history = new Set<string>();
+  const trades = [];
+  for (const t of run.trades) {
+    if (t.slot > slot) break;
+    const w = v.address[t.wallet] ?? t.wallet;
+    tier.set(w, t.tier);
+    if (t.agent === 'bundler' && t.tier === 2) bundle.add(w);
+    if ((v.source[t.wallet] ?? 'none') !== 'none') history.add(w);
+    trades.push({ wallet: w, slot: t.slot, kind: t.side, tokens: t.tokens, sol: t.usd });
+  }
+  return buildTokenCheck(
+    { mint: v.spec.id, launchSlot: 0, trades, tierOf: (w) => (tier.get(w) === 2 ? 'TOXIC' : 'STANDARD'), bundleOf: (w) => bundle.has(w), hadHistory: (w) => history.has(w) },
+    DEFAULT_CHECK_CONFIG,
+  );
 }

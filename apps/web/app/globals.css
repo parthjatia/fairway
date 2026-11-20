@@ -3,8 +3,29 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 @theme {
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  /* type scale: 12 / 14 / 16 / 20 / 28 / 40 */
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 20px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 28px;
+  --text-2xl--line-height: 36px;
+  --text-3xl: 28px;
+  --text-3xl--line-height: 36px;
+  --text-4xl: 40px;
+  --text-4xl--line-height: 44px;
+  --text-5xl: 40px;
+  --text-5xl--line-height: 44px;
+  --text-6xl: 40px;
+  --text-6xl--line-height: 44px;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -18,60 +39,64 @@
   --color-standard: var(--standard);
   --color-toxic: var(--toxic);
   --color-good: var(--good);
+  --color-warn: var(--warn);
   --color-bad: var(--bad);
 }
 
+/*
+ * Design tokens. One accent plus neutrals. Status colours carry meaning only: green = Low risk / RETAIL,
+ * amber = Medium risk, red = High risk / TOXIC. Every text/background pair below is >= 4.5:1 (WCAG AA).
+ */
 :root {
   color-scheme: light;
-  --bg: #f6f5f1;
-  --surface: #fcfcfb;
-  --surface-2: #efeee9;
-  --line: rgba(11, 11, 11, 0.1);
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
-  --muted: #7a7873;
-  --accent: #2a78d6;
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f0f1f3;
+  --line: rgba(10, 12, 16, 0.1);
+  --ink: #0b0c0e;
+  --ink-2: #464b54;
+  --muted: #636872;
+  --accent: #2457c5;
   --accent-ink: #ffffff;
-  --retail: #1baf7a;
-  --standard: #2a78d6;
-  --toxic: #eb6834;
-  --good: #006300;
-  --bad: #c23434;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  /* regime series (validated categorical order) */
-  --s-fairway: #2a78d6;
-  --s-flat30: #eb6834;
-  --s-rotation: #1baf7a;
-  --s-flat5: #eda100;
-  --s-flat80: #e87ba4;
+  --good: #14733f;
+  --warn: #8a5600;
+  --bad: #c0302f;
+  --retail: var(--good);
+  --standard: var(--ink-2);
+  --toxic: var(--bad);
+  --grid: #e4e5e8;
+  --axis: #c9cbd1;
+  /* chart series (categorical, data only) */
+  --s-fairway: #2457c5;
+  --s-flat30: #d9622b;
+  --s-rotation: #1c8f5f;
+  --s-flat5: #c48a00;
+  --s-flat80: #cf4f84;
   --s-bundle: #7a5bd1;
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0d0d0d;
-  --surface: #1a1a19;
-  --surface-2: #232321;
-  --line: rgba(255, 255, 255, 0.1);
-  --ink: #f0efec;
-  --ink-2: #c3c2b7;
-  --muted: #8f8d87;
-  --accent: #3987e5;
-  --accent-ink: #ffffff;
-  --retail: #199e70;
-  --standard: #3987e5;
-  --toxic: #d95926;
-  --good: #0ca30c;
-  --bad: #e66767;
-  --grid: #2c2c2a;
-  --axis: #383835;
-  --s-fairway: #3987e5;
-  --s-flat30: #d95926;
-  --s-rotation: #199e70;
-  --s-flat5: #c98500;
-  --s-flat80: #d55181;
-  --s-bundle: #9b80ee;
+  --bg: #0b0c0e;
+  --surface: #111316;
+  --surface-2: #181a1f;
+  --line: rgba(255, 255, 255, 0.09);
+  --ink: #ecedee;
+  --ink-2: #a9adb4;
+  --muted: #868b93;
+  --accent: #6f9cf0;
+  --accent-ink: #0b0c0e;
+  --good: #4cc38a;
+  --warn: #e3a93f;
+  --bad: #f07575;
+  --grid: #24262b;
+  --axis: #33363c;
+  --s-fairway: #6f9cf0;
+  --s-flat30: #e0784a;
+  --s-rotation: #4cc38a;
+  --s-flat5: #d9a21f;
+  --s-flat80: #e072a3;
+  --s-bundle: #a28df0;
 }
 
 html,
@@ -82,7 +107,41 @@ body {
 
 body {
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* visible keyboard focus everywhere (in the base layer, so utilities such as focus-visible:outline-none can override it) */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+a,
+button {
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.skeleton {
+  background: var(--surface-2);
+  border-radius: 8px;
+  animation: fw-pulse 1.4s ease-in-out infinite;
+}
+@keyframes fw-pulse {
+  50% {
+    opacity: 0.55;
+  }
 }
 
 .tnum {

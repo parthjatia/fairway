@@ -81,21 +81,21 @@ export function SwapPanel() {
           <div className="mb-3 flex items-center justify-between">
             <span className="flex items-center gap-2 text-sm font-semibold text-ink">
               Swap
-              <span role="tablist" aria-label="Pair" className="flex rounded-full border border-line bg-surface-2 p-0.5 text-[12px] font-medium">
+              <span role="tablist" aria-label="Pair" className="flex rounded-full border border-line bg-surface-2 p-0.5 text-xs font-semibold">
                 {pairs.map((p) => (
                   <button
                     key={p.key}
                     role="tab"
                     aria-selected={p.key === pair.key}
                     onClick={() => { setPairKey(p.key); setSellBase(false); setAmount(p.key === 'bonk' ? '100' : '250'); }}
-                    className={`rounded-full px-2.5 py-1 ${p.key === pair.key ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink'}`}
+                    className={`rounded-full px-2.5 py-1 ${p.key === pair.key ? 'bg-surface text-ink' : 'text-ink-2 hover:text-ink'}`}
                   >
                     {p.label}
                   </button>
                 ))}
               </span>
             </span>
-            <span className="text-[12px] text-muted tnum">1 {baseSym} = {usd(price, pair.key === 'bonk' ? 8 : 2)}</span>
+            <span className="text-xs text-muted tnum">1 {baseSym} = {usd(price, pair.key === 'bonk' ? 8 : 2)}</span>
           </div>
           <TokenBox label="You pay" token={sellToken}>
             <input
@@ -122,7 +122,7 @@ export function SwapPanel() {
             <div className="text-3xl font-semibold tracking-tight text-ink tnum">{q.res ? num(q.res.out, dpOf(buyToken)) : '—'}</div>
           </TokenBox>
 
-          <div className="mt-4 space-y-2 rounded-xl bg-surface-2 p-3 text-[13px]">
+          <div className="mt-4 space-y-2 rounded-xl bg-surface-2 p-3 text-sm">
             <Row k="Your tier">{loading ? <span className="text-muted">loading…</span> : <TierBadge tier={tier} />}</Row>
             <Row k="Your fee">
               <span className="font-semibold text-ink tnum">{feeBps} bps</span>
@@ -142,7 +142,7 @@ export function SwapPanel() {
               </>
             )}
           </div>
-          {q.error && <p className="mt-3 text-[13px] text-bad">{q.error}</p>}
+          {q.error && <p className="mt-3 text-sm text-bad">{q.error}</p>}
           <button
             disabled={!q.res}
             onClick={() => setConfirming(true)}
@@ -151,7 +151,7 @@ export function SwapPanel() {
             {q.res ? `Review swap as ${persona.name}` : 'Enter an amount'}
           </button>
           {done && (
-            <p role="status" className="mt-3 flex items-center gap-2 text-[13px] text-good">
+            <p role="status" className="mt-3 flex items-center gap-2 text-sm text-good">
               <Check size={14} /> {done}
             </p>
           )}
@@ -161,12 +161,12 @@ export function SwapPanel() {
           title="This session"
           subtitle="Simulated swaps update the mock pool reserves."
           action={
-            <button onClick={resetPool} className="inline-flex items-center gap-1 text-[12px] text-ink-2 hover:text-ink">
+            <button onClick={resetPool} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-ink-2 hover:text-ink">
               <RotateCcw size={12} /> Reset pool
             </button>
           }
         >
-          <div className="mb-3 grid grid-cols-2 gap-2 text-[12px] text-ink-2 tnum">
+          <div className="mb-3 grid grid-cols-2 gap-2 text-xs text-ink-2 tnum">
             <div>
               {baseSym} reserve <span className="font-semibold text-ink">{num(pool.base, pair.key === 'bonk' ? 0 : 2)}</span>
               {pool.base !== initialPool.base && <span className="ml-1 text-muted">({signed(pool.base - initialPool.base, pair.key === 'bonk' ? 0 : 2)})</span>}
@@ -178,11 +178,11 @@ export function SwapPanel() {
           {trades.length === 0 ? (
             <Empty>No swaps yet. Try the same trade as Retail Rita and as Arb Bot 7 and compare the fees.</Empty>
           ) : (
-            <ul className="divide-y divide-line text-[13px]">
+            <ul className="divide-y divide-line text-sm">
               {trades.map((t) => (
                 <li key={t.id} className="flex items-center justify-between py-2">
                   <span className="text-ink-2">
-                    <span className="font-medium text-ink">{t.persona}</span> {t.side === 'buy' ? 'bought' : 'sold'} {t.side === 'buy' ? `${num(t.amountOut, baseDp)} ${baseSym}` : `${num(t.amountIn, baseDp)} ${baseSym}`}
+                    <span className="font-semibold text-ink">{t.persona}</span> {t.side === 'buy' ? 'bought' : 'sold'} {t.side === 'buy' ? `${num(t.amountOut, baseDp)} ${baseSym}` : `${num(t.amountIn, baseDp)} ${baseSym}`}
                   </span>
                   <span className="flex items-center gap-2">
                     <TierBadge tier={t.tier as Tier} />
@@ -209,7 +209,7 @@ export function SwapPanel() {
           }
           action={
             wallet?.known ? (
-              <Link href={`/wallet/${persona.address}`} className="text-[13px] font-semibold text-accent hover:underline">
+              <Link href={`/wallet/${persona.address}`} className="text-sm font-semibold text-accent hover:underline">
                 Full score →
               </Link>
             ) : null
@@ -220,7 +220,7 @@ export function SwapPanel() {
           {wallet && (
             <>
               <div className="mb-2 flex flex-wrap items-center gap-2"><ScoreSourceBadge source={wallet.scoreSource} />{wallet.onchain.fairFlow && <FairFlowBadge minTrades={wallet.onchain.fairFlowMinTrades} />}</div>
-              <p className="text-[14px] leading-relaxed text-ink-2">{wallet.explanation}</p>
+              <p className="text-sm leading-relaxed text-ink-2">{wallet.explanation}</p>
               {wallet.known && wallet.score ? (
                 <>
                   <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -230,7 +230,7 @@ export function SwapPanel() {
                     <Mini k="History" v={`${wallet.score.historyDays.toFixed(1)} days`} />
                   </div>
                   <div className="mt-5">
-                    <div className="mb-1 flex items-center justify-between text-[12px] text-muted">
+                    <div className="mb-1 flex items-center justify-between text-xs text-muted">
                       <span>30 s markout of the last {mk.length} trades</span>
                       <span className="flex items-center gap-3">
                         <span className="flex items-center gap-1">
@@ -245,7 +245,7 @@ export function SwapPanel() {
                   </div>
                 </>
               ) : (
-                <div className="mt-4 flex gap-3 rounded-xl border border-line bg-surface-2 p-4 text-[13px] text-ink-2">
+                <div className="mt-4 flex gap-3 rounded-xl border border-line bg-surface-2 p-4 text-sm text-ink-2">
                   <Info size={16} className="mt-0.5 shrink-0 text-accent" />
                   <span>
                     No trading history on any watched venue. Fairway charges unknown wallets the STANDARD fee, never less. A bot that spins up a fresh wallet to escape its TOXIC
@@ -267,14 +267,14 @@ export function SwapPanel() {
 
       {confirming && q.res && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Confirm swap">
-          <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-5 shadow-2xl">
+          <div className="w-full max-w-sm rounded-xl border border-line bg-surface p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-[15px] font-semibold text-ink">Confirm swap</h3>
+              <h3 className="text-base font-semibold text-ink">Confirm swap</h3>
               <button onClick={() => setConfirming(false)} aria-label="Close" className="text-muted hover:text-ink">
                 <X size={16} />
               </button>
             </div>
-            <div className="space-y-2 text-[13px]">
+            <div className="space-y-2 text-sm">
               <Row k="Pay">
                 {amount} {sellToken}
               </Row>
@@ -291,7 +291,7 @@ export function SwapPanel() {
                 <span className="font-mono">{short(persona.address, 6)}</span>
               </Row>
             </div>
-            <p className="mt-3 text-[12px] leading-relaxed text-muted">
+            <p className="mt-3 text-xs leading-relaxed text-muted">
               Onchain this is <code>swap(amount_in, min_amount_out, a_to_b)</code>. The fee tier comes from the PDA <code>[&quot;score&quot;, signer]</code>. Mock mode: no wallet,
               simulated execution.
             </p>
@@ -308,7 +308,7 @@ export function SwapPanel() {
 function TokenBox({ label, token, children }: { label: string; token: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2 p-4">
-      <div className="mb-1 text-[12px] text-muted">{label}</div>
+      <div className="mb-1 text-xs text-muted">{label}</div>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">{children}</div>
         <span className="rounded-full border border-line bg-surface px-3 py-1 text-sm font-semibold text-ink">{token}</span>
@@ -326,8 +326,8 @@ const Row = ({ k, children }: { k: string; children: React.ReactNode }) => (
 
 const Mini = ({ k, v }: { k: string; v: string }) => (
   <div className="rounded-xl bg-surface-2 px-3 py-2">
-    <div className="text-[11px] text-muted">{k}</div>
-    <div className="text-[15px] font-semibold text-ink tnum">{v}</div>
+    <div className="text-xs text-muted">{k}</div>
+    <div className="text-base font-semibold text-ink tnum">{v}</div>
   </div>
 );
 
@@ -347,13 +347,13 @@ function TierCompare({ amount, sellBase, baseSym, baseDec, baseDp, pool, current
   });
   const std = rows[1]!.out;
   return (
-    <table className="w-full text-[13px]">
+    <table className="w-full text-sm">
       <thead>
-        <tr className="text-left text-[12px] text-muted">
-          <th className="pb-2 font-medium">Tier</th>
-          <th className="pb-2 font-medium">Fee</th>
-          <th className="pb-2 text-right font-medium">You receive</th>
-          <th className="pb-2 text-right font-medium">vs STANDARD</th>
+        <tr className="text-left text-xs text-muted">
+          <th className="pb-2 font-semibold">Tier</th>
+          <th className="pb-2 font-semibold">Fee</th>
+          <th className="pb-2 text-right font-semibold">You receive</th>
+          <th className="pb-2 text-right font-semibold">vs STANDARD</th>
         </tr>
       </thead>
       <tbody className="tnum">

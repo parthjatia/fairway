@@ -21,7 +21,7 @@ export function LiveCreate(p: { supply: number; poolPct: number; liquidityQuote:
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  if (!QUOTE_MINT) return <p className="text-[13px] text-bad">Set NEXT_PUBLIC_QUOTE_MINT (pnpm seed:local writes it) to create launches in live mode.</p>;
+  if (!QUOTE_MINT) return <p className="text-sm text-bad">Set NEXT_PUBLIC_QUOTE_MINT (pnpm seed:local writes it) to create launches in live mode.</p>;
   if (!publicKey) return <WalletButton />;
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -43,7 +43,7 @@ export function LiveCreate(p: { supply: number; poolPct: number; liquidityQuote:
       >
         <Rocket size={15} /> {busy ? 'Creating (3 transactions)…' : 'Create launch onchain'}
       </button>
-      {err && <span className="text-[13px] text-bad" role="alert">{err}</span>}
+      {err && <span className="text-sm text-bad" role="alert">{err}</span>}
     </div>
   );
 }
@@ -68,7 +68,7 @@ export function LiveLaunchView({ mint }: { mint: string }) {
     return () => clearInterval(t);
   }, [refresh]);
   if (err) return <Empty>Could not load the launch: {err}</Empty>;
-  if (!data) return <div className="h-64 animate-pulse rounded-2xl border border-line bg-surface" aria-busy />;
+  if (!data) return <div className="h-64 animate-pulse rounded-xl border border-line bg-surface" aria-busy />;
   if (!data.pool) return <Empty>No Fairway pool for mint {short(mint)} on this cluster. <Link href="/launch" className="text-accent">Create a launch</Link>.</Empty>;
   const l = data.pool.launch;
   const fee = (t: number) => launchFeeBps(l.curve, t, data.slot, l.launchSlot, l.windowSlots);
@@ -76,9 +76,9 @@ export function LiveLaunchView({ mint }: { mint: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="mb-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-accent">Launch · live</div>
+        <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-accent">Launch · live</div>
         <h1 className="font-mono text-2xl font-semibold text-ink">{short(mint, 6)}</h1>
-        <p className="mt-2 text-[14px] text-ink-2">
+        <p className="mt-2 text-sm text-ink-2">
           {l.windowSlots === 0n ? 'Not a launch pool (normal tier fees).' : `Opened at slot ${l.launchSlot}, window ${l.windowSlots} slots. Now slot ${data.slot} (${elapsed >= 0n ? `${elapsed} slots in` : 'not open yet'}).`} TWAP scoring:{' '}
           {l.twapScoring ? 'on' : 'off'}. Creator share of the sniper premium: {data.pool.creatorFees.shareBps / 100}% (owed now: {String(data.pool.creatorFees.owedQuote)} quote + {String(data.pool.creatorFees.owedBase)} token units, raw; claim with{' '}
           <span className="font-mono">claimCreatorFeesIx</span>).
@@ -93,13 +93,13 @@ export function LiveLaunchView({ mint }: { mint: string }) {
         {data.swaps.length === 0 ? (
           <Empty>No swaps yet.</Empty>
         ) : (
-          <table className="w-full text-left text-[13px]">
-            <thead className="text-[11px] uppercase tracking-wide text-muted">
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-muted">
               <tr>
-                <th className="py-2 pr-3 font-medium">Trader</th>
-                <th className="py-2 pr-3 font-medium">Side</th>
-                <th className="py-2 pr-3 font-medium">Tier</th>
-                <th className="py-2 pr-3 text-right font-medium">Fee</th>
+                <th className="py-2 pr-3 font-semibold">Trader</th>
+                <th className="py-2 pr-3 font-semibold">Side</th>
+                <th className="py-2 pr-3 font-semibold">Tier</th>
+                <th className="py-2 pr-3 text-right font-semibold">Fee</th>
               </tr>
             </thead>
             <tbody>

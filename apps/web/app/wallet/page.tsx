@@ -20,9 +20,9 @@ export default function WalletIndex() {
             {ex.map((w) => (
               <Link key={w.address} href={`/wallet/${w.address}`} className="flex flex-wrap items-center gap-3 py-3 hover:bg-surface-2 sm:px-2">
                 <TierBadge tier={w.tier} />
-                <span className="font-mono text-[13px] text-ink">{short(w.address, 6)}</span>
-                {w.label && <span className="text-[13px] text-ink-2">{w.label}</span>}
-                <span className="ml-auto text-[12px] text-muted tnum">
+                <span className="font-mono text-sm text-ink">{short(w.address, 6)}</span>
+                {w.label && <span className="text-sm text-ink-2">{w.label}</span>}
+                <span className="ml-auto text-xs text-muted tnum">
                   {w.trades} trades · score {signed(w.scoreBps)} bps
                 </span>
               </Link>

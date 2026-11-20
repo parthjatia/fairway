@@ -29,7 +29,7 @@ function valid(f: Form, step: number): string | null {
   return null;
 }
 
-const field = 'mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-[15px] text-ink outline-none focus:border-accent';
+const field = 'mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-base text-ink outline-none focus:border-accent';
 
 export function LaunchWizard() {
   const router = useRouter();
@@ -64,7 +64,7 @@ export function LaunchWizard() {
       <ol className="mb-6 flex flex-wrap gap-2" aria-label="Steps">
         {STEPS.map((s, i) => (
           <li key={s}>
-            <button onClick={() => i < step && setStep(i)} disabled={i > step} aria-current={i === step ? 'step' : undefined} className={`rounded-full border px-3 py-1.5 text-[12px] font-semibold ${i === step ? 'border-accent bg-surface-2 text-ink' : i < step ? 'border-line text-ink-2 hover:text-ink' : 'border-line text-muted'}`}>
+            <button onClick={() => i < step && setStep(i)} disabled={i > step} aria-current={i === step ? 'step' : undefined} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${i === step ? 'border-accent bg-surface-2 text-ink' : i < step ? 'border-line text-ink-2 hover:text-ink' : 'border-line text-muted'}`}>
               {i + 1}. {s}
             </button>
           </li>
@@ -73,16 +73,16 @@ export function LaunchWizard() {
 
       {step === 0 && (
         <div className="grid gap-4 sm:grid-cols-3">
-          <label className="text-[13px] font-medium text-ink sm:col-span-2">Name<input className={field} value={f.name} maxLength={32} onChange={(e) => set('name', e.target.value)} /></label>
-          <label className="text-[13px] font-medium text-ink">Symbol<input className={field} value={f.symbol} maxLength={10} onChange={(e) => set('symbol', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} /></label>
-          <label className="text-[13px] font-medium text-ink">Total supply (millions)<input type="number" className={field} value={f.supplyM} min={1} onChange={(e) => set('supplyM', Number(e.target.value))} /></label>
+          <label className="text-sm font-semibold text-ink sm:col-span-2">Name<input className={field} value={f.name} maxLength={32} onChange={(e) => set('name', e.target.value)} /></label>
+          <label className="text-sm font-semibold text-ink">Symbol<input className={field} value={f.symbol} maxLength={10} onChange={(e) => set('symbol', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} /></label>
+          <label className="text-sm font-semibold text-ink">Total supply (millions)<input type="number" className={field} value={f.supplyM} min={1} onChange={(e) => set('supplyM', Number(e.target.value))} /></label>
         </div>
       )}
       {step === 1 && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="text-[13px] font-medium text-ink">Share of supply in the pool (%)<input type="number" className={field} value={f.poolPct} min={10} max={100} onChange={(e) => set('poolPct', Number(e.target.value))} /></label>
-          <label className="text-[13px] font-medium text-ink">Starting liquidity (USDC)<input type="number" className={field} value={f.liquidityUsd} min={500} onChange={(e) => set('liquidityUsd', Number(e.target.value))} /></label>
-          <p className="text-[13px] text-ink-2 sm:col-span-2">
+          <label className="text-sm font-semibold text-ink">Share of supply in the pool (%)<input type="number" className={field} value={f.poolPct} min={10} max={100} onChange={(e) => set('poolPct', Number(e.target.value))} /></label>
+          <label className="text-sm font-semibold text-ink">Starting liquidity (USDC)<input type="number" className={field} value={f.liquidityUsd} min={500} onChange={(e) => set('liquidityUsd', Number(e.target.value))} /></label>
+          <p className="text-sm text-ink-2 sm:col-span-2">
             Listing price: <span className="font-semibold text-ink tnum">${listing.toPrecision(3)}</span> per token. You are the pool&apos;s creator and its first LP, so you earn the swap fees, including the high fees known snipers pay.
           </p>
         </div>
@@ -90,22 +90,22 @@ export function LaunchWizard() {
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-[13px] font-medium text-ink">Launch window (minutes)<input type="number" className={field} value={f.windowMin} min={1} max={60} onChange={(e) => set('windowMin', Number(e.target.value))} /></label>
-            <label className="block text-[13px] font-medium text-ink">
+            <label className="block text-sm font-semibold text-ink">Launch window (minutes)<input type="number" className={field} value={f.windowMin} min={1} max={60} onChange={(e) => set('windowMin', Number(e.target.value))} /></label>
+            <label className="block text-sm font-semibold text-ink">
               Your share of the sniper premium (%)
               <input type="number" className={field} value={f.creatorSharePct} min={0} max={MAX_CREATOR_SHARE_PCT} onChange={(e) => set('creatorSharePct', Number(e.target.value))} />
-              <span className="mt-1 block text-[12px] font-normal text-muted">Paid to you directly from what known snipers pay above the fresh-wallet fee, even if your liquidity is locked. Default {DEFAULT_CREATOR_SHARE_PCT}%; the protocol takes 15%; LPs keep the rest.</span>
+              <span className="mt-1 block text-xs font-normal text-muted">Paid to you directly from what known snipers pay above the fresh-wallet fee, even if your liquidity is locked. Default {DEFAULT_CREATOR_SHARE_PCT}%; the protocol takes 15%; LPs keep the rest.</span>
             </label>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] text-left text-[13px]">
-              <thead className="text-[11px] uppercase tracking-wide text-muted">
+            <table className="w-full min-w-[420px] text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="py-2 pr-3 font-medium">Tier</th>
-                  <th className="py-2 pr-3 text-right font-medium">Block 0</th>
-                  <th className="py-2 pr-3 text-right font-medium">Halfway</th>
-                  <th className="py-2 pr-3 text-right font-medium">Last slot</th>
-                  <th className="py-2 pr-3 text-right font-medium">After</th>
+                  <th className="py-2 pr-3 font-semibold">Tier</th>
+                  <th className="py-2 pr-3 text-right font-semibold">Block 0</th>
+                  <th className="py-2 pr-3 text-right font-semibold">Halfway</th>
+                  <th className="py-2 pr-3 text-right font-semibold">Last slot</th>
+                  <th className="py-2 pr-3 text-right font-semibold">After</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,13 +121,13 @@ export function LaunchWizard() {
               </tbody>
             </table>
           </div>
-          <p className="text-[13px] text-ink-2">
+          <p className="text-sm text-ink-2">
             The program&apos;s default curve. Fresh wallets pay the STANDARD row, so a sniper gains nothing by switching to a new wallet. Wallets with a clean history pay the RETAIL row from block 0.
           </p>
         </div>
       )}
       {step === 3 && (
-        <dl className="grid gap-x-6 gap-y-2 text-[14px] sm:grid-cols-2">
+        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           {[
             ['Token', `${f.name} ($${f.symbol})`],
             ['Supply', `${f.supplyM.toLocaleString('en-US')}M`],
@@ -145,7 +145,7 @@ export function LaunchWizard() {
         </dl>
       )}
 
-      {err && <p className="mt-4 text-[13px] text-bad" role="alert">{err}</p>}
+      {err && <p className="mt-4 text-sm text-bad" role="alert">{err}</p>}
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {step > 0 && (
           <button onClick={() => setStep((s) => s - 1)} className="inline-flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-ink hover:bg-surface-2">

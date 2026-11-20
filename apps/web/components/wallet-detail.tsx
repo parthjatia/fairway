@@ -73,7 +73,7 @@ export function WalletDetail({ address }: { address: string }) {
             </div>
             <Card title="Tier timeline" subtitle="The score and tier this wallet would have had after each trade.">
               <ScoreTimeline data={data.timeline.map((t) => ({ t: t.ts, score: t.scoreBps, max: t.maxScoreBps }))} toxic={cfg.toxicScoreBps} retail={cfg.retailScoreBps} />
-              <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-ink-2">
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-ink-2">
                 {data.timeline.length > 0 && <>Latest: <TierBadge tier={data.timeline.at(-1)!.tier} /></>}
               </div>
             </Card>
@@ -81,17 +81,17 @@ export function WalletDetail({ address }: { address: string }) {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {Object.entries(data.score.byHorizon).map(([h, v]) => (
                   <div key={h} className="rounded-xl border border-line p-3">
-                    <div className="text-[12px] text-muted">{h}s horizon</div>
+                    <div className="text-xs text-muted">{h}s horizon</div>
                     <div className="text-xl font-semibold text-ink tnum">{signed(v.scoreBps)} bps</div>
-                    <div className="text-[12px] text-ink-2">raw {signed(v.rawBps)} · {v.scoredTrades} trades</div>
+                    <div className="text-xs text-ink-2">raw {signed(v.rawBps)} · {v.scoredTrades} trades</div>
                   </div>
                 ))}
               </div>
             </Card>
             <Card title="Trades" subtitle={`${data.trades.length} total (${data.source === 'ingest' ? 'from ingest service' : 'computed in-process from fixtures'})`}>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-[13px] tnum">
-                  <thead className="text-[12px] uppercase tracking-wide text-muted">
+                <table className="w-full text-left text-sm tnum">
+                  <thead className="text-xs uppercase tracking-wide text-muted">
                     <tr>
                       <th className="py-2 pr-4">Time (UTC)</th><th className="pr-4">Side</th><th className="pr-4">Notional</th><th className="pr-4">Price</th><th className="pr-4">Fee</th><th>Markout {primary}s</th>
                     </tr>
@@ -114,7 +114,7 @@ export function WalletDetail({ address }: { address: string }) {
           </>
         )}
         <Card title="How this score is computed">
-          <ol className="list-decimal space-y-2 pl-5 text-[13px] leading-relaxed text-ink-2">
+          <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed text-ink-2">
             <li>For each trade, markout = side × (mid(t+h) − execPrice) / execPrice × 10⁴ bps, using the pre-fee price. We measure information, not cost.</li>
             <li>Wallet score = Σ(notional × markout) / (Σ notional + K), with K = {usd(cfg.priorNotional)}. The prior shrinks small samples toward zero, so one lucky trade proves nothing.</li>
             <li>TOXIC if score ≥ {cfg.toxicScoreBps} bps and ≥ {cfg.minTrades} trades. RETAIL if score ≤ {cfg.retailScoreBps} bps, ≥ {cfg.minTrades} trades and ≥ {cfg.retailMinHistoryDays} days of history. Otherwise STANDARD.</li>
@@ -144,7 +144,7 @@ function OnchainCard({ data }: { data: NonNullable<ReturnType<typeof useWalletVi
         <Stat label="Keeper (bootstrap) tier" value={<TierBadge tier={data.bootstrapTier} />} hint={o.verified ? 'overridden' : 'in force'} />
       </div>
       <div className="mt-4">
-        <div className="flex justify-between text-[12px] text-ink-2">
+        <div className="flex justify-between text-xs text-ink-2">
           <span>Settled notional {usd(o.notional)}</span>
           <span>
             {o.verified
@@ -160,8 +160,8 @@ function OnchainCard({ data }: { data: NonNullable<ReturnType<typeof useWalletVi
       </div>
       {o.perPool.length > 0 && (
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-left text-[13px] tnum">
-            <thead className="text-[12px] uppercase tracking-wide text-muted">
+          <table className="w-full text-left text-sm tnum">
+            <thead className="text-xs uppercase tracking-wide text-muted">
               <tr><th className="py-2 pr-4">Where the evidence comes from</th><th className="pr-4">Settled trades</th><th className="pr-4">Notional</th><th className="pr-4">Score</th><th>Tier on this pool alone</th></tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -171,14 +171,14 @@ function OnchainCard({ data }: { data: NonNullable<ReturnType<typeof useWalletVi
                   <td className="pr-4">{p.trades}</td>
                   <td className="pr-4">{usd(p.notional)}</td>
                   <td className="pr-4">{signed(p.scoreBps)} bps</td>
-                  <td><TierBadge tier={p.tier} />{p.tradesToToxic != null && <span className="ml-2 text-[12px] text-muted">TOXIC after {p.tradesToToxic} trades</span>}</td>
+                  <td><TierBadge tier={p.tier} />{p.tradesToToxic != null && <span className="ml-2 text-xs text-muted">TOXIC after {p.tradesToToxic} trades</span>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <p className="mt-3 text-[12px] leading-relaxed text-muted">
+      <p className="mt-3 text-xs leading-relaxed text-muted">
         Verified fair flow = onchain RETAIL tier (score ≤ 3 bps, ≥ 5 trades, ≥ 3 days) with at least {o.fairFlowMinTrades} settled trades. It is earned from measured behaviour, so a market-making or hedging bot with no informed edge can have it too.
       </p>
     </Card>

@@ -12,9 +12,10 @@ import type { TokenCheck, WalletCheck } from '@fairway/scoring';
 
 export type { CheckBuyer, RiskGrade, TokenCheck, WalletCheck } from '@fairway/scoring';
 export type CheckSource = 'live' | 'simulated';
-export type TokenCheckResponse = TokenCheck & { source: CheckSource };
+/** `name` is present for the simulated fixtures only: the Stream does not carry token metadata. */
+export type TokenCheckResponse = TokenCheck & { source: CheckSource; name?: string };
 export type WalletCheckResponse = WalletCheck & { source: CheckSource };
-export type TokenListResponse = { source: CheckSource; tokens: TokenCheck[] };
+export type TokenListResponse = { source: CheckSource; tokens: (TokenCheck & { name?: string })[] };
 
 export type CheckClientOptions = {
   /** Root of the check API. Default `/api/check` (the web app). The ingest service serves the same routes at `<ingest>/check`. */

@@ -1,4 +1,5 @@
 'use client';
+import { LaunchCheck } from './launch-check';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Pause, Play, RotateCcw, ShieldAlert } from 'lucide-react';
@@ -33,7 +34,7 @@ export function LaunchView({ id, demo }: { id: string; demo: LaunchSpec | null }
         No launch called <span className="font-mono">{id}</span> in this browser. Launches you create in mock mode are kept in this browser only. <Link href="/launch" className="text-accent">Create one</Link>.
       </Empty>
     );
-  return <div className="h-96 animate-pulse rounded-2xl border border-line bg-surface" aria-busy />;
+  return <div className="h-96 animate-pulse rounded-xl border border-line bg-surface" aria-busy />;
 }
 
 function LaunchSim({ spec }: { spec: LaunchSpec }) {
@@ -82,13 +83,13 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="mb-1 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-accent">
+          <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-accent">
             Launch {spec.createdBy === 'you' && <span className="rounded-full bg-accent/15 px-2 py-0.5 normal-case tracking-normal">created by you</span>}
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
             {spec.name} <span className="text-muted">${spec.symbol}</span>
           </h1>
-          <p className="mt-2 text-[14px] text-ink-2">
+          <p className="mt-2 text-sm text-ink-2">
             {(spec.supply / 1e6).toLocaleString('en-US')}M supply · {spec.poolPct}% in the pool · {usd(spec.liquidityUsd)} starting liquidity · listed at {fmtPrice(v.listingPrice)} · {spec.windowMin}-minute launch window
           </p>
         </div>
@@ -99,7 +100,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           <button onClick={() => { setSlot(0); setPlaying(true); }} className="rounded-xl border border-line p-2 text-ink-2 hover:text-ink" aria-label="Restart">
             <RotateCcw size={15} />
           </button>
-          <div className="flex rounded-xl border border-line p-0.5 text-[12px]">
+          <div className="flex rounded-xl border border-line p-0.5 text-xs">
             {SPEEDS.map((s) => (
               <button key={s} onClick={() => setSpeed(s)} aria-pressed={s === speed} className={`rounded-lg px-2.5 py-1.5 font-semibold ${s === speed ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
                 {s === 10 ? '1×' : s === 25 ? '2.5×' : '6×'}
@@ -111,10 +112,10 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
 
       <Card>
         <div className="flex flex-wrap items-center gap-4">
-          <div className="text-[13px] text-ink-2">
+          <div className="text-sm text-ink-2">
             <span className="font-mono text-lg font-semibold text-ink tnum">{clock(slot)}</span> since launch · slot {slot}
           </div>
-          <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${inWindow ? 'bg-toxic/15 text-toxic' : 'bg-retail/15 text-retail'}`}>{inWindow ? `Launch window: ${clock(W - slot)} left` : 'Window over: normal tier fees'}</span>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${inWindow ? 'bg-toxic/15 text-toxic' : 'bg-retail/15 text-retail'}`}>{inWindow ? `Launch window: ${clock(W - slot)} left` : 'Window over: normal tier fees'}</span>
           <input type="range" min={0} max={end} value={slot} onChange={(e) => { setSlot(Number(e.target.value)); setPlaying(false); }} className="min-w-[180px] flex-1" aria-label="Time since launch" />
         </div>
       </Card>
@@ -131,7 +132,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           <Meter label="Fairway (tier × time)" value={shareFw} tone="accent" />
           {v.hasBundle && <Meter label="Fairway + bundle detection" value={shareBd} tone="bundle" />}
           <Meter label="Same launch, time-decay only" value={shareDc} tone="muted" />
-          <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+          <p className="mt-3 text-sm leading-relaxed text-ink-2">
             {kept.length > 0 ? (
               <>
                 <ShieldAlert size={14} className="mr-1 inline text-retail" />
@@ -144,6 +145,8 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         </Card>
         <TwoWalletsLaunch buyUsd={buyUsd} setBuyUsd={setBuyUsd} fees={fees} decayFee={decayFee} />
       </div>
+
+      <LaunchCheck v={v} run={run} slot={slot} />
 
       <CreatorRevenue v={v} slot={slot} />
 
@@ -164,7 +167,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         title={`Buyers (${buyers.length})`}
         subtitle={`Humans have paid ${usd(humanFee, 2)} in fees so far.`}
         action={
-          <div className="flex rounded-xl border border-line p-0.5 text-[12px]" role="tablist" aria-label="Fee model">
+          <div className="flex rounded-xl border border-line p-0.5 text-xs" role="tablist" aria-label="Fee model">
             {(['fairway', 'bundle', 'decay'] as const).map((c) => (
               <button key={c} role="tab" aria-selected={c === compare} onClick={() => setCompare(c)} className={`rounded-lg px-2.5 py-1.5 font-semibold ${c === compare ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
                 {COMPARE_LABEL[c]}
@@ -177,15 +180,15 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           <Empty>No buys yet. Press play.</Empty>
         ) : (
           <div className="max-h-[420px] overflow-auto">
-            <table className="w-full text-left text-[13px]">
-              <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-muted">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="py-2 pr-3 font-medium">Time</th>
-                  <th className="py-2 pr-3 font-medium">Wallet</th>
-                  <th className="py-2 pr-3 font-medium">Tier</th>
-                  <th className="hidden py-2 pr-3 font-medium md:table-cell">Score</th>
-                  <th className="py-2 pr-3 text-right font-medium">Bought</th>
-                  <th className="py-2 pr-3 text-right font-medium">Fee paid</th>
+                  <th className="py-2 pr-3 font-semibold">Time</th>
+                  <th className="py-2 pr-3 font-semibold">Wallet</th>
+                  <th className="py-2 pr-3 font-semibold">Tier</th>
+                  <th className="hidden py-2 pr-3 font-semibold md:table-cell">Score</th>
+                  <th className="py-2 pr-3 text-right font-semibold">Bought</th>
+                  <th className="py-2 pr-3 text-right font-semibold">Fee paid</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,14 +196,14 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
                   <tr key={b.wallet} className="border-t border-line">
                     <td className="py-2 pr-3 font-mono text-ink-2 tnum">{clock(b.slot)}</td>
                     <td className="py-2 pr-3">
-                      <span className="font-mono text-ink">{short(b.wallet)}</span> <span className="text-[12px] text-muted">{b.label}{b.sold ? ' · sold' : ''}</span>
+                      <span className="font-mono text-ink">{short(b.wallet)}</span> <span className="text-xs text-muted">{b.label}{b.sold ? ' · sold' : ''}</span>
                       {b.bundle && <BundleBadge charged={b.tier} />}
                     </td>
                     <td className="py-2 pr-3"><TierBadge tier={b.tier} /></td>
                     <td className="hidden py-2 pr-3 md:table-cell"><ScoreSourceBadge source={srcBadge(b.source)} /></td>
                     <td className="py-2 pr-3 text-right tnum">{usd(b.usd)}</td>
                     <td className="py-2 pr-3 text-right tnum">
-                      {usd(b.feeUsd, 2)} <span className="text-[12px] text-muted">({b.feeBps.toFixed(0)} bps)</span>
+                      {usd(b.feeUsd, 2)} <span className="text-xs text-muted">({b.feeBps.toFixed(0)} bps)</span>
                     </td>
                   </tr>
                 ))}
@@ -209,12 +212,12 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           </div>
         )}
         {compare === 'bundle' && bundleKeptOut > 0 && (
-          <p className="mt-3 rounded-lg border border-[color:var(--s-bundle)] px-3 py-2 text-[13px] text-ink-2">
+          <p className="mt-3 rounded-lg border border-[color:var(--s-bundle)] px-3 py-2 text-sm text-ink-2">
             <span className="font-semibold text-[color:var(--s-bundle)]">{bundleKeptOut} bundle wallets kept out.</span> Their funder bundled earlier launches, so the keeper flagged them before the launch and they face
             the TOXIC curve. Under plain Fairway they buy as fresh STANDARD wallets.
           </p>
         )}
-        <p className="mt-3 text-[12px] leading-relaxed text-muted">
+        <p className="mt-3 text-xs leading-relaxed text-muted">
           Onchain verified: the tier comes from the wallet’s own settled Fairway trades (Pyth or pool TWAP markouts). Bootstrap score: from history the keeper scored with QuickNode Streams (Pump.fun, Raydium). No score yet: a fresh
           wallet, which pays STANDARD. Bundle: funded by the same source as other early buyers shortly before the launch (Streams funding check); it pays at least STANDARD, and TOXIC under
           bundle detection when the funder is a known bundler{v.hasBundle ? (v.bundleFunderKnown ? ' (this launch: known funder)' : ' (this launch: first-time funder, so STANDARD)') : ''}. Simulated wallets and trades.
@@ -237,13 +240,13 @@ function CreatorRevenue({ v, slot }: { v: LaunchSimView; slot: number }) {
       <div className="grid gap-3 md:grid-cols-3">
         {rows.map(([k, val, note]) => (
           <div key={k} className="rounded-xl border border-line px-3 py-2.5">
-            <div className="text-[12px] text-ink-2">{k}</div>
+            <div className="text-xs text-ink-2">{k}</div>
             <div className="mt-1 text-lg font-semibold text-ink tnum">{usd(val, 2)}</div>
-            <div className="mt-0.5 text-[11px] leading-snug text-muted">{note}</div>
+            <div className="mt-0.5 text-xs leading-snug text-muted">{note}</div>
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+      <p className="mt-3 text-sm leading-relaxed text-ink-2">
         The premium is what known snipers pay above the fresh-wallet fee: {usd(r.premium, 2)} here. It is small when Fairway works, because most known snipers skip the launch. The same launch under time-decay-only would have
         paid {usd(r.decayFees, 2)} in fees by now, mostly from humans. That is the trade-off: a fairer distribution and cheaper entry for your holders, in exchange for less fee income. Simulated data.
       </p>
@@ -258,7 +261,7 @@ function BundleBadge({ charged }: { charged: string }) {
   return (
     <span
       title={`Bundle: funded by the same source wallet as other early buyers within the lookback before the launch. Pays at least STANDARD; charged ${charged} here.`}
-      className="ml-1.5 inline-flex items-center rounded-full border border-[color:var(--s-bundle)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--s-bundle)]"
+      className="ml-1.5 inline-flex items-center rounded-full border border-[color:var(--s-bundle)] px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-[color:var(--s-bundle)]"
     >
       bundle
     </span>
@@ -268,7 +271,7 @@ function BundleBadge({ charged }: { charged: string }) {
 function Meter({ label, value, tone }: { label: string; value: number; tone: 'accent' | 'muted' | 'bundle' }) {
   return (
     <div className="mt-3">
-      <div className="mb-1 flex justify-between text-[13px]">
+      <div className="mb-1 flex justify-between text-sm">
         <span className="text-ink-2">{label}</span>
         <span className="font-semibold text-ink tnum">{(value * 100).toFixed(0)}%</span>
       </div>
@@ -287,7 +290,7 @@ function TwoWalletsLaunch({ buyUsd, setBuyUsd, fees, decayFee }: { buyUsd: numbe
   ];
   return (
     <Card title="Same buy, two wallets" subtitle="The identical buy, right now, from two different wallets.">
-      <label className="mb-3 flex items-center gap-2 text-[13px] text-ink-2">
+      <label className="mb-3 flex items-center gap-2 text-sm text-ink-2">
         Buy
         <input type="number" min={1} value={buyUsd} onChange={(e) => setBuyUsd(Math.max(0, Number(e.target.value)))} className="w-24 rounded-lg border border-line bg-surface-2 px-2 py-1 text-ink tnum" aria-label="Buy amount in USD" />
         USDC of the token
@@ -297,17 +300,17 @@ function TwoWalletsLaunch({ buyUsd, setBuyUsd, fees, decayFee }: { buyUsd: numbe
           <div key={r.who} className="flex items-center justify-between rounded-xl border border-line px-3 py-2.5">
             <div className="flex items-center gap-2">
               <TierBadge tier={r.tier} />
-              <span className="text-[14px] font-semibold text-ink">{r.who}</span>
-              <span className="text-[12px] text-muted">{r.note}</span>
+              <span className="text-sm font-semibold text-ink">{r.who}</span>
+              <span className="text-xs text-muted">{r.note}</span>
             </div>
             <div className="text-right">
-              <div className="text-[15px] font-semibold text-ink tnum">{usd((buyUsd * r.bps) / 10_000, 2)}</div>
-              <div className="text-[11px] text-muted">{r.bps} bps</div>
+              <div className="text-base font-semibold text-ink tnum">{usd((buyUsd * r.bps) / 10_000, 2)}</div>
+              <div className="text-xs text-muted">{r.bps} bps</div>
             </div>
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[12px] text-ink-2">
+      <p className="mt-3 text-xs text-ink-2">
         Under time-decay-only both pay {usd((buyUsd * decayFee) / 10_000, 2)} ({decayFee} bps). A fresh wallet pays {usd((buyUsd * fees.STANDARD) / 10_000, 2)} on Fairway, the same as time-decay.
       </p>
     </Card>

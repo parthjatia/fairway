@@ -66,6 +66,10 @@ describe('buildTokenCheck', () => {
     const r = buildTokenCheck({ ...base, trades: [buy('s1', 1000, 380), buy('h1', 1002, 620), sell('s1', 1300, 380)], tierOf });
     expect(r.verdict).toBe('High risk: snipers bought 38% of early supply and have already sold 100% of it.');
   });
+  it('no snipers: the verdict says so instead of "only 0%"', () => {
+    const r = buildTokenCheck({ ...base, trades: [buy('h1', 1000, 100), buy('h2', 1001, 100)], tierOf });
+    expect(r.verdict).toBe('Low risk: no known snipers bought in the first 60 seconds.');
+  });
   it('is deterministic', () => {
     const t = [buy('s1', 1000, 100), buy('h1', 1001, 100), buy('h2', 1001, 100)];
     expect(buildTokenCheck({ ...base, trades: t, tierOf })).toEqual(buildTokenCheck({ ...base, trades: [...t].reverse(), tierOf }));

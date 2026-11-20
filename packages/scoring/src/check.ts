@@ -167,8 +167,10 @@ export function buildTokenCheck(inp: CheckInput, cfg: CheckConfig = DEFAULT_CHEC
   const grade = gradeOf(sniperSharePct, snipersDumpedPct, cfg);
   const snipersSold = snipers.filter((b) => b.sold).length;
   const verdict =
-    grade === 'Low'
-      ? `Low risk: only ${fmt(sniperSharePct)} of early supply went to known snipers.`
+    snipers.length === 0
+      ? 'Low risk: no known snipers bought in the first 60 seconds.'
+      : grade === 'Low'
+        ? `Low risk: only ${fmt(sniperSharePct)} of early supply went to known snipers.`
       : `${grade} risk: snipers bought ${fmt(sniperSharePct)} of early supply and ${snipersDumpedPct >= 1 ? `have already sold ${fmt(snipersDumpedPct)} of it` : 'have not sold yet'}.`;
   return {
     mint: inp.mint,

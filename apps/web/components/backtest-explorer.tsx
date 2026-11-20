@@ -29,11 +29,11 @@ export function BacktestExplorer({ data }: { data: Data }) {
   const sel = (title: string, vals: number[], v: number, set: (n: number) => void) => (
     <div>
       <div className="mb-2 flex items-baseline justify-between">
-        <label className="text-[13px] font-medium text-ink">{title}</label>
+        <label className="text-sm font-semibold text-ink">{title}</label>
         <span className="text-lg font-semibold text-ink tnum">{v} bps</span>
       </div>
       <input type="range" min={0} max={vals.length - 1} step={1} value={vals.indexOf(v)} onChange={(e) => set(vals[Number(e.target.value)]!)} className="w-full" aria-label={title} />
-      <div className="mt-1 flex justify-between text-[11px] text-muted tnum">{vals.map((x) => <span key={x}>{x}</span>)}</div>
+      <div className="mt-1 flex justify-between text-xs text-muted tnum">{vals.map((x) => <span key={x}>{x}</span>)}</div>
     </div>
   );
   const dLp = (cell.fairway.lpPnlVsHodlUsd - sweep.baseline.lpPnlVsHodlUsd) / days;
@@ -44,7 +44,7 @@ export function BacktestExplorer({ data }: { data: Data }) {
           {sel('Toxic fee', sweep.toxic, toxic, setToxic)}
           {sel('Retail fee', sweep.retail, retail, setRetail)}
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-[13px] text-ink-2">
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-ink-2">
           {isRec ? <span className="rounded-full bg-accent/15 px-2.5 py-1 font-semibold text-accent">Recommended setting</span> : (
             <button onClick={() => { setToxic(sweep.recommended.toxicBps); setRetail(sweep.recommended.retailBps); }} className="rounded-full border border-line px-2.5 py-1 font-semibold text-accent hover:bg-surface-2">Jump to recommended ({sweep.recommended.retailBps}/30/{sweep.recommended.toxicBps})</button>
           )}
@@ -73,8 +73,8 @@ export function BacktestExplorer({ data }: { data: Data }) {
       )}
       <Card title="Sensitivities" subtitle="Assumptions that could break the result are output, not hidden.">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[13px] tnum">
-            <thead className="text-[12px] uppercase tracking-wide text-muted"><tr><th className="py-2">Scenario</th><th>Regime</th><th>Retail saved</th><th>LP PnL vs flat 30</th><th>p95 stale</th></tr></thead>
+          <table className="w-full text-left text-sm tnum">
+            <thead className="text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Scenario</th><th>Regime</th><th>Retail saved</th><th>LP PnL vs flat 30</th><th>p95 stale</th></tr></thead>
             <tbody className="divide-y divide-line">
               {data.sensitivity.map((r, i) => (
                 <tr key={i}><td className="py-2">{r.label}</td><td>{r.regime}</td><td>{bps(r.retailCostSavedBps)}</td><td>{usd(r.lpPnlVsFlat30UsdPerDay)}/d</td><td>{bps(r.stalenessP95Bps)}</td></tr>

@@ -3,12 +3,12 @@ import type { Tier } from '@fairway/scoring';
 
 export function Card({ children, className = '', title, subtitle, action }: { children: ReactNode; className?: string; title?: ReactNode; subtitle?: ReactNode; action?: ReactNode }) {
   return (
-    <section className={`rounded-2xl border border-line bg-surface p-5 ${className}`}>
+    <section className={`rounded-xl border border-line bg-surface p-6 ${className}`}>
       {(title || action) && (
-        <header className="mb-4 flex items-start justify-between gap-4">
+        <header className="mb-6 flex items-start justify-between gap-4">
           <div>
-            {title && <h2 className="text-[15px] font-semibold tracking-tight text-ink">{title}</h2>}
-            {subtitle && <p className="mt-0.5 text-[13px] text-ink-2">{subtitle}</p>}
+            {title && <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>}
+            {subtitle && <p className="mt-0.5 text-sm text-ink-2">{subtitle}</p>}
           </div>
           {action}
         </header>
@@ -20,10 +20,10 @@ export function Card({ children, className = '', title, subtitle, action }: { ch
 
 export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode; tone?: 'good' | 'bad' }) {
   return (
-    <div className="rounded-xl border border-line bg-surface px-4 py-3">
-      <div className="text-[12px] font-medium uppercase tracking-wide text-muted">{label}</div>
+    <div className="rounded-xl border border-line bg-surface p-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>
       <div className={`mt-1 text-2xl font-semibold tracking-tight ${tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : 'text-ink'}`}>{value}</div>
-      {hint && <div className="mt-0.5 text-[12px] text-ink-2">{hint}</div>}
+      {hint && <div className="mt-0.5 text-xs text-ink-2">{hint}</div>}
     </div>
   );
 }
@@ -38,7 +38,7 @@ const TIER_GLYPH: Record<Tier, string> = { RETAIL: '●', STANDARD: '◆', TOXIC
 /** Tier identity is never colour-alone: glyph + label. */
 export function TierBadge({ tier, size = 'sm' }: { tier: Tier; size?: 'sm' | 'lg' }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold ring-1 ring-inset ${TIER_STYLE[tier]} ${size === 'lg' ? 'px-3 py-1 text-sm' : 'px-2 py-0.5 text-[11px]'}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold ring-1 ring-inset ${TIER_STYLE[tier]} ${size === 'lg' ? 'px-3 py-1 text-sm' : 'px-2 py-0.5 text-xs'}`}>
       <span aria-hidden>{TIER_GLYPH[tier]}</span>
       {tier}
     </span>
@@ -50,7 +50,7 @@ export function FairFlowBadge({ minTrades, className = '' }: { minTrades: number
   return (
     <span
       title={`Verified fair flow: the program measured this wallet's own trades against Pyth and found no informed edge (onchain RETAIL tier) over at least ${minTrades} settled trades. Human or bot, good flow pays less.`}
-      className={`inline-flex items-center gap-1.5 rounded-full border border-retail/50 bg-retail/10 px-2.5 py-0.5 text-[11px] font-semibold text-retail ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border border-retail/50 bg-retail/10 px-2.5 py-0.5 text-xs font-semibold text-retail ${className}`}
     >
       <span aria-hidden>✓</span>
       Verified fair flow
@@ -66,7 +66,7 @@ export function ScoreSourceBadge({ source }: { source: 'onchain' | 'bootstrap' |
     default: { label: 'No score yet', title: 'No history: unknown wallets pay STANDARD.', cls: 'border-line text-muted', dot: 'bg-line' },
   }[source];
   return (
-    <span title={s.title} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${s.cls}`}>
+    <span title={s.title} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${s.cls}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden />
       {s.label}
     </span>
@@ -77,28 +77,41 @@ import { TIER_FEE } from '@/lib/fees';
 /** fee each tier pays in mock mode: RETAIL = 30 bps minus the (illustrative) bot-tax rebate */
 export const TIER_FEE_DEFAULT: Record<Tier, number> = TIER_FEE;
 
-export function SimBadge({ className = '' }: { className?: string }) {
+/** Where the numbers come from. Small and quiet: a dot and two words. */
+export function DataBadge({ source, className = '' }: { source: 'simulated' | 'live'; className?: string }) {
+  const live = source === 'live';
   return (
     <span
-      title="Everything shown is synthetic: deterministic fixtures and simulator outputs. See README › Simulated vs. live."
-      className={`inline-flex items-center gap-1.5 rounded-full border border-dashed border-line bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-ink-2 ${className}`}
+      title={live ? 'Live data: filled by a QuickNode Stream from Solana mainnet.' : 'Simulated data: deterministic synthetic fixtures and simulator output. See README, "Simulated vs. live".'}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-ink-2 ${className}`}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-toxic" aria-hidden />
-      Simulated data
+      <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-good' : 'bg-warn'}`} aria-hidden />
+      {live ? 'Live data' : 'Simulated data'}
     </span>
   );
+}
+
+export const SimBadge = ({ className = '' }: { className?: string }) => <DataBadge source="simulated" className={className} />;
+
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`skeleton ${className}`} aria-hidden />;
 }
 
 export function PageHeader({ eyebrow, title, children }: { eyebrow?: string; title: ReactNode; children?: ReactNode }) {
   return (
     <div className="mb-8">
-      {eyebrow && <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-accent">{eyebrow}</div>}
+      {eyebrow && <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-accent">{eyebrow}</div>}
       <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{title}</h1>
-      {children && <div className="mt-3 max-w-3xl text-[15px] leading-relaxed text-ink-2">{children}</div>}
+      {children && <div className="mt-4 max-w-3xl text-base text-ink-2">{children}</div>}
     </div>
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-2">{children}</div>;
+export function Empty({ children, title }: { children?: ReactNode; title?: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-dashed border-line px-6 py-8 text-center text-sm text-ink-2">
+      {title && <div className="mb-1 text-base font-semibold text-ink">{title}</div>}
+      {children}
+    </div>
+  );
 }
