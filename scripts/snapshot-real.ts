@@ -14,14 +14,23 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const base = (process.env.INGEST_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 
 async function main() {
-  const list = (await (await fetch(`${base}/check/tokens?limit=50`)).json()) as { source: string; tokens: { mint: string; topBuyers: { wallet: string }[] }[] };
+  const list = (await (await fetch(`${base}/check/tokens?limit=${Number(process.env.SNAPSHOT_CANDIDATES) || 300}`)).json()) as { source: string; tokens: { mint: string; topBuyers: { wallet: string }[] }[] };
   if (list.source !== 'live') throw new Error(`ingest at ${base} is in ${list.source} mode: refusing to write synthetic data as a real snapshot`);
-  const tokens: Record<string, unknown>[] = [];
-  for (const t of list.tokens) tokens.push((await (await fetch(`${base}/check/token/${t.mint}`)).json()) as Record<string, unknown>);
+  // the list endpoint already returns the full report per token
+  const all = list.tokens as unknown as Record<string, unknown>[];
   // name / symbol / image from onchain token metadata (Metaplex or Token-2022) via the mainnet RPC, so the static
   // snapshot (e.g. on Vercel) shows them without an RPC; tokens without metadata keep a shortened mint
   const conn = new Connection(process.env.MAINNET_RPC_URL || 'https://api.mainnet-beta.solana.com', 'confirmed');
   const meta = await fetchTokenMetadata(conn, list.tokens.map((t) => t.mint), { imageTimeoutMs: 5_000 });
+  // a good mix for the static site: every High and Medium (up to 15 each), then Low reports ranked by confidence
+  // (enough early buyers), onchain name + logo, and early-buyer count; 60 tokens in total
+  const SIZE = Number(process.env.SNAPSHOT_SIZE) || 60;
+  const rank = (t: Record<string, unknown>) => (t.lowConfidence ? 0 : 1000) + (meta.get(t.mint as string)?.image ? 500 : meta.get(t.mint as string) ? 250 : 0) + Math.min(Number(t.earlyBuyers) || 0, 200);
+  const byGrade = (g: string) => all.filter((t) => t.grade === g).sort((a, b) => rank(b) - rank(a));
+  const picked = [...byGrade('High').slice(0, 15), ...byGrade('Medium').slice(0, 15)];
+  const pickedSet = new Set(picked.map((t) => t.mint));
+  const low = byGrade('Low').filter((t) => !pickedSet.has(t.mint));
+  const tokens = [...picked, ...low].slice(0, SIZE).sort((a, b) => Number(b.launchSlot) - Number(a.launchSlot));
   for (const t of tokens) {
     const m = meta.get(t.mint as string) ?? null;
     const l = tokenLabel(t.mint as string, m);
@@ -29,7 +38,7 @@ async function main() {
   }
   const named = tokens.filter((t) => meta.get(t.mint as string)).length;
   const wallets: Record<string, unknown> = {};
-  for (const w of [...new Set(list.tokens.flatMap((t) => t.topBuyers.map((b) => b.wallet)))].slice(0, 200)) {
+  for (const w of [...new Set(tokens.flatMap((t) => (t.topBuyers as { wallet: string }[]).map((b) => b.wallet)))].slice(0, 200)) {
     const r = (await (await fetch(`${base}/check/wallet/${w}`)).json()) as { found?: boolean };
     if (r.found) wallets[w] = r;
   }
@@ -40,6 +49,8 @@ async function main() {
   const out = join(root, 'apps', 'web', 'data', 'real-snapshot.json');
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify({ source: 'live', updatedAt: Math.floor(Date.now() / 1000), slot, tokens, wallets }) + '\n');
+  const grades = tokens.reduce<Record<string, number>>((m, t) => ((m[t.grade as string] = (m[t.grade as string] || 0) + 1), m), {});
+  console.log(`grades ${JSON.stringify(grades)}; with logo: ${tokens.filter((t) => t.image).length}`);
   console.log(`wrote ${out}: ${tokens.length} tokens (${named} with onchain metadata), ${Object.keys(wallets).length} wallets, mainnet slot ${slot}`);
 }
 main().catch((e) => {

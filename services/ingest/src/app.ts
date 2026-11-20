@@ -215,7 +215,7 @@ export function buildApp(o: AppOptions): FastifyInstance {
   });
   app.get('/check/tokens', async (req) => {
     const q = req.query as { limit?: string };
-    return { source, tokens: listTokenChecks(o.db, Math.min(50, Math.max(1, Number(q.limit) || 12))) };
+    return { source, tokens: listTokenChecks(o.db, Math.min(400, Math.max(1, Number(q.limit) || 12))) };
   });
 
   /** Cross-launch sniper scores (bootstrap TOXIC from Pump.fun history). */
