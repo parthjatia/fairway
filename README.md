@@ -355,6 +355,8 @@ PDA seeds: `config`, `pool + base_mint + quote_mint`, `vault`, `lp_mint`, `score
 
 Full dashboard steps are in [`streams/STREAM_CONFIG.md`](streams/STREAM_CONFIG.md).
 
+**QuickNode RPC + Streams.** QuickNode is used in two places. **Streams** is the data layer (the filtered Pump.fun / Raydium / Fairway blocks that feed scoring). **QuickNode RPC** (a devnet and a mainnet endpoint) serves the live app: the devnet endpoint is used by the local live web server, the seed and swap scripts and the keeper (`KEEPER_MODE=devnet`), and the mainnet endpoint is used for Fairway Check's mainnet lookups (the slot shown on real-data reports and the snapshot script). Endpoints are secrets: they live only in gitignored `.env.local` and `apps/web/.env.local` (`DEVNET_RPC_URL`, `MAINNET_RPC_URL`, see `.env.example`), are read server-side only, and are never in `NEXT_PUBLIC_` variables or committed. The browser wallet connection uses the public devnet endpoint.
+
 | Setting | Value | Why |
 |---|---|---|
 | Streams | **L: launches** (`pumpfun-filter.js` → `/streams/pumpfun`), **A: liquid-pair history** (`filter.js` → `/streams/solana`), **B: the Fairway pool on devnet** | L finds known snipers before a token exists. A scores wallets from their trading on other DEXs. |

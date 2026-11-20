@@ -5,6 +5,7 @@
  *   KEEPER_MODE=devnet             needs RPC_URL and KEEPER_KEYPAIR
  * Flags: --watch <seconds>  re-run periodically
  */
+try { process.loadEnvFile(new URL('../../../.env.local', import.meta.url)); } catch { /* no local env file */ }
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
@@ -50,8 +51,8 @@ async function once() {
     console.log(`dry-run: ${rep.updates} updates in ${rep.batches.length} batches → ${rep.batches.length ? sender.file : '(nothing to do)'}; mirror has ${store.size} scores`);
     return rep;
   }
-  const rpcUrl = process.env.RPC_URL || (mode === 'local' ? 'http://127.0.0.1:8899' : '');
-  if (!rpcUrl) throw new Error('KEEPER_MODE=devnet needs RPC_URL (e.g. your QuickNode devnet endpoint)');
+  const rpcUrl = process.env.RPC_URL || (mode === 'local' ? 'http://127.0.0.1:8899' : process.env.DEVNET_RPC_URL || '');
+  if (!rpcUrl) throw new Error('KEEPER_MODE=devnet needs RPC_URL or DEVNET_RPC_URL (e.g. your QuickNode devnet endpoint)');
   const connection = new Connection(rpcUrl, 'confirmed');
   const authority = loadKeypair(process.env.KEEPER_KEYPAIR || '.keys/score-authority.json');
   const rep = await runKeeper(desired, new RpcStore(connection, programId), new RpcSender(connection, authority, programId), opts);

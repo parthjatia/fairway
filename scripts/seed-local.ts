@@ -7,6 +7,7 @@
  *   - writes apps/web/.env.local for live mode
  * Usage: pnpm seed:local | pnpm seed:devnet   (RPC_URL defaults to http://127.0.0.1:8899)
  */
+try { process.loadEnvFile(new URL('../.env.local', import.meta.url)); } catch { /* no local env file */ }
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +31,9 @@ import {
 } from '@fairway/sdk';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const rpc = process.env.RPC_URL || 'http://127.0.0.1:8899';
+const rpc = process.env.SEED_NETWORK === 'devnet'
+  ? process.env.DEVNET_RPC_URL || process.env.RPC_URL || 'https://api.devnet.solana.com'
+  : process.env.RPC_URL || 'http://127.0.0.1:8899';
 const conn = new Connection(rpc, { commitment: 'confirmed', disableRetryOnRateLimit: false });
 
 function key(name: string): Keypair {
@@ -193,7 +196,8 @@ async function main() {
   };
   mkdirSync(join(root, 'scripts', 'out'), { recursive: true });
   writeFileSync(join(root, 'scripts', 'out', `${net}-seed.json`), JSON.stringify(summary, null, 2) + '\n');
-  writeFileSync(join(root, 'apps', 'web', '.env.local'), `NEXT_PUBLIC_MODE=live\nNEXT_PUBLIC_RPC_URL=${rpc}\nNEXT_PUBLIC_BASE_MINT=${base.toBase58()}\nNEXT_PUBLIC_QUOTE_MINT=${quote.toBase58()}\nNEXT_PUBLIC_LAUNCH_MINT=${frog.toBase58()}\n`);
+  const prevEnv = existsSync(join(root, 'apps', 'web', '.env.local')) ? readFileSync(join(root, 'apps', 'web', '.env.local'), 'utf8').split('\n').filter((l) => /^(RPC_URL|DEVNET_RPC_URL|MAINNET_RPC_URL)=/.test(l)).join('\n') + '\n' : '';
+  writeFileSync(join(root, 'apps', 'web', '.env.local'), prevEnv + `NEXT_PUBLIC_MODE=live\nNEXT_PUBLIC_RPC_URL=${isDevnet ? 'https://api.devnet.solana.com' : rpc}\nNEXT_PUBLIC_BASE_MINT=${base.toBase58()}\nNEXT_PUBLIC_QUOTE_MINT=${quote.toBase58()}\nNEXT_PUBLIC_LAUNCH_MINT=${frog.toBase58()}\n`);
   console.log(JSON.stringify(summary, null, 2));
   console.log(`Seeded (${net}). Summary: scripts/out/${net}-seed.json. Import .keys/demo-*.json into your wallet to try tiers. Wrote apps/web/.env.local`);
 }

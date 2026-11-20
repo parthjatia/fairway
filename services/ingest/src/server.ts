@@ -1,3 +1,4 @@
+try { process.loadEnvFile(new URL('../../../.env.local', import.meta.url)); } catch { /* no local env file */ }
 import { buildApp } from './app';
 import { createContext } from './context';
 

@@ -6,7 +6,7 @@ import { decodePool, discriminator, launchPhase, parseSwapEvents, PROGRAM_ID, TI
 import { buildTokenCheck } from '@fairway/scoring';
 import { metaOf } from '../registry';
 
-export const RPC = process.env.RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || 'https://api.devnet.solana.com';
+export const RPC = process.env.RPC_URL || process.env.DEVNET_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || 'https://api.devnet.solana.com';
 const conn = () => new Connection(RPC, 'confirmed');
 
 import type { FwData, FwSwap, FwToken } from './fairway-types';

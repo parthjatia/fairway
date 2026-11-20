@@ -2,6 +2,7 @@
  * Sends a few REAL swaps on devnet from the seeded persona keys (RETAIL Rita, TOXIC Arb Bot 7, a new wallet), so the
  * launch feed, buyers list and fairness report have real onchain activity. Usage: RPC_URL=... pnpm --filter @fairway/scripts devnet:swaps
  */
+try { process.loadEnvFile(new URL('../.env.local', import.meta.url)); } catch { /* no local env file */ }
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +11,7 @@ import { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAd
 import { swapIx } from '@fairway/sdk';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const conn = new Connection(process.env.RPC_URL || 'https://api.devnet.solana.com', 'confirmed');
+const conn = new Connection(process.env.RPC_URL || process.env.DEVNET_RPC_URL || 'https://api.devnet.solana.com', 'confirmed');
 const key = (n: string) => Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(join(root, '.keys', `${n}.json`), 'utf8'))));
 const seed = JSON.parse(readFileSync(join(root, 'scripts', 'out', 'devnet-seed.json'), 'utf8'));
 const quote = new PublicKey(seed.mints.quote);
