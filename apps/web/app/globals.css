@@ -26,10 +26,17 @@
   --text-5xl--line-height: 44px;
   --text-6xl: 40px;
   --text-6xl--line-height: 44px;
+  --radius-md: 6px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 6px;
+  --radius-3xl: 6px;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent-hover: var(--accent-hover);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
@@ -44,59 +51,65 @@
 }
 
 /*
- * Design tokens. One accent plus neutrals. Status colours carry meaning only: green = Low risk / RETAIL,
- * amber = Medium risk, red = High risk / TOXIC. Every text/background pair below is >= 4.5:1 (WCAG AA).
+ * Design tokens: Geist-style monochrome. Hierarchy comes from 1px hairlines and small luminance shifts, never shadows.
+ * The primary action is the ink colour itself (black on light, white on dark). Colour carries status only:
+ * green = Low risk / RETAIL, amber = Medium risk, red = High risk / TOXIC, muted and desaturated.
+ * Every text/background pair below is >= 4.5:1 (WCAG AA).
  */
 :root {
   color-scheme: light;
-  --bg: #f7f7f8;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f0f1f3;
-  --line: rgba(10, 12, 16, 0.1);
-  --ink: #0b0c0e;
-  --ink-2: #464b54;
-  --muted: #636872;
-  --accent: #2457c5;
+  --surface-2: #fafafa;
+  --line: #eaeaea;
+  --line-strong: #d4d4d4;
+  --ink: #0a0a0a;
+  --ink-2: #4d4d4d;
+  --muted: #666666;
+  --accent: #000000;
+  --accent-hover: #262626;
   --accent-ink: #ffffff;
-  --good: #14733f;
-  --warn: #8a5600;
-  --bad: #c0302f;
+  --good: #1a7f45;
+  --warn: #8a5a00;
+  --bad: #c13a32;
   --retail: var(--good);
   --standard: var(--ink-2);
   --toxic: var(--bad);
-  --grid: #e4e5e8;
-  --axis: #c9cbd1;
+  --grid: #f0f0f0;
+  --axis: #d4d4d4;
   /* chart series (categorical, data only) */
-  --s-fairway: #2457c5;
-  --s-flat30: #d9622b;
-  --s-rotation: #1c8f5f;
-  --s-flat5: #c48a00;
-  --s-flat80: #cf4f84;
-  --s-bundle: #7a5bd1;
+  --s-fairway: #0a0a0a;
+  --s-flat30: #c2662f;
+  --s-rotation: #2f8a5b;
+  --s-flat5: #a8862a;
+  --s-flat80: #b04a72;
+  --s-bundle: #6b5bb0;
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0b0c0e;
-  --surface: #111316;
-  --surface-2: #181a1f;
-  --line: rgba(255, 255, 255, 0.09);
-  --ink: #ecedee;
-  --ink-2: #a9adb4;
-  --muted: #868b93;
-  --accent: #6f9cf0;
-  --accent-ink: #0b0c0e;
-  --good: #4cc38a;
-  --warn: #e3a93f;
-  --bad: #f07575;
-  --grid: #24262b;
-  --axis: #33363c;
-  --s-fairway: #6f9cf0;
-  --s-flat30: #e0784a;
-  --s-rotation: #4cc38a;
-  --s-flat5: #d9a21f;
-  --s-flat80: #e072a3;
-  --s-bundle: #a28df0;
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --surface-2: #111111;
+  --line: #262626;
+  --line-strong: #404040;
+  --ink: #ededed;
+  --ink-2: #a1a1a1;
+  --muted: #8f8f8f;
+  --accent: #ffffff;
+  --accent-hover: #e5e5e5;
+  --accent-ink: #000000;
+  --good: #52a875;
+  --warn: #c99a45;
+  --bad: #e0675f;
+  --grid: #1a1a1a;
+  --axis: #333333;
+  --s-fairway: #ededed;
+  --s-flat30: #d47a4c;
+  --s-rotation: #52a875;
+  --s-flat5: #c99a45;
+  --s-flat80: #d0749c;
+  --s-bundle: #9a8ad8;
 }
 
 html,
@@ -111,6 +124,7 @@ body {
   line-height: 20px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -123,8 +137,15 @@ body {
   }
 }
 a,
-button {
-  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+button,
+input,
+summary {
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+h1,
+h2,
+h3 {
+  letter-spacing: -0.025em;
 }
 @media (prefers-reduced-motion: reduce) {
   * {
@@ -135,7 +156,8 @@ button {
 
 .skeleton {
   background: var(--surface-2);
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
   animation: fw-pulse 1.4s ease-in-out infinite;
 }
 @keyframes fw-pulse {
@@ -145,7 +167,22 @@ button {
 }
 
 .tnum {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* metadata labels: small, mono, uppercase, tracked (components layer, so colour utilities can still override) */
+@layer components {
+.label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
 }
 
 /* Recharts: recessive axes and grid */
@@ -159,7 +196,10 @@ button {
 .recharts-default-tooltip {
   background: var(--surface) !important;
   border: 1px solid var(--line) !important;
-  border-radius: 8px;
+  border-radius: 4px;
+  box-shadow: none !important;
+  font-family: var(--font-mono);
+  font-size: 12px;
   color: var(--ink);
 }
 
@@ -168,5 +208,21 @@ input[type='range'] {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+/* flush grid: cells share 1px hairlines instead of floating apart (gap-px over the line colour) */
+@layer components {
+  .flush {
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .flush > * {
+    border-width: 0 !important;
+    border-radius: 0 !important;
+    background: var(--surface);
+  }
 }

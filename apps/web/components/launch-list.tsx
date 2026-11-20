@@ -20,7 +20,7 @@ export function LaunchList({ demo }: { demo: LaunchSpec[] }) {
               <div>
                 <div className="text-base font-semibold text-ink">
                   {l.name} <span className="text-muted">${l.symbol}</span>
-                  {l.createdBy === 'you' && <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent">yours</span>}
+                  {l.createdBy === 'you' && <span className="ml-2 rounded-[3px] border border-line bg-surface-2 px-2 py-0.5 text-xs font-semibold text-accent">yours</span>}
                 </div>
                 <div className="text-xs text-ink-2">
                   {usd(l.liquidityUsd)} liquidity · {l.windowMin}-min window

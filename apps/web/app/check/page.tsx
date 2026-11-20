@@ -27,23 +27,23 @@ export default async function CheckIndex({ searchParams }: { searchParams: Promi
   const source = ok ? (r.body as { source: 'live' | 'simulated' }).source : 'live';
   const ex = ok ? examples((r.body as { tokens: NamedToken[] }).tokens) : [];
   return (
-    <div className="mx-auto flex max-w-2xl flex-col items-center py-8 text-center sm:py-16">
-      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Fairway Check</span>
+    <div className="max-w-3xl py-2 sm:py-6">
+      <span className="label">Fairway Check</span>
       <h1 className="mt-3 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">Know who you are buying from</h1>
       <p className="mt-4 text-base text-ink-2">See who bought a Solana token in its first minute, how much of the early supply went to snipers, and whether they have already sold.</p>
       <div className="mt-8 w-full text-left">
         <CheckSearch autoFocus />
       </div>
       <div className="mt-6 w-full text-left">
-        <div className="mb-3 flex items-center justify-between gap-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Try an example</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <h2 className="label">Try an example</h2>
           <DataBadge source={source} />
         </div>
         {ex.length > 0 ? (
           <ul className="grid gap-3 sm:grid-cols-3">
             {ex.map((t) => (
               <li key={t.mint}>
-                <Link href={`/check/${t.mint}${demo ? '?demo=1' : ''}`} className="block rounded-xl border border-line bg-surface p-4 hover:border-ink-2">
+                <Link href={`/check/${t.mint}${demo ? '?demo=1' : ''}`} className="block rounded-md border border-line bg-surface p-4 hover:border-ink-2">
                   <span className="flex items-center gap-2 text-sm font-semibold text-ink">
                     <span className={`h-2 w-2 rounded-full ${DOT[t.grade]}`} aria-hidden />
                     {t.grade} risk
@@ -55,7 +55,7 @@ export default async function CheckIndex({ searchParams }: { searchParams: Promi
             ))}
           </ul>
         ) : (
-          <p className="rounded-xl border border-dashed border-line p-6 text-sm text-ink-2">
+          <p className="rounded-md border border-dashed border-line p-6 text-sm text-ink-2">
             <>No real Pump.fun launches are indexed yet (the QuickNode Stream feeds them). Paste any mint above: Fairway tokens on devnet work now, or browse them in <Link href="/explore" className="text-accent hover:underline">Explore</Link>.</>
           </p>
         )}

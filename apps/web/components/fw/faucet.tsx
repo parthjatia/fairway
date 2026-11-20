@@ -25,7 +25,7 @@ export function FaucetButton({ onDone, className = '' }: { onDone?: () => void; 
             setState({ msg: (e as Error).message, err: true });
           }
         }}
-        className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-50"
       >
         <Droplet size={12} /> {state.busy ? 'Sending…' : 'Get test USDC'}
       </button>

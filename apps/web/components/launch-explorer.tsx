@@ -38,12 +38,12 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
   const fw = by('fairway').metrics;
   const dc = by('decay').metrics;
   const key = (id: string) => data.keyChart.find((k) => k.id === id)!;
-  const chip = (on: boolean) => `rounded-full border px-3 py-1.5 text-sm font-semibold ${on ? 'border-accent bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`;
+  const chip = (on: boolean) => `rounded-md border px-3 py-1.5 text-sm font-semibold ${on ? 'border-accent bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`;
   const keyRows = data.keyChart.map((k) => ({ name: k.short, Humans: k.humanFeeBps, Snipers: k.sniperFeeBps, 'Known snipers': k.knownSniperFeeBps }));
   const metricRows = data.regimes.map((r) => ({ id: r.id, name: r.short, value: r.metrics[metric].mean, p10: r.metrics[metric].p10, p90: r.metrics[metric].p90 }));
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="flush grid grid-cols-2 lg:grid-cols-4">
         <Stat label="Humans pay vs time-decay-only" value={`−${data.paired.humanFeeCutPct.toFixed(0)}%`} tone="good" hint={`${b0(key('fairway').humanFeeBps)} vs ${b0(key('decay').humanFeeBps)}, all ${data.launches} launches pooled`} />
         <Stat label="Sniper share of early supply" value={`${pct(dc.sniperShareOfWindowSupply.mean)} → ${pct(fw.sniperShareOfWindowSupply.mean)}`} tone="good" hint={`time-decay → Fairway (flat fee: ${pct(by('flat').metrics.sniperShareOfWindowSupply.mean)})`} />
         <Stat label="Snipers' total fees (deterrence)" value={`${data.paired.sniperFeeRatio.toFixed(2)}×`} hint={`about the same: known snipers mostly skip the launch. Those who buy pay ${data.paired.knownSniperFeeRatio.toFixed(2)}× per dollar`} />
@@ -124,7 +124,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[480px] text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-muted">
+            <thead className="label">
               <tr>
                 <th className="py-2 pr-3 font-semibold">Regime</th>
                 <th className="py-2 pr-3 text-right font-semibold">Bundle share of early supply</th>
@@ -155,7 +155,7 @@ export function LaunchExplorer({ data }: { data: LaunchStudyData }) {
       <Card title="Creator revenue: the share of the sniper premium" subtitle={`Per launch, Fairway regime, mean of ${data.launches} launches. Default: ${data.creatorShare.defaultBps / 100}% of the TOXIC premium goes to the creator, 15% to the protocol, the rest stays with LPs.`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[480px] text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-muted">
+            <thead className="label">
               <tr>
                 <th className="py-2 pr-3 font-semibold">Creator share</th>
                 <th className="py-2 pr-3 text-right font-semibold">Paid to creator directly</th>

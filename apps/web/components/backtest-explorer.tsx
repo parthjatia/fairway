@@ -45,13 +45,13 @@ export function BacktestExplorer({ data }: { data: Data }) {
           {sel('Retail fee', sweep.retail, retail, setRetail)}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-ink-2">
-          {isRec ? <span className="rounded-full bg-accent/15 px-2.5 py-1 font-semibold text-accent">Recommended setting</span> : (
-            <button onClick={() => { setToxic(sweep.recommended.toxicBps); setRetail(sweep.recommended.retailBps); }} className="rounded-full border border-line px-2.5 py-1 font-semibold text-accent hover:bg-surface-2">Jump to recommended ({sweep.recommended.retailBps}/30/{sweep.recommended.toxicBps})</button>
+          {isRec ? <span className="rounded-md border border-line bg-surface-2 px-2.5 py-1 font-semibold text-accent">Recommended setting</span> : (
+            <button onClick={() => { setToxic(sweep.recommended.toxicBps); setRetail(sweep.recommended.retailBps); }} className="rounded-md border border-line px-2.5 py-1 font-semibold text-accent hover:bg-surface-2">Jump to recommended ({sweep.recommended.retailBps}/30/{sweep.recommended.toxicBps})</button>
           )}
           <span>{sweep.recommended.reason}</span>
         </div>
       </Card>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="flush grid grid-cols-2 lg:grid-cols-4">
         <Stat label="Retail cost" value={bps(cell.fairway.retailCostBps)} hint={`flat 30: ${bps(sweep.baseline.retailCostBps)}`} tone={cell.meetsRetailCost ? 'good' : 'bad'} />
         <Stat label="LP PnL vs flat 30" value={`${dLp >= 0 ? '+' : '−'}${usd(Math.abs(dLp))}/d`} hint="negative = discount paid to retail" tone={dLp >= 0 ? 'good' : undefined} />
         <Stat label="Staleness p95" value={bps(cell.fairway.stalenessP95Bps)} hint={`bound ${sweep.stalenessBoundBps} bps`} tone={cell.meetsStaleness ? 'good' : 'bad'} />
@@ -74,7 +74,7 @@ export function BacktestExplorer({ data }: { data: Data }) {
       <Card title="Sensitivities" subtitle="Assumptions that could break the result are output, not hidden.">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm tnum">
-            <thead className="text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Scenario</th><th>Regime</th><th>Retail saved</th><th>LP PnL vs flat 30</th><th>p95 stale</th></tr></thead>
+            <thead className="label"><tr><th className="py-2">Scenario</th><th>Regime</th><th>Retail saved</th><th>LP PnL vs flat 30</th><th>p95 stale</th></tr></thead>
             <tbody className="divide-y divide-line">
               {data.sensitivity.map((r, i) => (
                 <tr key={i}><td className="py-2">{r.label}</td><td>{r.regime}</td><td>{bps(r.retailCostSavedBps)}</td><td>{usd(r.lpPnlVsFlat30UsdPerDay)}/d</td><td>{bps(r.stalenessP95Bps)}</td></tr>

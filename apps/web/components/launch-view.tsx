@@ -34,7 +34,7 @@ export function LaunchView({ id, demo }: { id: string; demo: LaunchSpec | null }
         No launch called <span className="font-mono">{id}</span> in this browser. Launches you create in mock mode are kept in this browser only. <Link href="/launch" className="text-accent">Create one</Link>.
       </Empty>
     );
-  return <div className="h-96 animate-pulse rounded-xl border border-line bg-surface" aria-busy />;
+  return <div className="h-96 animate-pulse rounded-md border border-line bg-surface" aria-busy />;
 }
 
 function LaunchSim({ spec }: { spec: LaunchSpec }) {
@@ -83,8 +83,8 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-accent">
-            Launch {spec.createdBy === 'you' && <span className="rounded-full bg-accent/15 px-2 py-0.5 normal-case tracking-normal">created by you</span>}
+          <div className="mb-1 flex items-center gap-2 label">
+            Launch {spec.createdBy === 'you' && <span className="rounded-[3px] border border-line bg-surface-2 px-2 py-0.5 normal-case tracking-normal">created by you</span>}
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
             {spec.name} <span className="text-muted">${spec.symbol}</span>
@@ -94,15 +94,15 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => (slot >= end ? (setSlot(0), setPlaying(true)) : setPlaying((p) => !p))} className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-ink" aria-label={playing ? 'Pause' : 'Play'}>
+          <button onClick={() => (slot >= end ? (setSlot(0), setPlaying(true)) : setPlaying((p) => !p))} className="inline-flex items-center gap-2 rounded-md bg-accent hover:bg-accent-hover px-4 py-2 text-sm font-semibold text-accent-ink" aria-label={playing ? 'Pause' : 'Play'}>
             {playing ? <Pause size={15} /> : <Play size={15} />} {playing ? 'Pause' : slot >= end ? 'Replay' : 'Play'}
           </button>
-          <button onClick={() => { setSlot(0); setPlaying(true); }} className="rounded-xl border border-line p-2 text-ink-2 hover:text-ink" aria-label="Restart">
+          <button onClick={() => { setSlot(0); setPlaying(true); }} className="rounded-md border border-line p-2 text-ink-2 hover:text-ink" aria-label="Restart">
             <RotateCcw size={15} />
           </button>
-          <div className="flex rounded-xl border border-line p-0.5 text-xs">
+          <div className="flex rounded-md border border-line p-0.5 text-xs">
             {SPEEDS.map((s) => (
-              <button key={s} onClick={() => setSpeed(s)} aria-pressed={s === speed} className={`rounded-lg px-2.5 py-1.5 font-semibold ${s === speed ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
+              <button key={s} onClick={() => setSpeed(s)} aria-pressed={s === speed} className={`rounded-[4px] px-2.5 py-1.5 font-semibold ${s === speed ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
                 {s === 10 ? '1×' : s === 25 ? '2.5×' : '6×'}
               </button>
             ))}
@@ -115,12 +115,12 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           <div className="text-sm text-ink-2">
             <span className="font-mono text-lg font-semibold text-ink tnum">{clock(slot)}</span> since launch · slot {slot}
           </div>
-          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${inWindow ? 'bg-toxic/15 text-toxic' : 'bg-retail/15 text-retail'}`}>{inWindow ? `Launch window: ${clock(W - slot)} left` : 'Window over: normal tier fees'}</span>
+          <span className={`rounded-[3px] px-2.5 py-1 text-xs font-semibold ${inWindow ? 'bg-toxic/15 text-toxic' : 'bg-retail/15 text-retail'}`}>{inWindow ? `Launch window: ${clock(W - slot)} left` : 'Window over: normal tier fees'}</span>
           <input type="range" min={0} max={end} value={slot} onChange={(e) => { setSlot(Number(e.target.value)); setPlaying(false); }} className="min-w-[180px] flex-1" aria-label="Time since launch" />
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="flush grid grid-cols-2 lg:grid-cols-4">
         <Stat label="Fee now: RETAIL" value={`${fees.RETAIL} bps`} tone="good" hint="proven humans, from block 0" />
         <Stat label="Fee now: fresh wallet" value={`${fees.STANDARD} bps`} hint={`time-decay-only charges everyone ${decayFee} bps`} />
         <Stat label="Fee now: known sniper" value={`${fees.TOXIC} bps`} tone="bad" hint="TOXIC curve" />
@@ -167,9 +167,9 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         title={`Buyers (${buyers.length})`}
         subtitle={`Humans have paid ${usd(humanFee, 2)} in fees so far.`}
         action={
-          <div className="flex rounded-xl border border-line p-0.5 text-xs" role="tablist" aria-label="Fee model">
+          <div className="flex rounded-md border border-line p-0.5 text-xs" role="tablist" aria-label="Fee model">
             {(['fairway', 'bundle', 'decay'] as const).map((c) => (
-              <button key={c} role="tab" aria-selected={c === compare} onClick={() => setCompare(c)} className={`rounded-lg px-2.5 py-1.5 font-semibold ${c === compare ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
+              <button key={c} role="tab" aria-selected={c === compare} onClick={() => setCompare(c)} className={`rounded-[4px] px-2.5 py-1.5 font-semibold ${c === compare ? 'bg-surface-2 text-ink' : 'text-ink-2'}`}>
                 {COMPARE_LABEL[c]}
               </button>
             ))}
@@ -181,7 +181,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
         ) : (
           <div className="max-h-[420px] overflow-auto">
             <table className="w-full min-w-[520px] whitespace-nowrap text-left text-sm">
-              <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wide text-muted">
+              <thead className="sticky top-0 bg-surface label">
                 <tr>
                   <th className="py-2 pr-3 font-semibold">Time</th>
                   <th className="py-2 pr-3 font-semibold">Wallet</th>
@@ -212,7 +212,7 @@ function LaunchSim({ spec }: { spec: LaunchSpec }) {
           </div>
         )}
         {compare === 'bundle' && bundleKeptOut > 0 && (
-          <p className="mt-3 rounded-lg border border-[color:var(--s-bundle)] px-3 py-2 text-sm text-ink-2">
+          <p className="mt-3 rounded-[4px] border border-[color:var(--s-bundle)] px-3 py-2 text-sm text-ink-2">
             <span className="font-semibold text-[color:var(--s-bundle)]">{bundleKeptOut} bundle wallets kept out.</span> Their funder bundled earlier launches, so the keeper flagged them before the launch and they face
             the TOXIC curve. Under plain Fairway they buy as fresh STANDARD wallets.
           </p>
@@ -239,7 +239,7 @@ function CreatorRevenue({ v, slot }: { v: LaunchSimView; slot: number }) {
     <Card title="Creator revenue" subtitle={`Fees paid in this launch so far under Fairway: ${usd(r.fees, 2)}, of which ${usd(r.fromSnipers, 2)} from snipers and bundle wallets.`}>
       <div className="grid gap-3 md:grid-cols-3">
         {rows.map(([k, val, note]) => (
-          <div key={k} className="rounded-xl border border-line px-3 py-2.5">
+          <div key={k} className="rounded-md border border-line px-3 py-2.5">
             <div className="text-xs text-ink-2">{k}</div>
             <div className="mt-1 text-lg font-semibold text-ink tnum">{usd(val, 2)}</div>
             <div className="mt-0.5 text-xs leading-snug text-muted">{note}</div>
@@ -261,7 +261,7 @@ function BundleBadge({ charged }: { charged: string }) {
   return (
     <span
       title={`Bundle: funded by the same source wallet as other early buyers within the lookback before the launch. Pays at least STANDARD; charged ${charged} here.`}
-      className="ml-1.5 inline-flex items-center rounded-full border border-[color:var(--s-bundle)] px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-[color:var(--s-bundle)]"
+      className="ml-1.5 inline-flex items-center rounded-[3px] border border-[color:var(--s-bundle)] px-2 py-0.5 label text-[color:var(--s-bundle)]"
     >
       bundle
     </span>
@@ -275,8 +275,8 @@ function Meter({ label, value, tone }: { label: string; value: number; tone: 'ac
         <span className="text-ink-2">{label}</span>
         <span className="font-semibold text-ink tnum">{(value * 100).toFixed(0)}%</span>
       </div>
-      <div className="h-3 overflow-hidden rounded-full bg-surface-2" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} aria-label={label}>
-        <div className={`h-full rounded-full ${tone === 'accent' ? 'bg-accent' : tone === 'bundle' ? 'bg-[color:var(--s-bundle)]' : 'bg-muted'}`} style={{ width: `${Math.min(100, value * 100)}%`, transition: 'width 120ms linear' }} />
+      <div className="h-3 overflow-hidden rounded-none bg-surface-2" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} aria-label={label}>
+        <div className={`h-full rounded-none ${tone === 'accent' ? 'bg-accent' : tone === 'bundle' ? 'bg-[color:var(--s-bundle)]' : 'bg-muted'}`} style={{ width: `${Math.min(100, value * 100)}%`, transition: 'width 120ms linear' }} />
       </div>
     </div>
   );
@@ -292,12 +292,12 @@ function TwoWalletsLaunch({ buyUsd, setBuyUsd, fees, decayFee }: { buyUsd: numbe
     <Card title="Same buy, two wallets" subtitle="The identical buy, right now, from two different wallets.">
       <label className="mb-3 flex items-center gap-2 text-sm text-ink-2">
         Buy
-        <input type="number" min={1} value={buyUsd} onChange={(e) => setBuyUsd(Math.max(0, Number(e.target.value)))} className="w-24 rounded-lg border border-line bg-surface-2 px-2 py-1 text-ink tnum" aria-label="Buy amount in USD" />
+        <input type="number" min={1} value={buyUsd} onChange={(e) => setBuyUsd(Math.max(0, Number(e.target.value)))} className="w-24 rounded-[4px] border border-line bg-surface-2 px-2 py-1 text-ink tnum" aria-label="Buy amount in USD" />
         USDC of the token
       </label>
       <div className="space-y-2">
         {rows.map((r) => (
-          <div key={r.who} className="flex items-center justify-between rounded-xl border border-line px-3 py-2.5">
+          <div key={r.who} className="flex items-center justify-between rounded-md border border-line px-3 py-2.5">
             <div className="flex items-center gap-2">
               <TierBadge tier={r.tier} />
               <span className="text-sm font-semibold text-ink">{r.who}</span>

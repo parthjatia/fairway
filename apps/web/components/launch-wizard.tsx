@@ -29,7 +29,7 @@ function valid(f: Form, step: number): string | null {
   return null;
 }
 
-const field = 'mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-base text-ink outline-none focus:border-accent';
+const field = 'mt-1 w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 text-base text-ink outline-none focus:border-accent';
 
 export function LaunchWizard() {
   const router = useRouter();
@@ -65,7 +65,7 @@ export function LaunchWizard() {
       <ol className="mb-6 flex flex-wrap gap-2" aria-label="Steps">
         {STEPS.map((s, i) => (
           <li key={s}>
-            <button onClick={() => i < step && setStep(i)} disabled={i > step} aria-current={i === step ? 'step' : undefined} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${i === step ? 'border-accent bg-surface-2 text-ink' : i < step ? 'border-line text-ink-2 hover:text-ink' : 'border-line text-muted'}`}>
+            <button onClick={() => i < step && setStep(i)} disabled={i > step} aria-current={i === step ? 'step' : undefined} className={`rounded-[3px] border px-3 py-1.5 text-xs font-semibold ${i === step ? 'border-accent bg-surface-2 text-ink' : i < step ? 'border-line text-ink-2 hover:text-ink' : 'border-line text-muted'}`}>
               {i + 1}. {s}
             </button>
           </li>
@@ -100,7 +100,7 @@ export function LaunchWizard() {
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-muted">
+              <thead className="label">
                 <tr>
                   <th className="py-2 pr-3 font-semibold">Tier</th>
                   <th className="py-2 pr-3 text-right font-semibold">Block 0</th>
@@ -149,16 +149,16 @@ export function LaunchWizard() {
       {err && <p className="mt-4 text-sm text-bad" role="alert">{err}</p>}
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {step > 0 && (
-          <button onClick={() => setStep((s) => s - 1)} className="inline-flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-ink hover:bg-surface-2">
+          <button onClick={() => setStep((s) => s - 1)} className="inline-flex items-center gap-2 rounded-md border border-line px-4 py-2.5 text-sm font-semibold text-ink hover:bg-surface-2">
             <ArrowLeft size={15} /> Back
           </button>
         )}
         {step < 3 ? (
-          <button disabled={!!err} onClick={() => setStep((s) => s + 1)} className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink disabled:opacity-40">
+          <button disabled={!!err} onClick={() => setStep((s) => s + 1)} className="inline-flex items-center gap-2 rounded-md bg-accent hover:bg-accent-hover px-4 py-2.5 text-sm font-semibold text-accent-ink disabled:opacity-40">
             Next <ArrowRight size={15} />
           </button>
         ) : demo ? (
-          <button onClick={createMock} className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink">
+          <button onClick={createMock} className="inline-flex items-center gap-2 rounded-md bg-accent hover:bg-accent-hover px-5 py-2.5 text-sm font-semibold text-accent-ink">
             <Rocket size={15} /> Launch (simulated)
           </button>
         ) : (

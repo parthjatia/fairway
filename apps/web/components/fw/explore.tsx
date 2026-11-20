@@ -15,9 +15,9 @@ const pct = (x: number) => `${Math.round(x)}%`;
 function Table({ rows, extraLabel }: { rows: Row[]; extraLabel?: string }) {
   const router = useRouter();
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-surface">
+    <div className="overflow-hidden rounded-md border border-line bg-surface">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
+        <thead className="border-b border-line label">
           <tr>
             <th className="px-4 py-3 font-semibold">Token</th>
             <th className="px-4 py-3 font-semibold">Risk</th>
@@ -85,11 +85,11 @@ export function Explore({ pump, initialTab }: { pump: Pump; initialTab: 'fairway
     age: pump?.slot && t.launchSlot ? ago(pump.updatedAt - (pump.slot - t.launchSlot) * 0.4, pump.via === 'ingest' ? now : pump.updatedAt) : '—',
   }));
 
-  const tabCls = (on: boolean) => `rounded-lg px-3 py-1.5 text-sm font-semibold ${on ? 'bg-surface-2 text-ink' : 'text-ink-2 hover:text-ink'}`;
+  const tabCls = (on: boolean) => `rounded-[4px] px-3 py-1.5 text-sm font-semibold ${on ? 'bg-surface-2 text-ink' : 'text-ink-2 hover:text-ink'}`;
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" className="flex gap-1 rounded-xl border border-line bg-surface p-1">
+        <div role="tablist" className="flex gap-1 rounded-md border border-line bg-surface p-1">
           <button role="tab" aria-selected={tab === 'fairway'} onClick={() => choose('fairway')} className={tabCls(tab === 'fairway')}>
             On Fairway
           </button>
@@ -101,18 +101,18 @@ export function Explore({ pump, initialTab }: { pump: Pump; initialTab: 'fairway
       </div>
       {tab === 'fairway' ? (
         error && !data ? (
-          <p className="rounded-xl border border-dashed border-line p-6 text-sm text-bad">Could not read Fairway pools from devnet: {error}</p>
+          <p className="rounded-md border border-dashed border-line p-6 text-sm text-bad">Could not read Fairway pools from devnet: {error}</p>
         ) : !data ? (
-          <div className="skeleton h-64 rounded-xl" aria-busy />
+          <div className="skeleton h-64 rounded-md" aria-busy />
         ) : fwRows.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-line p-6 text-sm text-ink-2">No Fairway pools on devnet yet. <Link href="/launch" className="text-accent hover:underline">Create the first token</Link>.</p>
+          <p className="rounded-md border border-dashed border-line p-6 text-sm text-ink-2">No Fairway pools on devnet yet. <Link href="/launch" className="text-accent hover:underline">Create the first token</Link>.</p>
         ) : (
           <Table rows={fwRows} extraLabel="Price" />
         )
       ) : pump && pumpRows.length ? (
         <Table rows={pumpRows} />
       ) : (
-        <div className="rounded-xl border border-dashed border-line p-6 text-sm text-ink-2">
+        <div className="rounded-md border border-dashed border-line p-6 text-sm text-ink-2">
           <p className="font-semibold text-ink">No real Pump.fun data connected yet.</p>
           <p className="mt-1">
             This tab shows real mainnet launches from the ingest service, fed by the QuickNode Stream. Start the Stream and the ingest service in live mode (see <span className="font-mono">docs/SETUP_REMAINING.md</span>) and set{' '}

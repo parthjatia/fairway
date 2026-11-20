@@ -90,7 +90,7 @@ export function LiveSwapPanel() {
       <button className="mt-2 text-sm text-ink-2 underline" onClick={() => setSell(sell === 'SOL' ? 'USDC' : 'SOL')}>
         Switch to paying {sell === 'SOL' ? 'USDC' : 'SOL'}
       </button>
-      <div className="mt-4 space-y-2 rounded-xl bg-surface-2 p-3 text-sm">
+      <div className="mt-4 space-y-2 rounded-md bg-surface-2 p-3 text-sm">
         <div className="flex justify-between"><span>Your tier</span>{publicKey ? <TierBadge tier={tier} /> : <span className="text-muted">connect a wallet</span>}</div>
         <div className="flex justify-between"><span>Your fee</span><span className="tnum">{fee ? `${fee.feeBps} bps (${fee.source})` : '—'}</span></div>
         <div className="flex justify-between"><span>You receive</span><span className="tnum">{quote ? quote.out.toFixed(sell === 'USDC' ? 4 : 2) : '—'}</span></div>
@@ -98,7 +98,7 @@ export function LiveSwapPanel() {
       {status && <p role="status" className={`mt-3 text-sm ${status.kind === 'ok' ? 'text-good' : 'text-bad'}`}>{status.msg}</p>}
       <button
         disabled={!publicKey || !quote || busy} onClick={() => void submit()}
-        className="mt-4 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-ink disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-4 w-full rounded-md bg-accent hover:bg-accent-hover py-3 text-sm font-semibold text-accent-ink disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy ? 'Confirm in wallet…' : 'Swap'}
       </button>

@@ -52,7 +52,7 @@ export function TwoWallets({ amount, sellBase }: Props) {
         <>
           <div className="grid gap-3 sm:grid-cols-2">
             {cols.map((c) => (
-              <div key={c.name} className="rounded-xl border border-line bg-surface-2 p-4">
+              <div key={c.name} className="rounded-md border border-line bg-surface-2 p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-ink">{c.name}</span>
                   {c.data ? <TierBadge tier={c.data.tier} /> : <span className="text-xs text-muted">{c.loading ? 'loading…' : '—'}</span>}

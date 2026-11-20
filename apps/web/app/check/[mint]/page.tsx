@@ -25,7 +25,7 @@ function Problem({ title, children }: { title: string; children: React.ReactNode
     <div className="mx-auto max-w-2xl space-y-6 py-8">
       <Empty title={title}>{children}</Empty>
       <CheckSearch size="md" />
-      <p className="text-center text-sm text-ink-2">
+      <p className="text-sm text-ink-2">
         <Link href="/check" className="text-accent hover:underline">
           Back to examples
         </Link>
@@ -46,7 +46,7 @@ export default async function CheckReport({ params, searchParams }: Params) {
       <div className="space-y-6">
         <TokenReport r={tb as never} name={(tb as { name?: string }).name} source={tb.source} unit={tb.source === 'devnet' ? 'USDC' : 'SOL'} />
         {tb.source === 'devnet' && (
-          <p className="text-center text-sm">
+          <p className="text-sm">
             <Link href={`/launch/${mint}`} className="font-semibold text-accent hover:underline">Trade this token on Fairway →</Link>
           </p>
         )}

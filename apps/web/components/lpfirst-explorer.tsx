@@ -27,7 +27,7 @@ export function LpFirstExplorer({ data }: { data: LpFirstData }) {
   const days = data.hours / 24;
   const after = cell.lpAfterProtocol[opt]!;
   const isRec = cell.id === rec.id && opt === data.recommended.protocolOption;
-  const chip = (on: boolean) => `rounded-full border px-3 py-1.5 text-sm font-semibold ${on ? 'border-accent bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`;
+  const chip = (on: boolean) => `rounded-md border px-3 py-1.5 text-sm font-semibold ${on ? 'border-accent bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`;
   const ext = data.cells.filter((c) => c.extended && c.kind === 'toxic-only');
   const max = data.cells.find((c) => c.kind === 'max-discount')!;
   const botDay = cell.botExtraFeesUsdPerDay;
@@ -50,14 +50,14 @@ export function LpFirstExplorer({ data }: { data: LpFirstData }) {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-ink-2">
-          {isRec ? <span className="rounded-full bg-accent/15 px-2.5 py-1 font-semibold text-accent">Default setting</span> : (
-            <button onClick={() => { setToxic(rec.fees.TOXIC); setShare(rec.rebateShare); setOpt(data.recommended.protocolOption); }} className="rounded-full border border-line px-2.5 py-1 font-semibold text-accent hover:bg-surface-2">Jump to default</button>
+          {isRec ? <span className="rounded-md border border-line bg-surface-2 px-2.5 py-1 font-semibold text-accent">Default setting</span> : (
+            <button onClick={() => { setToxic(rec.fees.TOXIC); setShare(rec.rebateShare); setOpt(data.recommended.protocolOption); }} className="rounded-md border border-line px-2.5 py-1 font-semibold text-accent hover:bg-surface-2">Jump to default</button>
           )}
           <span>Noise band = {data.noiseSigmas} × standard error over {data.seeds} paired seeds. Values are per day on the simulated pool, versus a flat 30 bps pool in the same random world.</span>
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="flush grid grid-cols-2 lg:grid-cols-4">
         <Stat label="LVR cut" value={`−${cell.lvrReductionPct.mean.toFixed(0)}%`} hint={`arb profit vs flat 30 (${usd(f30.arbProfitUsd / days)}/d)`} tone="good" />
         <Stat label="LP vs flat 30, before protocol" value={`${pm(cell.lpBeforeProtocol)}/d`} hint={verdict(cell.lpBeforeProtocol)} tone={cell.lpBeforeProtocol.beatsNoise ? 'good' : undefined} />
         <Stat label="LP vs flat 30, after protocol" value={`${pm(after)}/d`} hint={verdict(after)} tone={after.beatsNoise ? 'good' : after.mean + 2 * after.stderr < 0 ? 'bad' : undefined} />
@@ -90,7 +90,7 @@ export function LpFirstExplorer({ data }: { data: LpFirstData }) {
       <Card title="All settings" subtitle="LP net vs flat 30 per day after the selected protocol share. ✓ = beats flat 30 beyond the noise band. No setting does.">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm tnum">
-            <thead className="text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Setting</th><th>LP before</th><th>LP after</th><th>Retail Δ</th><th>LVR cut</th><th>p95 Δ</th></tr></thead>
+            <thead className="label"><tr><th className="py-2">Setting</th><th>LP before</th><th>LP after</th><th>Retail Δ</th><th>LVR cut</th><th>p95 Δ</th></tr></thead>
             <tbody className="divide-y divide-line">
               {[...grid, max, ...ext].map((c) => (
                 <tr key={c.id} className={c.id === cell.id ? 'bg-surface-2' : ''}>
@@ -112,7 +112,7 @@ export function LpFirstExplorer({ data }: { data: LpFirstData }) {
 
       <Card title="Extra: if retail volume responds to fees (assumption, not a result)" subtitle={data.elasticityExtra.note}>
         <table className="w-full text-left text-sm tnum">
-          <thead className="text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Elasticity</th><th>LP before protocol</th><th>LP after protocol</th><th>Retail Δ</th></tr></thead>
+          <thead className="label"><tr><th className="py-2">Elasticity</th><th>LP before protocol</th><th>LP after protocol</th><th>Retail Δ</th></tr></thead>
           <tbody className="divide-y divide-line">
             {data.elasticityExtra.rows.map((r) => (
               <tr key={r.elasticity}><td className="py-2">{r.elasticity}</td><td>{pm(r.lpBeforeProtocol)}</td><td>{pm(r.lpAfterProtocol)}</td><td>{bps(r.retailVsFlat30Bps.mean)}</td></tr>

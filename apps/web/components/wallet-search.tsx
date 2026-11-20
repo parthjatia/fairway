@@ -22,10 +22,10 @@ export function WalletSearch() {
           onChange={(e) => setV(e.target.value)}
           placeholder="Paste a wallet address"
           aria-label="Wallet address"
-          className="w-full rounded-xl border border-line bg-surface py-2.5 pl-9 pr-3 font-mono text-sm text-ink outline-none focus:border-accent"
+          className="w-full rounded-md border border-line bg-surface py-2.5 pl-9 pr-3 font-mono text-sm text-ink outline-none focus:border-accent"
         />
       </div>
-      <button disabled={!ok} className="rounded-xl bg-accent px-5 text-sm font-semibold text-accent-ink disabled:opacity-40">
+      <button disabled={!ok} className="rounded-md bg-accent hover:bg-accent-hover px-5 text-sm font-semibold text-accent-ink disabled:opacity-40">
         Look up
       </button>
     </form>

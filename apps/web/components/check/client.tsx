@@ -25,7 +25,7 @@ export function CopyButton({ value, label = 'Copy address' }: { value: string; l
           /* clipboard blocked: nothing to do */
         }
       }}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-2 hover:bg-surface-2 hover:text-ink"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-[4px] border border-line text-ink-2 hover:bg-surface-2 hover:text-ink"
     >
       {done ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
     </button>
@@ -52,7 +52,7 @@ export function CheckSearch({ initial = '', autoFocus = false, size = 'lg' }: { 
       <label htmlFor="check-input" className="sr-only">
         Token mint or wallet address
       </label>
-      <div className={`flex ${h} items-center gap-2 rounded-xl border bg-surface pl-4 pr-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent ${err ? 'border-bad' : 'border-line'}`}>
+      <div className={`flex ${h} items-center gap-2 rounded-md border bg-surface pl-4 pr-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent ${err ? 'border-bad' : 'border-line'}`}>
         <Search size={18} className="shrink-0 text-muted" aria-hidden />
         <input
           id="check-input"
@@ -70,7 +70,7 @@ export function CheckSearch({ initial = '', autoFocus = false, size = 'lg' }: { 
           aria-describedby={err ? 'check-err' : undefined}
           className="min-w-0 flex-1 bg-transparent font-mono text-sm text-ink outline-none placeholder:font-sans placeholder:text-muted focus-visible:outline-none"
         />
-        <button type="submit" className="h-10 shrink-0 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-ink hover:opacity-90">
+        <button type="submit" className="h-10 shrink-0 rounded-[4px] bg-accent px-4 text-sm font-semibold text-accent-ink hover:bg-accent-hover">
           Check
         </button>
       </div>

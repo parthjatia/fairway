@@ -57,7 +57,7 @@ export function WalletDetail({ address }: { address: string }) {
           </Empty>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="flush grid grid-cols-2 lg:grid-cols-4">
               <Stat label={`Score (${primary}s)`} value={`${signed(data.score.scoreBps)} bps`} hint={`max over horizons ${signed(data.score.maxScoreBps)}`} />
               <Stat label="Trades" value={data.score.trades} hint={`min ${cfg.minTrades} to leave STANDARD`} />
               <Stat label="Notional" value={usd(data.score.totalNotional)} hint={`prior K = ${usd(cfg.priorNotional)}`} />
@@ -80,7 +80,7 @@ export function WalletDetail({ address }: { address: string }) {
             <Card title="Per-horizon scores">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {Object.entries(data.score.byHorizon).map(([h, v]) => (
-                  <div key={h} className="rounded-xl border border-line p-3">
+                  <div key={h} className="rounded-md border border-line p-3">
                     <div className="text-xs text-muted">{h}s horizon</div>
                     <div className="text-xl font-semibold text-ink tnum">{signed(v.scoreBps)} bps</div>
                     <div className="text-xs text-ink-2">raw {signed(v.rawBps)} · {v.scoredTrades} trades</div>
@@ -91,7 +91,7 @@ export function WalletDetail({ address }: { address: string }) {
             <Card title="Trades" subtitle={`${data.trades.length} total (${data.source === 'ingest' ? 'from ingest service' : 'computed in-process from fixtures'})`}>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm tnum">
-                  <thead className="text-xs uppercase tracking-wide text-muted">
+                  <thead className="label">
                     <tr>
                       <th className="py-2 pr-4">Time (UTC)</th><th className="pr-4">Side</th><th className="pr-4">Notional</th><th className="pr-4">Price</th><th className="pr-4">Fee</th><th>Markout {primary}s</th>
                     </tr>
@@ -137,7 +137,7 @@ function OnchainCard({ data }: { data: NonNullable<ReturnType<typeof useWalletVi
       subtitle="Computed by the Fairway program from this wallet's Fairway trades, marked out against Pyth. No oracle operator involved."
       action={<span className="flex items-center gap-2">{o.fairFlow && <FairFlowBadge minTrades={o.fairFlowMinTrades} />}<ScoreSourceBadge source={data.scoreSource} /></span>}
     >
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="flush grid grid-cols-2 lg:grid-cols-4">
         <Stat label="Settled trades" value={o.tradeCount} hint={`needs ${o.minTrades} · horizon ${o.markoutSlots} slots`} />
         <Stat label="Onchain score" value={o.tradeCount ? `${signed(o.scoreBps)} bps` : '—'} hint="integer bps, same shrinkage" />
         <Stat label="Onchain tier" value={o.tradeCount ? <TierBadge tier={o.tier} /> : '—'} hint={o.verified ? 'in force' : 'not in force yet'} />
@@ -154,14 +154,14 @@ function OnchainCard({ data }: { data: NonNullable<ReturnType<typeof useWalletVi
                 : `${o.minTrades - o.tradeCount} more settled trades until the onchain score takes over`}
           </span>
         </div>
-        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
-          <div className={`h-full rounded-full ${o.verified ? 'bg-retail' : 'bg-muted'}`} style={{ width: `${pct}%` }} />
+        <div className="mt-1.5 h-2 overflow-hidden rounded-none bg-surface-2" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+          <div className={`h-full rounded-none ${o.verified ? 'bg-retail' : 'bg-muted'}`} style={{ width: `${pct}%` }} />
         </div>
       </div>
       {o.perPool.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm tnum">
-            <thead className="text-xs uppercase tracking-wide text-muted">
+            <thead className="label">
               <tr><th className="py-2 pr-4">Where the evidence comes from</th><th className="pr-4">Settled trades</th><th className="pr-4">Notional</th><th className="pr-4">Score</th><th>Tier on this pool alone</th></tr>
             </thead>
             <tbody className="divide-y divide-line">

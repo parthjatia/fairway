@@ -20,7 +20,7 @@ export function phaseLabel(t: FwToken): { text: string; tone: string } {
 function Card({ t, name, now }: { t: FwToken; name: { symbol: string; name: string }; now: number }) {
   const ph = phaseLabel(t);
   return (
-    <Link href={`/launch/${t.mint}`} className="block rounded-xl border border-line bg-surface p-4 hover:border-ink-2">
+    <Link href={`/launch/${t.mint}`} className="block rounded-md border border-line bg-surface p-4 hover:border-ink-2">
       <div className="flex items-start gap-3">
         <TokenIcon symbol={name.symbol} size={40} />
         <div className="min-w-0 flex-1">
@@ -34,7 +34,7 @@ function Card({ t, name, now }: { t: FwToken; name: { symbol: string; name: stri
         </div>
       </div>
       {t.launch && t.launch.phase === 'window' && (
-        <div className="mt-3 h-1 overflow-hidden rounded-full bg-surface-2" aria-hidden>
+        <div className="mt-3 h-1 overflow-hidden rounded-none bg-surface-2" aria-hidden>
           <div className="h-full bg-accent" style={{ width: `${t.launch.progressPct}%` }} />
         </div>
       )}
@@ -84,18 +84,18 @@ export function LaunchFeed() {
           <h2 className="text-base font-semibold text-ink">Launches</h2>
           <DevnetBadge />
         </div>
-        <button onClick={() => setOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink hover:opacity-90">
+        <button onClick={() => setOpen(true)} className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover">
           <Plus size={15} /> Create token
         </button>
       </div>
       {error && !data ? (
-        <p className="rounded-xl border border-dashed border-line p-6 text-sm text-bad">Could not read launches from devnet: {error}</p>
+        <p className="rounded-md border border-dashed border-line p-6 text-sm text-bad">Could not read launches from devnet: {error}</p>
       ) : !data ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((i) => <div key={i} className="skeleton h-40 rounded-xl" aria-hidden />)}
+          {[0, 1, 2].map((i) => <div key={i} className="skeleton h-40 rounded-md" aria-hidden />)}
         </div>
       ) : launches.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line p-6 text-sm text-ink-2">No launches on devnet yet. Be the first: create a token.</p>
+        <p className="rounded-md border border-dashed border-line p-6 text-sm text-ink-2">No launches on devnet yet. Be the first: create a token.</p>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {launches.map((t) => (
@@ -108,7 +108,7 @@ export function LaunchFeed() {
       {open && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-4 py-[6vh]" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
           <div role="dialog" aria-modal aria-label="Create token" className="relative mx-auto max-w-2xl">
-            <button onClick={() => setOpen(false)} aria-label="Close" className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink">
+            <button onClick={() => setOpen(false)} aria-label="Close" className="absolute right-3 top-3 z-10 rounded-[4px] p-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink">
               <X size={16} />
             </button>
             <LaunchWizard />

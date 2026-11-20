@@ -47,7 +47,7 @@ export function FwLaunchDetail({ mint }: { mint: string }) {
   }, [connection, mint, quoteMint]);
 
   if (error && !data) return <Empty title="No Fairway pool for this token">{error} <Link href="/launch" className="text-accent hover:underline">Back to launches</Link></Empty>;
-  if (!data) return <div className="skeleton h-96 rounded-xl" aria-busy />;
+  if (!data) return <div className="skeleton h-96 rounded-md" aria-busy />;
   const t = data.token;
   const n = t.name.startsWith('Token ') && name ? name : { symbol: t.symbol, name: t.name };
   const ph = phaseLabel(t);
@@ -56,7 +56,7 @@ export function FwLaunchDetail({ mint }: { mint: string }) {
     <div className="space-y-6">
       <header>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">{t.isLaunch ? 'Fairway Launch' : 'Fairway pool'}</span>
+          <span className="label">{t.isLaunch ? 'Fairway Launch' : 'Fairway pool'}</span>
           <DevnetBadge />
         </div>
         <div className="mt-2 flex items-center gap-3">
@@ -67,7 +67,7 @@ export function FwLaunchDetail({ mint }: { mint: string }) {
           </div>
         </div>
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-sm">
-          <code className="min-w-0 max-w-full truncate rounded-lg bg-surface-2 px-3 py-1.5 font-mono text-xs text-ink-2" title={mint}>{mint}</code>
+          <code className="min-w-0 max-w-full truncate rounded-[4px] bg-surface-2 px-3 py-1.5 font-mono text-xs text-ink-2" title={mint}>{mint}</code>
           <CopyButton value={mint} />
           <a href={explorerAddr(t.pool)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-ink-2 hover:text-ink">
             Pool on Explorer <ExternalLink size={12} />
@@ -82,11 +82,11 @@ export function FwLaunchDetail({ mint }: { mint: string }) {
           </span>
         </div>
         {inWindow && curve && (
-          <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-md">
+          <div className="flush mt-4 grid grid-cols-3 sm:max-w-md">
             {[0, 1, 2].map((tier) => {
               const f = launchFeeBps(curve.curve, tier, curve.slot, curve.launchSlot, curve.windowSlots);
               return (
-                <div key={tier} className="rounded-lg border border-line px-3 py-2">
+                <div key={tier} className="rounded-[4px] border border-line px-3 py-2">
                   <TierBadge tier={TIER_NAMES[tier] as Tier} />
                   <div className="mt-1 text-sm font-semibold text-ink tnum">{f === null ? '—' : `${(f / 100).toFixed(2)}%`}</div>
                 </div>
@@ -104,7 +104,7 @@ export function FwLaunchDetail({ mint }: { mint: string }) {
           ) : (
             <div className="-mx-6 overflow-x-auto px-6">
               <table className="w-full min-w-[460px] text-left text-sm">
-                <thead className="text-xs uppercase tracking-wide text-muted">
+                <thead className="label">
                   <tr>
                     <th className="py-2 pr-3 font-semibold">Wallet</th>
                     <th className="py-2 pr-3 font-semibold">Side</th>

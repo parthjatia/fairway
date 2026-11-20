@@ -29,15 +29,15 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
       <div className="space-y-6">
         <nav aria-label="Pool" className="flex flex-wrap gap-2 text-sm">
           {pairs().map((x) => (
-            <Link key={x.key} href={x.key === 'sol' ? '/pool' : `/pool?pool=${x.key}`} aria-current={x.key === key ? 'page' : undefined} className={`rounded-full border px-3 py-1.5 font-semibold ${x.key === key ? 'border-accent bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`}>
+            <Link key={x.key} href={x.key === 'sol' ? '/pool' : `/pool?pool=${x.key}`} aria-current={x.key === key ? 'page' : undefined} className={`rounded-md border px-3 py-1.5 font-semibold ${x.key === key ? 'border-accent bg-surface-2 text-ink' : 'border-line text-ink-2 hover:text-ink'}`}>
               {x.label}
             </Link>
           ))}
         </nav>
-        <div className="rounded-xl border border-line bg-surface p-5">
+        <div className="rounded-md border border-line bg-surface p-5">
           <div className="grid gap-5 sm:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div>
-              <div className="text-xs uppercase tracking-wide text-muted">Extra fees earned from bots</div>
+              <div className="label">Extra fees earned from bots</div>
               <div className="mt-1 text-4xl font-semibold tracking-tight text-ink tnum">{usd(e.botExtraFeesUsd)}</div>
               <p className="mt-1 text-xs leading-relaxed text-ink-2">What TOXIC-tier flow paid above a flat 30 bps fee on the same volume ({p.tradesByTier.TOXIC} swaps). A flat-fee pool would have left this on the table.</p>
             </div>
@@ -50,7 +50,7 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
             otherwise the trader pays.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="flush grid grid-cols-2 lg:grid-cols-4">
           <Stat label="TVL" value={usdCompact(p.tvlUsd)} hint={`${usdCompact(p.reserves.base)} ${p.baseSymbol} · ${usdCompact(p.reserves.quote)} USDC`.replace('$', '')} />
           <Stat label="Pool price" value={usd(p.price, key === 'bonk' ? 8 : 2)} hint={`USDC per ${p.baseSymbol}`} />
           <Stat label="Volume" value={usdCompact(totalVol)} hint={`${p.trades} swaps · ${p.uniqueTraders} wallets`} />
@@ -63,7 +63,7 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
           <Card title="Volume and fees by tier">
             <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] whitespace-nowrap text-sm tnum">
-              <thead className="text-left text-xs uppercase tracking-wide text-muted">
+              <thead className="text-left label">
                 <tr><th className="py-2">Tier</th><th>Fee</th><th>Swaps</th><th>Volume</th><th>Fees</th></tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -85,7 +85,7 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
           <Card title="Snipers score TOXIC fastest on memecoins" subtitle="Settled Fairway trades until a wallet's running onchain score first reaches TOXIC (≥ 10 bps, shrunk with K = 2,000). Test mint, synthetic data.">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[420px] whitespace-nowrap text-left text-sm tnum">
-                <thead className="text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Wallet</th><th>Here (BONK-test)</th><th>On SOL / USDC</th></tr></thead>
+                <thead className="label"><tr><th className="py-2">Wallet</th><th>Here (BONK-test)</th><th>On SOL / USDC</th></tr></thead>
                 <tbody className="divide-y divide-line">
                   {sniperRows.map((r) => (
                     <tr key={r.address}>
@@ -101,7 +101,7 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
           </Card>
         )}
         <Card title="LP economics (simulator, LP-first default)" subtitle={`Per day on a $${(backtest.headline.tvlUsd / 1e6).toFixed(0)}M pool; ${lpfirst.seeds.length} paired seeds. LVR proxy = profit arbitrageurs and snipers extract at the CEX mid.`}>
-          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="flush mb-5 grid grid-cols-2 lg:grid-cols-4">
             <Stat label="LVR cut vs flat 30" value={`−${rec.lvrReductionPct.mean.toFixed(0)}%`} hint={`${usd(lpfirst.baseline.flat30.arbProfitUsd / lfDays)} → ${usd((lpfirst.baseline.flat30.arbProfitUsd / lfDays) * (1 - rec.lvrReductionPct.mean / 100))}/d`} tone="good" />
             <Stat label="LP vs flat 30, before protocol" value={`${usdSigned(rec.lpBeforeProtocol.mean)} ± ${usd(rec.lpBeforeProtocol.stderr)}`} hint="per day · within noise" />
             <Stat label="LP vs flat 30, after protocol" value={`${usdSigned(after.mean)} ± ${usd(after.stderr)}`} hint="per day · 15% of the toxic premium" />
@@ -122,7 +122,7 @@ export default async function PoolPage({ searchParams }: { searchParams: Promise
         <Card title="Recent swaps">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] whitespace-nowrap text-left text-sm tnum">
-              <thead className="text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Time (UTC)</th><th>Trader</th><th>Side</th><th>Size</th><th>Tier</th><th>Fee</th></tr></thead>
+              <thead className="label"><tr><th className="py-2">Time (UTC)</th><th>Trader</th><th>Side</th><th>Size</th><th>Tier</th><th>Fee</th></tr></thead>
               <tbody className="divide-y divide-line">
                 {p.recent.map((s) => (
                   <tr key={s.sig}>

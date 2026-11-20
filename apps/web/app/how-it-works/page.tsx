@@ -49,7 +49,7 @@ export default function HowItWorks() {
           <ol className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-stretch">
             {CHECK_STEPS.map(([t, d], i) => (
               <li key={t} className="flex flex-1 items-stretch gap-2">
-                <div className="flex flex-1 flex-col justify-center rounded-xl border border-line bg-surface-2 px-3 py-3 text-center">
+                <div className="flex flex-1 flex-col justify-center rounded-md border border-line bg-surface-2 px-3 py-3 text-center">
                   <div className="text-sm font-semibold text-ink">{t}</div>
                   <div className="text-xs text-ink-2">{d}</div>
                 </div>
@@ -65,7 +65,7 @@ export default function HowItWorks() {
           <ol className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-stretch">
             {LAUNCH_STEPS.map(([t, d], i) => (
               <li key={t} className="flex flex-1 items-stretch gap-2">
-                <div className="flex flex-1 flex-col justify-center rounded-xl border border-line bg-surface-2 px-3 py-3 text-center">
+                <div className="flex flex-1 flex-col justify-center rounded-md border border-line bg-surface-2 px-3 py-3 text-center">
                   <div className="text-sm font-semibold text-ink">{t}</div>
                   <div className="text-xs text-ink-2">{d}</div>
                 </div>
@@ -83,7 +83,7 @@ export default function HowItWorks() {
           <ol className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-stretch">
             {STEPS.map(([t, d], i) => (
               <li key={t} className="flex flex-1 items-stretch gap-2">
-                <div className="flex flex-1 flex-col justify-center rounded-xl border border-line bg-surface-2 px-3 py-3 text-center">
+                <div className="flex flex-1 flex-col justify-center rounded-md border border-line bg-surface-2 px-3 py-3 text-center">
                   <div className="text-sm font-semibold text-ink">{t}</div>
                   <div className="text-xs text-ink-2">{d}</div>
                 </div>
@@ -99,7 +99,7 @@ export default function HowItWorks() {
           <ol className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-stretch">
             {ONCHAIN_STEPS.map(([t, d], i) => (
               <li key={t} className="flex flex-1 items-stretch gap-2">
-                <div className="flex flex-1 flex-col justify-center rounded-xl border border-line bg-surface-2 px-3 py-3 text-center">
+                <div className="flex flex-1 flex-col justify-center rounded-md border border-line bg-surface-2 px-3 py-3 text-center">
                   <div className="text-sm font-semibold text-ink">{t}</div>
                   <div className="text-xs text-ink-2">{d}</div>
                 </div>
@@ -108,10 +108,10 @@ export default function HowItWorks() {
             ))}
           </ol>
           <div className="mt-4 grid gap-3 text-sm leading-relaxed text-ink-2 sm:grid-cols-2">
-            <div className="rounded-xl border border-line p-3">
+            <div className="rounded-md border border-line p-3">
               <b className="text-ink">Bootstrap score</b> (keeper). Computed offchain from a wallet&apos;s history on every venue (Raydium etc., via QuickNode Streams) and written with set_score. Lets a wallet be scored from day one. Trusted: the score authority can write any tier, limited by the TTL.
             </div>
-            <div className="rounded-xl border border-line p-3">
+            <div className="rounded-md border border-line p-3">
               <b className="text-ink">Onchain verified score</b> (program). Once a wallet has ≥ 1,000 USDC and ≥ 5 trades of settled Fairway flow, its onchain tier is used and keeper writes no longer affect its fee. Inputs are the wallet&apos;s own swaps and Pyth (feed id, staleness and confidence checked). The same formula runs in TypeScript and Rust, checked on shared test vectors.
             </div>
           </div>
@@ -149,9 +149,9 @@ export default function HowItWorks() {
         </Card>
         <Card title="Tiers">
           <div className="grid gap-3 sm:grid-cols-3 text-sm text-ink-2">
-            <div className="rounded-xl border border-line p-3"><b className="text-ink">RETAIL · 30 bps − rebate</b><br />score ≤ 3 bps, ≥5 trades, ≥3 days</div>
-            <div className="rounded-xl border border-line p-3"><b className="text-ink">STANDARD · 30 bps</b><br />unknown, new, or in-between</div>
-            <div className="rounded-xl border border-line p-3"><b className="text-ink">TOXIC · 80 bps</b><br />score ≥ 10 bps, ≥5 trades</div>
+            <div className="rounded-md border border-line p-3"><b className="text-ink">RETAIL · 30 bps − rebate</b><br />score ≤ 3 bps, ≥5 trades, ≥3 days</div>
+            <div className="rounded-md border border-line p-3"><b className="text-ink">STANDARD · 30 bps</b><br />unknown, new, or in-between</div>
+            <div className="rounded-md border border-line p-3"><b className="text-ink">TOXIC · 80 bps</b><br />score ≥ 10 bps, ≥5 trades</div>
           </div>
         </Card>
       </div>

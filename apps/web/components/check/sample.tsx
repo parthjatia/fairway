@@ -7,9 +7,9 @@ import { short } from '@/lib/format';
 /** A real report, in small: the landing page's proof that the product works. */
 export function SampleReport({ t, source }: { t: TokenCheck & { name?: string }; source: 'live' | 'simulated' }) {
   return (
-    <Link href={`/check/${t.mint}`} className="block rounded-xl border border-line bg-surface p-6 hover:border-ink-2" aria-label={`Open the report for ${t.name ?? short(t.mint, 4)}`}>
+    <Link href={`/check/${t.mint}`} className="block rounded-md border border-line bg-surface p-6 hover:border-ink-2" aria-label={`Open the report for ${t.name ?? short(t.mint, 4)}`}>
       <div className="flex items-center justify-between gap-4">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Sample report</span>
+        <span className="label">Sample report</span>
         <DataBadge source={source} />
       </div>
       <div className="mt-4 flex items-center justify-between gap-4">

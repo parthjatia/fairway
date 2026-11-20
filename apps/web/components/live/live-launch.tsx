@@ -44,7 +44,7 @@ export function LiveCreate({ name, symbol, ...p }: { name: string; symbol: strin
             setBusy(false);
           }
         }}
-        className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-md bg-accent hover:bg-accent-hover px-5 py-2.5 text-sm font-semibold text-accent-ink disabled:opacity-50"
       >
         <Rocket size={15} /> {busy ? 'Creating (3 transactions)…' : 'Create launch onchain'}
       </button>
@@ -73,7 +73,7 @@ export function LiveLaunchView({ mint }: { mint: string }) {
     return () => clearInterval(t);
   }, [refresh]);
   if (err) return <Empty>Could not load the launch: {err}</Empty>;
-  if (!data) return <div className="h-64 animate-pulse rounded-xl border border-line bg-surface" aria-busy />;
+  if (!data) return <div className="h-64 animate-pulse rounded-md border border-line bg-surface" aria-busy />;
   if (!data.pool) return <Empty>No Fairway pool for mint {short(mint)} on this cluster. <Link href="/launch" className="text-accent">Create a launch</Link>.</Empty>;
   const l = data.pool.launch;
   const fee = (t: number) => launchFeeBps(l.curve, t, data.slot, l.launchSlot, l.windowSlots);
@@ -81,7 +81,7 @@ export function LiveLaunchView({ mint }: { mint: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-accent">Launch · live</div>
+        <div className="mb-1 label">Launch · live</div>
         <h1 className="font-mono text-2xl font-semibold text-ink">{short(mint, 6)}</h1>
         <p className="mt-2 text-sm text-ink-2">
           {l.windowSlots === 0n ? 'Not a launch pool (normal tier fees).' : `Opened at slot ${l.launchSlot}, window ${l.windowSlots} slots. Now slot ${data.slot} (${elapsed >= 0n ? `${elapsed} slots in` : 'not open yet'}).`} TWAP scoring:{' '}
@@ -89,7 +89,7 @@ export function LiveLaunchView({ mint }: { mint: string }) {
           <span className="font-mono">claimCreatorFeesIx</span>).
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="flush grid grid-cols-3">
         {[0, 1, 2].map((t) => (
           <Stat key={t} label={`Fee now: ${TIER_NAMES[t]}`} value={`${fee(t) ?? '—'}${fee(t) === null ? '' : ' bps'}`} hint={fee(t) === null ? 'window over: Config fee' : 'launch curve'} />
         ))}
@@ -99,7 +99,7 @@ export function LiveLaunchView({ mint }: { mint: string }) {
           <Empty>No swaps yet.</Empty>
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-muted">
+            <thead className="label">
               <tr>
                 <th className="py-2 pr-3 font-semibold">Trader</th>
                 <th className="py-2 pr-3 font-semibold">Side</th>

@@ -49,15 +49,15 @@ function Picker({ opts, onPick, onClose, exclude }: { opts: Opt[]; onPick: (m: s
   const shown = opts.filter((o) => !s || o.symbol.toLowerCase().includes(s) || o.name.toLowerCase().includes(s) || o.mint.toLowerCase() === s || o.mint.toLowerCase().startsWith(s));
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[10vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal aria-label="Select a token" className="w-full max-w-md overflow-hidden rounded-2xl border border-line bg-surface">
+      <div role="dialog" aria-modal aria-label="Select a token" className="w-full max-w-md overflow-hidden rounded-md border border-line bg-surface">
         <div className="flex items-center justify-between px-4 pt-4">
           <h2 className="text-base font-semibold text-ink">Select a token</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink">
+          <button onClick={onClose} aria-label="Close" className="rounded-[4px] p-1.5 text-ink-2 hover:bg-surface-2 hover:text-ink">
             <X size={16} />
           </button>
         </div>
         <div className="p-4">
-          <div className="flex h-11 items-center gap-2 rounded-xl border border-line bg-bg px-3 focus-within:border-accent">
+          <div className="flex h-11 items-center gap-2 rounded-md border border-line bg-bg px-3 focus-within:border-accent">
             <Search size={16} className="text-muted" aria-hidden />
             <input
               ref={ref} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, symbol or paste a mint" aria-label="Search tokens"
@@ -66,7 +66,7 @@ function Picker({ opts, onPick, onClose, exclude }: { opts: Opt[]; onPick: (m: s
           </div>
         </div>
         <ul className="max-h-[55vh] overflow-y-auto border-t border-line pb-2">
-          {shown.length === 0 && <li className="px-4 py-6 text-center text-sm text-ink-2">No Fairway pool for “{q}” on devnet.</li>}
+          {shown.length === 0 && <li className="px-4 py-6 text-sm text-ink-2">No Fairway pool for “{q}” on devnet.</li>}
           {shown.map((o) => (
             <li key={o.mint}>
               <button
@@ -93,7 +93,7 @@ function Picker({ opts, onPick, onClose, exclude }: { opts: Opt[]; onPick: (m: s
 
 function TokenButton({ o, onClick }: { o: Opt | undefined; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex shrink-0 items-center gap-2 rounded-full border border-line bg-surface py-1 pl-1 pr-3 text-sm font-semibold text-ink hover:bg-surface-2" aria-label={`Select token, current ${o?.symbol ?? 'none'}`}>
+    <button onClick={onClick} className="flex shrink-0 items-center gap-2 rounded-md border border-line bg-surface py-1 pl-1 pr-2.5 text-sm font-medium text-ink duration-150 hover:border-line-strong" aria-label={`Select token, current ${o?.symbol ?? 'none'}`}>
       {o ? <TokenIcon symbol={o.symbol} size={26} /> : <span className="h-[26px] w-[26px] rounded-full bg-surface-2" />}
       {o?.symbol ?? 'Select'}
       <ChevronDown size={14} className="text-muted" />
@@ -234,16 +234,16 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
   const cta = !publicKey ? null : !pool ? 'No pool for this pair' : !quote ? 'Enter an amount' : tooMuch ? `Not enough ${payO?.symbol}` : busy ? 'Confirm in your wallet…' : 'Swap';
 
   return (
-    <div className="w-full min-w-0 rounded-2xl border border-line bg-surface p-4 sm:p-5">
+    <div className="w-full min-w-0 rounded-md border border-line bg-surface p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-base font-semibold text-ink">Swap</h2>
         <DevnetBadge />
       </div>
-      {error && !data && <p className="mb-3 rounded-xl bg-surface-2 p-3 text-sm text-bad">Could not load Fairway pools: {error}</p>}
-      {!data && !error && <div className="skeleton mb-3 h-[268px] rounded-xl" aria-busy />}
+      {error && !data && <p className="mb-3 rounded-md bg-surface-2 p-3 text-sm text-bad">Could not load Fairway pools: {error}</p>}
+      {!data && !error && <div className="skeleton mb-3 h-[268px] rounded-md" aria-busy />}
       {data && (
         <>
-          <div className="rounded-xl bg-surface-2 p-3">
+          <div className="rounded-md bg-surface-2 p-3">
             <div className="flex items-center justify-between text-xs text-ink-2">
               <span>You pay</span>
               {balance !== null && (
@@ -263,12 +263,12 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
           <div className="relative z-10 -my-2 flex justify-center">
             <button
               aria-label="Switch direction" onClick={() => { setPay(get); setGet(pay); setResult(null); }}
-              className="rounded-xl border-4 border-surface bg-surface-2 p-1.5 text-ink-2 hover:text-ink"
+              className="rounded-md border border-line bg-surface p-1.5 text-ink-2 duration-150 hover:border-line-strong hover:text-ink"
             >
               <ArrowDownUp size={16} />
             </button>
           </div>
-          <div className="rounded-xl bg-surface-2 p-3">
+          <div className="rounded-md bg-surface-2 p-3">
             <div className="text-xs text-ink-2">You receive</div>
             <div className="mt-1 flex items-center gap-3">
               <span className={`min-w-0 flex-1 truncate text-3xl font-semibold tnum ${quote ? 'text-ink' : 'text-muted'}`}>{quote ? fmtAmt(quote.out) : '0'}</span>
@@ -276,7 +276,7 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
             </div>
           </div>
 
-          <div className="mt-3 space-y-2 rounded-xl border border-line p-3 text-sm">
+          <div className="mt-3 space-y-2 rounded-md border border-line p-3 text-sm">
             <div className="flex items-center justify-between gap-3">
               <span className="text-ink-2">Your tier</span>
               {publicKey ? <TierBadge tier={tier} /> : <span className="text-muted">—</span>}
@@ -309,7 +309,7 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
           </div>
 
           {result && (
-            <div role="status" className={`mt-3 rounded-xl p-3 text-sm ${result.ok ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'}`}>
+            <div role="status" className={`mt-3 rounded-md p-3 text-sm ${result.ok ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'}`}>
               {result.msg}
               {result.sig && (
                 <a href={explorerTx(result.sig)} target="_blank" rel="noreferrer" className="ml-1 inline-flex items-center gap-1 font-semibold underline">
@@ -322,7 +322,7 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
             {publicKey ? (
               <button
                 disabled={!quote || busy || tooMuch || !pool} onClick={() => void submit()}
-                className="h-12 w-full rounded-xl bg-accent text-sm font-semibold text-accent-ink disabled:cursor-not-allowed disabled:opacity-40"
+                className="h-11 w-full rounded-md bg-accent hover:bg-accent-hover text-sm font-medium text-accent-ink disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {cta}
               </button>
@@ -336,7 +336,7 @@ export function SwapCard({ fixedMint, onSwapped }: { fixedMint?: string; onSwapp
             </div>
           )}
           {pool && !fixedMint && (
-            <p className="mt-3 text-center text-xs text-muted">
+            <p className="mt-3 text-xs text-muted">
               <Link href={`/check/${pool.mint}`} className="hover:text-ink">
                 Fairway Check for {byMint.get(pool.mint)?.symbol} →
               </Link>

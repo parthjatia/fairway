@@ -81,14 +81,14 @@ export function SwapPanel() {
           <div className="mb-3 flex items-center justify-between">
             <span className="flex items-center gap-2 text-sm font-semibold text-ink">
               Swap
-              <span role="tablist" aria-label="Pair" className="flex rounded-full border border-line bg-surface-2 p-0.5 text-xs font-semibold">
+              <span role="tablist" aria-label="Pair" className="flex rounded-[3px] border border-line bg-surface-2 p-0.5 text-xs font-semibold">
                 {pairs.map((p) => (
                   <button
                     key={p.key}
                     role="tab"
                     aria-selected={p.key === pair.key}
                     onClick={() => { setPairKey(p.key); setSellBase(false); setAmount(p.key === 'bonk' ? '100' : '250'); }}
-                    className={`rounded-full px-2.5 py-1 ${p.key === pair.key ? 'bg-surface text-ink' : 'text-ink-2 hover:text-ink'}`}
+                    className={`rounded-md px-2.5 py-1 ${p.key === pair.key ? 'bg-surface text-ink' : 'text-ink-2 hover:text-ink'}`}
                   >
                     {p.label}
                   </button>
@@ -113,7 +113,7 @@ export function SwapPanel() {
                 setAmount(q.res ? String(Number(q.res.out.toFixed(dpOf(buyToken)))) : amount);
               }}
               aria-label="Switch direction"
-              className="rounded-xl border border-line bg-surface p-2 text-ink-2 hover:text-ink"
+              className="rounded-md border border-line bg-surface p-2 text-ink-2 hover:text-ink"
             >
               <ArrowDownUp size={16} />
             </button>
@@ -122,7 +122,7 @@ export function SwapPanel() {
             <div className="text-3xl font-semibold tracking-tight text-ink tnum">{q.res ? num(q.res.out, dpOf(buyToken)) : '—'}</div>
           </TokenBox>
 
-          <div className="mt-4 space-y-2 rounded-xl bg-surface-2 p-3 text-sm">
+          <div className="mt-4 space-y-2 rounded-md bg-surface-2 p-3 text-sm">
             <Row k="Your tier">{loading ? <span className="text-muted">loading…</span> : <TierBadge tier={tier} />}</Row>
             <Row k="Your fee">
               <span className="font-semibold text-ink tnum">{feeBps} bps</span>
@@ -146,7 +146,7 @@ export function SwapPanel() {
           <button
             disabled={!q.res}
             onClick={() => setConfirming(true)}
-            className="mt-4 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mt-4 w-full rounded-md bg-accent py-3 text-sm font-semibold text-accent-ink transition-opacity hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             {q.res ? `Review swap as ${persona.name}` : 'Enter an amount'}
           </button>
@@ -216,7 +216,7 @@ export function SwapPanel() {
           }
         >
           {error && <p className="text-sm text-bad">Couldn&apos;t load the score: {error}</p>}
-          {loading && !wallet && <div className="h-40 animate-pulse rounded-xl bg-surface-2" />}
+          {loading && !wallet && <div className="h-40 animate-pulse rounded-md bg-surface-2" />}
           {wallet && (
             <>
               <div className="mb-2 flex flex-wrap items-center gap-2"><ScoreSourceBadge source={wallet.scoreSource} />{wallet.onchain.fairFlow && <FairFlowBadge minTrades={wallet.onchain.fairFlowMinTrades} />}</div>
@@ -245,7 +245,7 @@ export function SwapPanel() {
                   </div>
                 </>
               ) : (
-                <div className="mt-4 flex gap-3 rounded-xl border border-line bg-surface-2 p-4 text-sm text-ink-2">
+                <div className="mt-4 flex gap-3 rounded-md border border-line bg-surface-2 p-4 text-sm text-ink-2">
                   <Info size={16} className="mt-0.5 shrink-0 text-accent" />
                   <span>
                     No trading history on any watched venue. Fairway charges unknown wallets the STANDARD fee, never less. A bot that spins up a fresh wallet to escape its TOXIC
@@ -267,7 +267,7 @@ export function SwapPanel() {
 
       {confirming && q.res && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Confirm swap">
-          <div className="w-full max-w-sm rounded-xl border border-line bg-surface p-5">
+          <div className="w-full max-w-sm rounded-md border border-line bg-surface p-5">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-semibold text-ink">Confirm swap</h3>
               <button onClick={() => setConfirming(false)} aria-label="Close" className="text-muted hover:text-ink">
@@ -295,7 +295,7 @@ export function SwapPanel() {
               Onchain this is <code>swap(amount_in, min_amount_out, a_to_b)</code>. The fee tier comes from the PDA <code>[&quot;score&quot;, signer]</code>. Mock mode: no wallet,
               simulated execution.
             </p>
-            <button onClick={execute} className="mt-4 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-ink hover:opacity-90">
+            <button onClick={execute} className="mt-4 w-full rounded-md bg-accent py-3 text-sm font-semibold text-accent-ink hover:bg-accent-hover">
               Confirm swap
             </button>
           </div>
@@ -307,11 +307,11 @@ export function SwapPanel() {
 
 function TokenBox({ label, token, children }: { label: string; token: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-line bg-surface-2 p-4">
+    <div className="rounded-md border border-line bg-surface-2 p-4">
       <div className="mb-1 text-xs text-muted">{label}</div>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">{children}</div>
-        <span className="rounded-full border border-line bg-surface px-3 py-1 text-sm font-semibold text-ink">{token}</span>
+        <span className="rounded-md border border-line bg-surface px-3 py-1 text-sm font-semibold text-ink">{token}</span>
       </div>
     </div>
   );
@@ -325,7 +325,7 @@ const Row = ({ k, children }: { k: string; children: React.ReactNode }) => (
 );
 
 const Mini = ({ k, v }: { k: string; v: string }) => (
-  <div className="rounded-xl bg-surface-2 px-3 py-2">
+  <div className="rounded-md bg-surface-2 px-3 py-2">
     <div className="text-xs text-muted">{k}</div>
     <div className="text-base font-semibold text-ink tnum">{v}</div>
   </div>

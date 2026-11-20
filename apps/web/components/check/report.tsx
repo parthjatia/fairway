@@ -16,8 +16,8 @@ const pct = (x: number) => `${Math.round(x)}%`;
 
 export function GradeMark({ grade, className = '' }: { grade: RiskGrade; className?: string }) {
   return (
-    <div className={`inline-flex flex-col rounded-xl border px-6 py-4 ${GRADE[grade].ring} ${className}`}>
-      <span className="text-xs font-semibold uppercase tracking-wide text-ink-2">Risk grade</span>
+    <div className={`inline-flex flex-col rounded-md border px-6 py-4 ${GRADE[grade].ring} ${className}`}>
+      <span className="label text-ink-2">Risk grade</span>
       <span className={`text-4xl font-semibold tracking-tight ${GRADE[grade].text}`}>{grade}</span>
     </div>
   );
@@ -27,7 +27,7 @@ export function FairLaunchBadge() {
   return (
     <span
       title={`Fair launch verified: known snipers bought under ${DEFAULT_CHECK_CONFIG.fairLaunchMaxSniperSharePct}% of the early supply, across at least ${DEFAULT_CHECK_CONFIG.fairLaunchMinBuyers} early buyers.`}
-      className="inline-flex items-center gap-1.5 rounded-full border border-good/40 bg-good/10 px-3 py-1 text-xs font-semibold text-good"
+      className="inline-flex items-center gap-1.5 rounded-[3px] border border-good/40 bg-good/10 px-3 py-1 text-xs font-semibold text-good"
     >
       <Check size={12} aria-hidden />
       Fair launch verified
@@ -37,9 +37,9 @@ export function FairLaunchBadge() {
 
 export function Big({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <div className="rounded-xl border border-line bg-surface p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-ink">{value}</div>
+    <div className="rounded-md border border-line bg-surface p-4">
+      <div className="label">{label}</div>
+      <div className="tnum mt-2 text-2xl font-medium tracking-tight text-ink">{value}</div>
       <div className="mt-1 text-sm text-ink-2">{hint}</div>
     </div>
   );
@@ -62,9 +62,9 @@ export function SniperMeter({ sharePct, grade }: { sharePct: number; grade: Risk
         aria-valuemax={100}
         aria-valuenow={Math.round(w)}
         aria-valuetext={`${pct(sharePct)} of early supply bought by known snipers`}
-        className="relative h-3 overflow-hidden rounded-full bg-surface-2"
+        className="relative h-3 overflow-hidden rounded-none bg-surface-2"
       >
-        <div className={`h-full rounded-full ${GRADE[grade].bar}`} style={{ width: `${w}%` }} />
+        <div className={`h-full rounded-none ${GRADE[grade].bar}`} style={{ width: `${w}%` }} />
         {[c.mediumSniperSharePct, c.highSniperSharePct].map((t) => (
           <span key={t} className="absolute top-0 h-full w-px bg-bg" style={{ left: `${t}%` }} aria-hidden />
         ))}
@@ -93,7 +93,7 @@ function BuyersTable({ buyers, self }: { buyers: CheckBuyer[]; self?: string }) 
     <div className="-mx-2 overflow-x-auto px-2">
       <table className="w-full text-left text-sm">
         <caption className="sr-only">Top early buyers, largest first</caption>
-        <thead className="text-xs uppercase tracking-wide text-muted">
+        <thead className="label">
           <tr>
             <th scope="col" className="py-2 pr-4 font-semibold">Wallet</th>
             <th scope="col" className="hidden py-2 pr-4 font-semibold sm:table-cell">Tier</th>
@@ -119,7 +119,7 @@ function BuyersTable({ buyers, self }: { buyers: CheckBuyer[]; self?: string }) 
                 <span className="inline-flex flex-wrap items-center gap-2">
                   <TierBadge tier={b.tier} />
                   {b.bundle && (
-                    <span title="Funded by a known bundler shortly before the launch." className="rounded-full border border-[color:var(--s-bundle)] px-2 py-0.5 text-xs font-semibold text-[color:var(--s-bundle)]">
+                    <span title="Funded by a known bundler shortly before the launch." className="rounded-[3px] border border-[color:var(--s-bundle)] px-2 py-0.5 text-xs font-semibold text-[color:var(--s-bundle)]">
                       bundle
                     </span>
                   )}
@@ -141,8 +141,8 @@ function BuyersTable({ buyers, self }: { buyers: CheckBuyer[]; self?: string }) 
 export function HowComputed({ kind }: { kind: 'token' | 'wallet' }) {
   const c = DEFAULT_CHECK_CONFIG;
   return (
-    <details className="group rounded-xl border border-line bg-surface">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-xl p-6 text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
+    <details className="group rounded-md border border-line bg-surface">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-md p-6 text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
         How this is computed
         <ChevronDown size={18} className="shrink-0 text-muted transition-transform group-open:rotate-180" aria-hidden />
       </summary>
@@ -182,8 +182,8 @@ export function HowComputed({ kind }: { kind: 'token' | 'wallet' }) {
 
 function HowComputedDevnet() {
   return (
-    <details className="group rounded-xl border border-line bg-surface">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-xl p-6 text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
+    <details className="group rounded-md border border-line bg-surface">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-md p-6 text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
         How this is computed
         <ChevronDown size={18} className="shrink-0 text-muted transition-transform group-open:rotate-180" aria-hidden />
       </summary>
@@ -202,12 +202,12 @@ export function MintHeader({ eyebrow, title, mint, source, children }: { eyebrow
   return (
     <header>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">{eyebrow}</span>
+        <span className="label">{eyebrow}</span>
         <DataBadge source={source} />
       </div>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{title}</h1>
       <div className="mt-3 flex min-w-0 items-center gap-2">
-        <code className="min-w-0 truncate rounded-lg bg-surface-2 px-3 py-1.5 font-mono text-sm text-ink-2" title={mint}>
+        <code className="min-w-0 truncate rounded-[4px] bg-surface-2 px-3 py-1.5 font-mono text-sm text-ink-2" title={mint}>
           {mint}
         </code>
         <CopyButton value={mint} />
@@ -239,7 +239,7 @@ export function TokenReport({ r, name, source, unit = 'SOL', embedded = false }:
           )}
         </div>
       </Card>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="flush grid grid-cols-2 lg:grid-cols-4">
         <Big label="Sniper share" value={pct(r.sniperSharePct)} hint={`${r.sniperCount} known sniper${r.sniperCount === 1 ? '' : 's'}`} />
         <Big label="New wallets" value={pct(r.freshWalletSharePct)} hint="no history before this launch" />
         <Big label="Dumped already" value={r.sniperCount ? pct(r.snipersDumpedPct) : '0%'} hint={r.sniperCount ? `${r.snipersSold} of ${r.sniperCount} snipers have sold` : 'no snipers to dump'} />
@@ -270,7 +270,7 @@ export function WalletReport({ r, source }: { r: WalletCheck; source: Src }) {
           {r.bundle && <p className="mt-2 text-sm text-ink-2">Flagged as funded by a known bundler.</p>}
         </div>
       </Card>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="flush grid grid-cols-2 lg:grid-cols-4">
         <Big label="Launches" value={String(r.launches)} hint={`${r.earlyLaunches} bought early`} />
         <Big label="First-block buys" value={String(r.firstBlockBuys)} hint="bought in the launch slot" />
         <Big label="Avg markout" value={`${mk > 0 ? '+' : mk < 0 ? '−' : ''}${Math.abs(Math.round(mk))} bps`} hint="30 s after its early buys" />
@@ -281,7 +281,7 @@ export function WalletReport({ r, source }: { r: WalletCheck; source: Src }) {
           <div className="-mx-2 overflow-x-auto px-2">
             <table className="w-full min-w-[420px] text-left text-sm">
               <caption className="sr-only">Recent launch trades by this wallet</caption>
-              <thead className="text-xs uppercase tracking-wide text-muted">
+              <thead className="label">
                 <tr>
                   <th scope="col" className="py-2 pr-4 font-semibold">Token</th>
                   <th scope="col" className="py-2 pr-4 font-semibold">Side</th>

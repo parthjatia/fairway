@@ -7,10 +7,10 @@ export default function ErrorState({ reset }: { error: Error; reset: () => void 
     <div className="mx-auto max-w-2xl space-y-4 py-8">
       <Empty title="Something went wrong building this report">Nothing was lost. Try again, or check a different token.</Empty>
       <div className="flex justify-center gap-4 text-sm">
-        <button onClick={reset} className="rounded-lg border border-line px-4 py-2 font-semibold text-ink hover:bg-surface-2">
+        <button onClick={reset} className="rounded-[4px] border border-line px-4 py-2 font-semibold text-ink hover:bg-surface-2">
           Try again
         </button>
-        <Link href="/check" className="rounded-lg px-4 py-2 font-semibold text-accent hover:underline">
+        <Link href="/check" className="rounded-[4px] px-4 py-2 font-semibold text-accent hover:underline">
           Back to Check
         </Link>
       </div>

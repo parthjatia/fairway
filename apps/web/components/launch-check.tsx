@@ -34,7 +34,7 @@ export function LaunchCheck({ v, run, slot }: { v: LaunchSimView; run: LaunchRun
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="flush grid grid-cols-2 lg:grid-cols-4">
             <Big label="Sniper share" value={pct(r.sniperSharePct)} hint={`${r.sniperCount} known sniper${r.sniperCount === 1 ? '' : 's'}`} />
             <Big label="New wallets" value={pct(r.freshWalletSharePct)} hint="no history before this launch" />
             <Big label="Dumped already" value={r.sniperCount ? pct(r.snipersDumpedPct) : '0%'} hint={r.sniperCount ? `${r.snipersSold} of ${r.sniperCount} snipers have sold` : 'no snipers to dump'} />
