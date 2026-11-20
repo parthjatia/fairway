@@ -4,7 +4,7 @@
 
 A Solana launch pool whose fee depends on **who** is buying, not only **when**. Wallets with a record of sniping past launches pay more, wallets with a record of normal trading pay less, and the fee is enforced by an Anchor program.
 
-[**▶ Live app**](<VERCEL_URL>) · [**🎬 Demo video**](<VIDEO_URL>) · [**Program on Solana Explorer (devnet)**](https://explorer.solana.com/address/8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk?cluster=devnet)
+[**▶ Live app**](https://fairway1.vercel.app) · [**🎬 Demo video**](<VIDEO_URL>) · [**Program on Solana Explorer (devnet)**](https://explorer.solana.com/address/8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk?cluster=devnet)
 
 ## TL;DR
 
@@ -42,7 +42,7 @@ A fresh-wallet sniper isn't caught. It pays exactly the time-decay curve, which 
 | Criterion | Our answer | Proof |
 |---|---|---|
 | **Technical execution** | An Anchor program with a per-tier launch fee curve on slots, an onchain price × slots TWAP in the pool account, permissionless markout settlement against Pyth or the TWAP, and signer-derived score PDAs. **49 LiteSVM tests**. The Stream filters are generated from the same parser the ingest service runs, and tests fail if they drift. | [`launch.rs`](programs/fairway/src/instructions/launch.rs), [`swap.rs`](programs/fairway/src/instructions/swap.rs), [`settle.rs`](programs/fairway/src/instructions/settle.rs), [`fairway-math/launch.rs`](crates/fairway-math/src/launch.rs), [`twap.rs`](crates/fairway-math/src/twap.rs), [`tests/fairway.rs`](programs/fairway/tests/fairway.rs) |
-| **Product & UX** | Swap with a token picker that shows your tier, the reason and your fee in $. A launch feed with a 3-transaction "Create token" wizard. Launch pages with buyers and their tiers. Fairway Check reports for any covered token. The default experience reads devnet data. | [Live app](<VERCEL_URL>), [screenshots](#screenshots), [`apps/web/`](apps/web) |
+| **Product & UX** | Swap with a token picker that shows your tier, the reason and your fee in $. A launch feed with a 3-transaction "Create token" wizard. Launch pages with buyers and their tiers. Fairway Check reports for any covered token. The default experience reads devnet data. | [Live app](https://fairway1.vercel.app), [screenshots](#screenshots), [`apps/web/`](apps/web) |
 | **Innovation** | The launch fee keys on the **wallet's history across past launches**, found by a Stream before the token exists. Tokens with no oracle are scored onchain against the pool's own TWAP, measured after the trade's own price impact. | [How it works](#how-it-works), [`sniper.ts`](packages/scoring/src/sniper.ts), [`docs/ECONOMICS.md` §8](docs/ECONOMICS.md#8-launch-economics-m16) |
 | **Impact & potential** | Simulated: humans pay 53% less than under time-decay, and the sniper share falls from 49% to 27%. Revenue: a 0.05 SOL launch fee plus 15% of the toxic premium. The scores are public PDAs that any DEX can read with one call. | [Launch economics](#simulated-results), [`docs/RISKS.md`](docs/RISKS.md), [`getFeeTier`](packages/sdk/src/feetier.ts) |
 | **Demo** | `pnpm demo` runs everything offline in one command, and the live app runs on devnet. There is a shot-by-shot video script and a 5-minute pitch with Q&A. | [Demo video](<VIDEO_URL>), [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md), [`docs/PITCH.md`](docs/PITCH.md) |
@@ -162,7 +162,7 @@ These come from 200 seeded synthetic launches ([`packages/sim/src/launch.ts`](pa
 ## Verify it yourself in 2 minutes
 
 1. **Onchain:** open the [program on Solana Explorer (devnet)](https://explorer.solana.com/address/8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk?cluster=devnet) and the [SOL/USDC pool account](https://explorer.solana.com/address/Hgodc8z2rmsyrcmcJUovZiwtSLh3V93VyEwbLrW3mTTj?cluster=devnet).
-2. **Live app:** open [`/explore`](<VERCEL_URL>/explore) → "Live launches" for real mainnet reports, [`/check`](<VERCEL_URL>/check) for a token report, [`/swap`](<VERCEL_URL>/swap) for your tier and fee, and [`/backtest`](<VERCEL_URL>/backtest) for the simulation.
+2. **Live app:** open [`/explore`](https://fairway1.vercel.app/explore) → "Live launches" for real mainnet reports, [`/check`](https://fairway1.vercel.app/check) for a token report, [`/swap`](https://fairway1.vercel.app/swap) for your tier and fee, and [`/backtest`](https://fairway1.vercel.app/backtest) for the simulation.
 3. **Locally:**
    ```bash
    corepack enable && pnpm i && pnpm test   # TS (vitest) + Rust (cargo) tests
