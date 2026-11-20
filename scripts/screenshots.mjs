@@ -1,5 +1,5 @@
 // Screenshots of every page at 1440px and 375px, dark and light, plus automated checks (console errors, horizontal overflow).
-// Usage: node scripts/screenshots.mjs [baseUrl] [outDir] [filter]   (needs the web app running in mock mode)
+// Usage: node scripts/screenshots.mjs [baseUrl] [outDir] [filter]   (needs the web app running; devnet pools are read live)
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
@@ -8,27 +8,25 @@ const out = process.argv[3] || 'docs/screenshots';
 const filter = process.argv[4] || '';
 mkdirSync(out, { recursive: true });
 
-const tokens = (await (await fetch(`${base}/api/check/tokens?limit=30`)).json()).tokens;
-const pick = (g, i = 0) => tokens.filter((t) => t.grade === g && t.earlyBuyers >= 10)[i]?.mint;
-const high = pick('High');
-const med = pick('Medium');
-const low = pick('Low');
-const wallet = tokens.flatMap((t) => t.topBuyers).find((b) => b.tier === 'TOXIC' && !b.bundle)?.wallet;
+// default (real data): Fairway pools on devnet; ?demo=1 pages keep the simulated fixtures reachable
+const fw = (await (await fetch(`${base}/api/fairway/tokens`)).json()).tokens ?? [];
+const launchMint = fw.find((t) => t.isLaunch)?.mint;
+const traded = fw.find((t) => t.check.earlyBuyers > 0)?.mint ?? fw[0]?.mint;
+const demoTokens = (await (await fetch(`${base}/api/check/tokens?limit=30&demo=1`)).json()).tokens;
+const high = demoTokens.filter((t) => t.grade === 'High' && t.earlyBuyers >= 10)[0]?.mint;
 const pages = [
   ['home', '/'],
+  ['swap', '/swap'],
+  ['launch', '/launch'],
+  ['launch-live', `/launch/${launchMint}`],
+  ['explore', '/explore'],
+  ['explore-pump', '/explore?tab=pump'],
   ['check', '/check'],
-  ['check-high', `/check/${high}`],
-  ['check-medium', `/check/${med}`],
-  ['check-low', `/check/${low}`],
-  ['check-wallet', `/check/${wallet}`],
+  ['check-fairway', `/check/${traded}`],
   ['check-unknown', '/check/11111111111111111111111111111111'],
   ['check-invalid', '/check/not-an-address'],
-  ['launch', '/launch'],
-  ['launch-frog', '/launch/frog'],
-  ['launch-cat', '/launch/cat'],
-  ['swap', '/swap'],
-  ['wallet', '/wallet'],
-  ['pool', '/pool'],
+  ['demo-check-high', `/check/${high}?demo=1`],
+  ['demo-swap', '/swap?demo=1'],
   ['backtest', '/backtest'],
   ['how-it-works', '/how-it-works'],
 ].filter(([n]) => !filter || n.includes(filter));
@@ -44,8 +42,8 @@ for (const theme of ['dark', 'light']) {
       const errors = [];
       page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
       page.on('pageerror', (e) => errors.push(String(e)));
-      const res = await page.goto(base + path, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(250);
+      const res = await page.goto(base + path, { waitUntil: 'networkidle', timeout: 90_000 });
+      await page.waitForTimeout(1500);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (overflow > 0) problems.push(`${name} ${vw} ${theme}: horizontal overflow ${overflow}px`);
       if (res && res.status() >= 400 && !name.includes('invalid')) problems.push(`${name} ${vw} ${theme}: HTTP ${res.status()}`);

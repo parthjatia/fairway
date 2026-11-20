@@ -11,6 +11,7 @@ const GRADE: Record<RiskGrade, { text: string; bar: string; ring: string }> = {
   High: { text: 'text-bad', bar: 'bg-bad', ring: 'border-bad/40 bg-bad/10' },
 };
 const SLOT_SEC = 0.4;
+type Src = 'live' | 'simulated' | 'devnet';
 const pct = (x: number) => `${Math.round(x)}%`;
 
 export function GradeMark({ grade, className = '' }: { grade: RiskGrade; className?: string }) {
@@ -179,7 +180,25 @@ export function HowComputed({ kind }: { kind: 'token' | 'wallet' }) {
   );
 }
 
-export function MintHeader({ eyebrow, title, mint, source, children }: { eyebrow: string; title: string; mint: string; source: 'live' | 'simulated'; children?: React.ReactNode }) {
+function HowComputedDevnet() {
+  return (
+    <details className="group rounded-xl border border-line bg-surface">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-xl p-6 text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
+        How this is computed
+        <ChevronDown size={18} className="shrink-0 text-muted transition-transform group-open:rotate-180" aria-hidden />
+      </summary>
+      <div className="space-y-3 border-t border-line p-6 text-sm text-ink-2">
+        <p>
+          Built from this pool&apos;s <span className="font-mono">SwapExecuted</span> events on Solana devnet: every buy in the first 60 seconds after the launch slot, with the tier the program charged the buyer. Buyers the program
+          charged as TOXIC count as snipers; buyers with no score account count as new wallets.
+        </p>
+        <p>Grades use the same thresholds as Fairway Check on Pump.fun. A pool with few buyers gets a low-confidence grade.</p>
+      </div>
+    </details>
+  );
+}
+
+export function MintHeader({ eyebrow, title, mint, source, children }: { eyebrow: string; title: string; mint: string; source: Src; children?: React.ReactNode }) {
   return (
     <header>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -198,11 +217,11 @@ export function MintHeader({ eyebrow, title, mint, source, children }: { eyebrow
   );
 }
 
-export function TokenReport({ r, name, source }: { r: TokenCheck; name?: string; source: 'live' | 'simulated' }) {
+export function TokenReport({ r, name, source, unit = 'SOL', embedded = false }: { r: TokenCheck; name?: string; source: Src; unit?: string; embedded?: boolean }) {
   const sec = (slots: number) => Math.round(slots * SLOT_SEC);
   return (
     <div className="space-y-6">
-      <MintHeader eyebrow="Fairway Check · Token" title={name ?? `Token ${short(r.mint, 4)}`} mint={r.mint} source={source} />
+      {!embedded && <MintHeader eyebrow="Fairway Check · Token" title={name ?? `Token ${short(r.mint, 4)}`} mint={r.mint} source={source} />}
       <Card className="flex flex-col gap-6 sm:flex-row sm:items-center">
         <GradeMark grade={r.grade} className="shrink-0" />
         <div className="min-w-0">
@@ -224,7 +243,7 @@ export function TokenReport({ r, name, source }: { r: TokenCheck; name?: string;
         <Big label="Sniper share" value={pct(r.sniperSharePct)} hint={`${r.sniperCount} known sniper${r.sniperCount === 1 ? '' : 's'}`} />
         <Big label="New wallets" value={pct(r.freshWalletSharePct)} hint="no history before this launch" />
         <Big label="Dumped already" value={r.sniperCount ? pct(r.snipersDumpedPct) : '0%'} hint={r.sniperCount ? `${r.snipersSold} of ${r.sniperCount} snipers have sold` : 'no snipers to dump'} />
-        <Big label="Early buyers" value={String(r.earlyBuyers)} hint={`${r.earlyBuyVolumeSol.toFixed(1)} SOL in ${sec(r.earlyWindowSlots)} s`} />
+        <Big label="Early buyers" value={String(r.earlyBuyers)} hint={`${r.earlyBuyVolumeSol.toFixed(1)} ${unit} in ${sec(r.earlyWindowSlots)} s`} />
       </div>
       <Card>
         <SniperMeter sharePct={r.sniperSharePct} grade={r.grade} />
@@ -232,12 +251,12 @@ export function TokenReport({ r, name, source }: { r: TokenCheck; name?: string;
       <Card title="Top early buyers" subtitle="Largest buyers in the first 60 seconds. Click a wallet to check it.">
         <BuyersTable buyers={r.topBuyers} />
       </Card>
-      <HowComputed kind="token" />
+      {source === 'devnet' ? <HowComputedDevnet /> : <HowComputed kind="token" />}
     </div>
   );
 }
 
-export function WalletReport({ r, source }: { r: WalletCheck; source: 'live' | 'simulated' }) {
+export function WalletReport({ r, source }: { r: WalletCheck; source: Src }) {
   const mk = r.avgMarkoutBps;
   return (
     <div className="space-y-6">

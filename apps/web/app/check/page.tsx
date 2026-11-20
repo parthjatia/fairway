@@ -20,10 +20,11 @@ function examples(tokens: NamedToken[]): NamedToken[] {
   return out;
 }
 
-export default async function CheckIndex() {
-  const r = await tokenList(24);
+export default async function CheckIndex({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
+  const demo = (await searchParams).demo === '1';
+  const r = await tokenList(24, demo);
   const ok = r.status === 200 && 'tokens' in r.body;
-  const source = ok ? (r.body as { source: 'live' | 'simulated' }).source : 'simulated';
+  const source = ok ? (r.body as { source: 'live' | 'simulated' }).source : 'live';
   const ex = ok ? examples((r.body as { tokens: NamedToken[] }).tokens) : [];
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center py-8 text-center sm:py-16">
@@ -42,7 +43,7 @@ export default async function CheckIndex() {
           <ul className="grid gap-3 sm:grid-cols-3">
             {ex.map((t) => (
               <li key={t.mint}>
-                <Link href={`/check/${t.mint}`} className="block rounded-xl border border-line bg-surface p-4 hover:border-ink-2">
+                <Link href={`/check/${t.mint}${demo ? '?demo=1' : ''}`} className="block rounded-xl border border-line bg-surface p-4 hover:border-ink-2">
                   <span className="flex items-center gap-2 text-sm font-semibold text-ink">
                     <span className={`h-2 w-2 rounded-full ${DOT[t.grade]}`} aria-hidden />
                     {t.grade} risk
@@ -55,7 +56,7 @@ export default async function CheckIndex() {
           </ul>
         ) : (
           <p className="rounded-xl border border-dashed border-line p-6 text-sm text-ink-2">
-            {ok ? 'No launches have been indexed yet. Paste a token mint above, or start the Stream (see the setup guide) and check back in a few minutes.' : 'The data service is not reachable right now. Paste a token mint to try again.'}
+            <>No real Pump.fun launches are indexed yet (the QuickNode Stream feeds them). Paste any mint above: Fairway tokens on devnet work now, or browse them in <Link href="/explore" className="text-accent hover:underline">Explore</Link>.</>
           </p>
         )}
       </div>

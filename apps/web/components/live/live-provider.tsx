@@ -4,9 +4,9 @@
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import type { ReactNode } from 'react';
 
-export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8899';
+export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://api.devnet.solana.com';
 export const BASE_MINT = process.env.NEXT_PUBLIC_BASE_MINT || '';
-export const QUOTE_MINT = process.env.NEXT_PUBLIC_QUOTE_MINT || '';
+export const QUOTE_MINT = process.env.NEXT_PUBLIC_QUOTE_MINT || 'BLo5pvqdwJY4yN5f91utohYk39hgnPKxA3KfV7PCX86X';
 
 export function LiveProvider({ children }: { children: ReactNode }) {
   return (

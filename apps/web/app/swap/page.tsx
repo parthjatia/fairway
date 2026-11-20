@@ -1,19 +1,14 @@
-import { PageHeader } from '@/components/ui';
-import { SwapPanel } from '@/components/swap-panel';
-import { LiveSwapPanel } from '@/components/live/live-swap-panel';
+import { SwapRoute } from '@/components/fw/routes';
 
-const LIVE = process.env.NEXT_PUBLIC_MODE === 'live';
-
-export const metadata = { title: 'Swap — Fairway' };
+export const metadata = { title: 'Swap' };
 
 export default function SwapPage() {
   return (
-    <>
-      <PageHeader eyebrow="Swap" title="Your fee depends on how you trade">
-        Pick a demo persona at the top right. The pool reads your tier from an onchain score account derived from your own wallet, so the fee you see is the fee you pay. In mock mode the
-        swap runs on a simulated pool with the program&apos;s exact integer math.
-      </PageHeader>
-      {LIVE ? <LiveSwapPanel /> : <SwapPanel />}
-    </>
+    <div className="mx-auto max-w-[480px] py-2 sm:py-6">
+      <SwapRoute />
+      <p className="mt-4 text-center text-xs leading-relaxed text-muted">
+        Your fee comes from an onchain score derived from your own wallet: clean history pays less, snipers and arbitrage bots pay more, and a new wallet pays the standard fee. Set Phantom to devnet.
+      </p>
+    </div>
   );
 }

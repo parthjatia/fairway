@@ -7,7 +7,9 @@
     "charts": "tsx export-charts.ts",
     "typecheck": "tsc -p tsconfig.json",
     "seed:local": "tsx seed-local.ts",
-    "seed:devnet": "RPC_URL=${RPC_URL:-https://api.devnet.solana.com} tsx seed-local.ts"
+    "seed:devnet": "RPC_URL=${RPC_URL:-https://api.devnet.solana.com} tsx seed-local.ts",
+    "snapshot:real": "tsx snapshot-real.ts",
+    "devnet:swaps": "RPC_URL=${RPC_URL:-https://api.devnet.solana.com} tsx devnet-swaps.ts"
   },
   "dependencies": {
     "@fairway/fixtures": "workspace:*",

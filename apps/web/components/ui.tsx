@@ -78,15 +78,14 @@ import { TIER_FEE } from '@/lib/fees';
 export const TIER_FEE_DEFAULT: Record<Tier, number> = TIER_FEE;
 
 /** Where the numbers come from. Small and quiet: a dot and two words. */
-export function DataBadge({ source, className = '' }: { source: 'simulated' | 'live'; className?: string }) {
-  const live = source === 'live';
+export function DataBadge({ source, className = '' }: { source: 'simulated' | 'live' | 'devnet'; className?: string }) {
+  const label = source === 'live' ? 'Real mainnet data via QuickNode Streams' : source === 'devnet' ? 'Devnet' : 'Simulated data';
+  const title =
+    source === 'live' ? 'Real data: Solana mainnet, delivered by a QuickNode Stream.' : source === 'devnet' ? 'Read from the Fairway program on Solana devnet.' : 'Simulated data: deterministic synthetic fixtures (demo mode).';
   return (
-    <span
-      title={live ? 'Live data: filled by a QuickNode Stream from Solana mainnet.' : 'Simulated data: deterministic synthetic fixtures and simulator output. See README, "Simulated vs. live".'}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-ink-2 ${className}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-good' : 'bg-warn'}`} aria-hidden />
-      {live ? 'Live data' : 'Simulated data'}
+    <span title={title} className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-ink-2 ${className}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${source === 'live' ? 'bg-good' : source === 'devnet' ? 'bg-accent' : 'bg-warn'}`} aria-hidden />
+      {label}
     </span>
   );
 }

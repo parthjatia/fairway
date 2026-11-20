@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Rocket } from 'lucide-react';
 import { decayedFee, DEFAULT_LAUNCH_CONFIG } from '@fairway/sim/launch';
-import { MODE } from '@/lib/client/state';
+import { useDemo } from '@/lib/client/fairway';
 import { saveMyLaunch } from '@/lib/client/launch-store';
 import { DEFAULT_CREATOR_SHARE_PCT, MAX_CREATOR_SHARE_PCT, newLaunchId, SLOT_SEC, type LaunchSpec } from '@/lib/launches';
 import { usd } from '@/lib/format';
@@ -33,8 +33,9 @@ const field = 'mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2.
 
 export function LaunchWizard() {
   const router = useRouter();
+  const demo = useDemo();
   const [step, setStep] = useState(0);
-  const [f, setF] = useState<Form>({ name: 'My Fair Token', symbol: 'FAIR', supplyM: 1_000, poolPct: 80, liquidityUsd: 20_000, windowMin: 5, creatorSharePct: DEFAULT_CREATOR_SHARE_PCT });
+  const [f, setF] = useState<Form>({ name: 'My Fair Token', symbol: 'FAIR', supplyM: 1_000, poolPct: 80, liquidityUsd: 2_000, windowMin: 5, creatorSharePct: DEFAULT_CREATOR_SHARE_PCT });
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
   const err = valid(f, step);
   const listing = f.liquidityUsd / ((f.supplyM * 1e6 * f.poolPct) / 100);
@@ -60,7 +61,7 @@ export function LaunchWizard() {
   };
 
   return (
-    <Card title="Create a fair launch" subtitle={MODE === 'mock' ? 'Mock mode: the launch is simulated in your browser, with the same engine as the backtest.' : 'Live mode: creates the mint, the Fairway pool and the launch with your wallet.'}>
+    <Card title="Create a fair launch" subtitle={demo ? 'Demo mode: the launch is simulated in your browser, with the same engine as the backtest.' : 'Creates the mint, the Fairway pool and the launch on Solana devnet with your wallet (3 transactions). Liquidity is paid in test USDC.'}>
       <ol className="mb-6 flex flex-wrap gap-2" aria-label="Steps">
         {STEPS.map((s, i) => (
           <li key={s}>
@@ -156,12 +157,12 @@ export function LaunchWizard() {
           <button disabled={!!err} onClick={() => setStep((s) => s + 1)} className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink disabled:opacity-40">
             Next <ArrowRight size={15} />
           </button>
-        ) : MODE === 'mock' ? (
+        ) : demo ? (
           <button onClick={createMock} className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink">
             <Rocket size={15} /> Launch (simulated)
           </button>
         ) : (
-          <LiveCreate supply={f.supplyM * 1e6} poolPct={f.poolPct} liquidityQuote={f.liquidityUsd} windowSlots={windowSlots} creatorShareBps={Math.round(f.creatorSharePct * 100)} />
+          <LiveCreate name={f.name.trim()} symbol={f.symbol} supply={f.supplyM * 1e6} poolPct={f.poolPct} liquidityQuote={f.liquidityUsd} windowSlots={windowSlots} creatorShareBps={Math.round(f.creatorSharePct * 100)} />
         )}
       </div>
     </Card>

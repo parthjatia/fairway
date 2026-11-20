@@ -16,7 +16,7 @@ A launch on Fairway is a normal Fairway pool with a **launch fee curve**. During
 
 The same engine also runs a liquid SOL/USDC pool (markouts against Pyth, a bot-tax rebate, a protocol share). Those results are now the **secondary evidence**: [Liquid-pair results](#liquid-pair-results-solusdc-secondary-evidence-synthetic).
 
-> **Hackathon status, read this first.** Everything runs offline on **synthetic data** (a deterministic simulator and fixtures). The Anchor program is unaudited and **not deployed to devnet yet**. No live Stream has run yet. The Pump.fun and PumpSwap program IDs in the launch filter and the devnet Pyth SOL/USD account were verified onchain on 2026-11-19 ([details](streams/STREAM_CONFIG.md#program-ids-verified-2026-11-19)). The Raydium SOL-USDC vault addresses were checked against mainnet. See [What is simulated vs. live](#what-is-simulated-vs-live).
+> **Hackathon status, read this first.** The Anchor program is **deployed on devnet** (`8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk`), unaudited. The web app's default experience reads **real devnet data only**: every Fairway pool via `getProgramAccounts`, real swaps through Phantom, real `SwapExecuted` events. Simulated data appears only behind the hidden `?demo=1` flag and on the research pages (`/backtest`), which say so. No live Stream has run yet, so the "Live on Pump.fun" tab is empty until one does. The Pump.fun and PumpSwap program IDs in the launch filter and the devnet Pyth SOL/USD account were verified onchain on 2026-11-19 ([details](streams/STREAM_CONFIG.md#program-ids-verified-2026-11-19)). The Raydium SOL-USDC vault addresses were checked against mainnet. See [What is simulated vs. live](#what-is-simulated-vs-live).
 
 **Fairway is bot-friendly: good bots pay less, extractive flow pays its fair share.** The fee follows measured behaviour (markout), not whether the signer is a human or a program.
 
@@ -28,10 +28,11 @@ The same engine also runs a liquid SOL/USDC pool (markouts against Pyth, a bot-t
 
 | | |
 |---|---|
-| ![A High risk token report](docs/screenshots/check-high-1440-dark.png) | ![A Low risk token report, light mode](docs/screenshots/check-low-1440-light.png) |
-| ![The /check search page](docs/screenshots/check-1440-dark.png) | ![The report on a phone](docs/screenshots/check-high-375-dark.png) |
+| ![Swap with the token picker, devnet](docs/screenshots/swap-1440-dark.png) | ![Explore: every Fairway token, graded](docs/screenshots/explore-1440-light.png) |
+| ![A launch page: trade panel, buyers with tiers, fairness report](docs/screenshots/launch-live-1440-light.png) | ![A Fairway Check report built from real devnet swaps](docs/screenshots/check-fairway-1440-dark.png) |
+| ![Launch feed on a phone](docs/screenshots/launch-375-dark.png) | ![A simulated report, demo mode only](docs/screenshots/demo-check-high-1440-dark.png) |
 
-*Screenshots show simulated data (the badge in each report says so). Every report shows a "Simulated data" or "Live data" badge, depending on where it was built from.*
+*All screenshots except the last show real devnet data (badge: "Devnet"). The last one is the hidden `?demo=1` mode on synthetic fixtures (badge: "Simulated data"). Pump.fun data, once a Stream runs, is badged "Real mainnet data via QuickNode Streams · updated <time>".*
 
 - **Token report** (`/check/<mint>`): one risk grade (Low / Medium / High) with a plain-English verdict, then **sniper share** of early supply, **new-wallet share**, **dumped already**, early buyers, a sniper-share meter, the **top early buyers** (tier badge, entry time, share, sold) and a collapsible "How this is computed".
 - **Wallet report** (paste a wallet instead): tier, launches participated in, first-block buys, average markout, recent trades.
@@ -59,7 +60,7 @@ The same engine also runs a liquid SOL/USDC pool (markouts against Pyth, a bot-t
   - [x] Price discovery without arbitrage: an onchain pool TWAP as the markout reference, [`twap.rs`](crates/fairway-math/src/twap.rs), [`settle.rs`](programs/fairway/src/instructions/settle.rs)
   - [x] Economic design: [Launch economics](#launch-economics), [Economic design](#economic-design), [`docs/ECONOMICS.md`](docs/ECONOMICS.md)
   - [x] Risk assumptions: [Risk assumptions](#risk-assumptions), [`docs/RISKS.md`](docs/RISKS.md) (TWAP manipulation, launch Sybils, bundlers)
-  - [x] Program addresses: [Program IDs](#program-ids) (localnet ID; devnet is **not deployed yet**)
+  - [x] Program addresses: [Program IDs](#program-ids) (localnet and devnet)
   - [x] Simulation evidence, with limits stated: [`packages/sim/src/launch.ts`](packages/sim/src/launch.ts), [`packages/sim/out/launch.json`](packages/sim/out/launch.json)
 - **Best use of Solana**
   - [x] Anchor program, PDAs (`config`, `pool`, `vault`, `lp_mint`, `score`, `treasury`), SPL Token vaults and LP mint: [`state.rs`](programs/fairway/src/state.rs), [`pool.rs`](programs/fairway/src/instructions/pool.rs)
@@ -343,7 +344,7 @@ Full list in [`docs/RISKS.md`](docs/RISKS.md). The main ones:
 | Cluster | Program | Address |
 |---|---|---|
 | Localnet | `fairway` | `8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk` (throwaway keypair in `.keys/`, gitignored) |
-| Devnet | `fairway` | **TBD: fill after deploy** (see [`docs/SETUP_REMAINING.md`](docs/SETUP_REMAINING.md)) |
+| Devnet | `fairway` | `8jo3xry2rp9rQHwPCyh8c9Qwnw2HHa5JvAUiXHo2XPXk` (config `5J5oibtSnpDUv54tD7tkpoxZsB2XhNRZCsrvrJPJCmke`, SOL/USDC pool `Hgodc8z2rmsyrcmcJUovZiwtSLh3V93VyEwbLrW3mTTj`) |
 | Mainnet | n/a | Not deployed. The program is unaudited. |
 
 Fresh clones do not have the program keypair. Run `anchor keys sync` to generate one and update `Anchor.toml`, `declare_id!` and the SDK default.
@@ -373,9 +374,12 @@ corepack enable
 pnpm i
 pnpm demo            # offline: fixtures → sim → ingest (fixture mode) → web (mock mode)
 # open http://localhost:3000
+
+# the real app against devnet (needs apps/web/.env.local with NEXT_PUBLIC_MODE=live, written by pnpm seed:devnet)
+pnpm --filter @fairway/web build && pnpm --filter @fairway/web start   # http://localhost:3000
 ```
 
-Pages: `/` landing · **`/launch`** (create wizard + demo launches) · **`/launch/frog`**, `/launch/sols`, `/launch/pie`, `/launch/cat` (launch replays; CAT has a bundle) · `/backtest` (launch study by default, liquid-pair sweep in the second tab) · `/wallet/[address]` · `/how-it-works` · liquid pair: `/swap` (persona switcher: Retail Rita, New wallet, Arb Bot 7) and `/pool`.
+Pages (real devnet data by default): **`/swap`** (Jupiter-style token picker over every Fairway pool, live quote, your tier and why, fee in $, Explorer link after the swap, test-USDC faucet) · **`/launch`** (launch feed, newest first, and a "Create token" wizard that sends 3 devnet transactions) · **`/launch/<mint>`** (trade panel, buyers with tiers, inline fairness report) · **`/explore`** ("On Fairway" and "Live on Pump.fun" tabs) · **`/check`** (standalone search; the same report sits on every token and launch page). Research: `/backtest`, `/how-it-works`. Add **`?demo=1`** to any URL for the old simulated experience (persona switcher, `/launch/frog`, `/launch/cat`, fixture reports); it sticks for the browser tab.
 
 Other commands:
 
@@ -386,7 +390,9 @@ pnpm lint
 pnpm sim            # regenerate packages/sim/out/*.json (add --quick via the sim package for a fast run)
 pnpm charts         # regenerate docs/charts/*.svg|png
 pnpm demo:local     # local validator + deploy + seed + keeper + web in live mode (needs Solana + Anchor)
-pnpm seed:devnet    # create the pool on devnet (needs funded throwaway keys; see SETUP_REMAINING)
+pnpm seed:devnet    # idempotent devnet seed: funds helper keys from the deployer (no airdrops), writes scripts/out/devnet-seed.json
+pnpm --filter @fairway/scripts devnet:swaps   # a few real devnet swaps from the persona keys (RETAIL, TOXIC, new wallet)
+pnpm snapshot:real  # export real Pump.fun reports from a LIVE ingest to apps/web/data/real-snapshot.json (refuses fixture data)
 pnpm --filter @fairway/sim replay -- --input swaps.jsonl   # historical replay on exported swaps
 ```
 
@@ -402,9 +408,10 @@ The program's tests use LiteSVM: `anchor build && cargo test -p fairway` (49 tes
 | Fairway Check (`/check`) | **The engine, API, SDK client and pages are real code**, tested on synthetic launches (`packages/fixtures/data/checks.json` plus the Pump.fun fixtures). With `INGEST_URL` set it serves whatever a live ingest DB holds and says "Live data"; **no live Stream has run yet**, so every report you can open today says "Simulated data". Grade thresholds are not calibrated on real launches. |
 | Bundle detection (Stream L fundings) | **Real code** (`packages/parser/src/funding.ts`, `packages/scoring/src/bundle.ts`, ingest `GET /bundles`, keeper merge), **tested on synthetic blocks** (`packages/fixtures/data/bundles.json`). The sim's 60% "known bundler" rate is an assumption, not measured. |
 | Backtest, sweep, charts, fixtures | **Synthetic.** Generated from a seeded simulator. The UI shows a "Simulated data" badge in mock mode. |
-| Frontend (default) | **Mock mode**: reads fixtures and sim outputs. No wallet or RPC. |
-| Frontend (live mode) | Real wallet adapter + SDK against a local validator (`pnpm demo:local`). Devnet is untested until the human deploys. |
-| Anchor program | Real, tested with LiteSVM. **Not deployed to devnet**, unaudited. |
+| Frontend (default) | **Real devnet data.** Pools from `getProgramAccounts` on the deployed program, reserves from the vaults, swaps and tiers from `SwapExecuted` events, fairness reports built from those swaps. Swaps were verified with the persona keys (`devnet:swaps`); the Phantom click path was not tested in a browser here. Token names come from a small registry for the seeded mints (no Metaplex metadata). The faucet mints test USDC with the deployer key, server-side. |
+| Frontend (`?demo=1`, or `pnpm demo` with `NEXT_PUBLIC_MODE=mock`) | **Synthetic**: fixtures, sim outputs and the persona switcher, badged "Simulated data". |
+| Explore → "Live on Pump.fun" | **Real mainnet data only**: a live ingest (`INGEST_URL`, fed by the Stream) or `apps/web/data/real-snapshot.json`. Neither exists yet, so the tab says so instead of showing fixtures. |
+| Anchor program | Real, tested with LiteSVM. **Deployed to devnet**, unaudited. |
 | Ingest, scoring, keeper | Real code. Run on fixtures in `DATA_MODE=fixture`. The keeper defaults to `dry-run`. |
 | QuickNode Stream | **Config and filter are real and tested against getBlock-shaped fixtures.** No live Stream has been created yet. |
 | Mid prices | Fixture mode uses the simulated CEX path. Live mode uses the pool-implied mid. `PythMidPrice` (offchain) is a stub. |

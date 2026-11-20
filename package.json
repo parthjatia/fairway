@@ -22,7 +22,8 @@
     "demo:local": "bash scripts/demo-local.sh",
     "seed:local": "pnpm --filter @fairway/scripts seed:local",
     "seed:devnet": "pnpm --filter @fairway/scripts seed:devnet",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "snapshot:real": "pnpm --filter @fairway/scripts snapshot:real"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

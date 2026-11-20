@@ -12,10 +12,12 @@ import { short } from '@/lib/format';
 import { Card, Empty, Stat, TierBadge } from '../ui';
 import { WalletButton } from '../wallet-button';
 import { QUOTE_MINT } from './live-provider';
+import { saveLocalName } from '@/lib/client/fairway';
+import { FaucetButton } from '../fw/faucet';
 
 const QUOTE_DECIMALS = 6;
 
-export function LiveCreate(p: { supply: number; poolPct: number; liquidityQuote: number; windowSlots: number; creatorShareBps?: number }) {
+export function LiveCreate({ name, symbol, ...p }: { name: string; symbol: string; supply: number; poolPct: number; liquidityQuote: number; windowSlots: number; creatorShareBps?: number }) {
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
   const router = useRouter();
@@ -25,6 +27,7 @@ export function LiveCreate(p: { supply: number; poolPct: number; liquidityQuote:
   if (!publicKey) return <WalletButton />;
   return (
     <div className="flex flex-wrap items-center gap-3">
+      <FaucetButton />
       <button
         disabled={busy}
         onClick={async () => {
@@ -32,6 +35,8 @@ export function LiveCreate(p: { supply: number; poolPct: number; liquidityQuote:
           setErr(null);
           try {
             const mint = await createLaunchLive({ connection, creator: publicKey, quoteMint: new PublicKey(QUOTE_MINT), quoteDecimals: QUOTE_DECIMALS, sendTransaction, ...p });
+            saveLocalName(mint.toBase58(), symbol, name);
+            void fetch(`/api/fairway/token/${mint.toBase58()}?fresh=1`).catch(() => undefined);
             router.push(`/launch/${mint.toBase58()}`);
           } catch (e) {
             setErr((e as Error).message);
@@ -43,7 +48,7 @@ export function LiveCreate(p: { supply: number; poolPct: number; liquidityQuote:
       >
         <Rocket size={15} /> {busy ? 'Creating (3 transactions)…' : 'Create launch onchain'}
       </button>
-      {err && <span className="text-sm text-bad" role="alert">{err}</span>}
+      {err && <span className="text-sm text-bad" role="alert">{/insufficient|0x1\b/i.test(err) ? 'Not enough test USDC or SOL: use the faucet first.' : /reject/i.test(err) ? 'You rejected the transaction.' : err}</span>}
     </div>
   );
 }

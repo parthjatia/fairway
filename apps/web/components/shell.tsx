@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Moon, Sun, ChevronDown, Menu, X } from 'lucide-react';
-import { MODE, useAppState } from '@/lib/client/state';
-import { DataBadge, TierBadge } from './ui';
+import { useAppState } from '@/lib/client/state';
+import { useDemo } from '@/lib/client/fairway';
+import { TierBadge } from './ui';
 import { WalletButton } from './wallet-button';
 
 export function Logo({ className = '' }: { className?: string }) {
@@ -20,15 +21,15 @@ export function Logo({ className = '' }: { className?: string }) {
 
 /** Check first (the public entry point), then Launch; the liquid-pair (SOL/USDC) swap and pool are secondary evidence that the engine generalises. */
 const LINKS = [
-  { href: '/check', label: 'Check a token' },
-  { href: '/launch', label: 'Launch' },
-  { href: '/backtest', label: 'Backtest' },
-  { href: '/wallet', label: 'Wallets' },
-  { href: '/how-it-works', label: 'How it works' },
-];
-const SECONDARY = [
   { href: '/swap', label: 'Swap' },
-  { href: '/pool', label: 'Pool' },
+  { href: '/launch', label: 'Launch' },
+  { href: '/explore', label: 'Explore' },
+  { href: '/check', label: 'Check' },
+];
+/** research pages (simulator output, labelled as such on the page) */
+const SECONDARY = [
+  { href: '/backtest', label: 'Backtest' },
+  { href: '/how-it-works', label: 'How it works' },
 ];
 
 function PersonaSwitcher() {
@@ -84,8 +85,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const { theme, toggleTheme } = useAppState();
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [path]);
-  // the persona switcher only matters where a wallet is simulated (swap, wallets, pool)
-  const showPersona = /^\/(swap|wallet|pool)/.test(path);
+  // simulated personas exist only behind the hidden ?demo=1 flag
+  const demo = useDemo();
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur">
@@ -106,7 +107,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            {MODE === 'mock' ? showPersona && <PersonaSwitcher /> : <WalletButton />}
+            {demo ? <PersonaSwitcher /> : <WalletButton />}
             <button onClick={toggleTheme} aria-label="Toggle theme" className="rounded-full border border-line p-2 text-ink-2 hover:text-ink">
               {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
             </button>
@@ -122,7 +123,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 {l.label}
               </Link>
             ))}
-            <div className="mt-1 border-t border-line px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">Liquid pair (SOL/USDC)</div>
+            <div className="mt-1 border-t border-line px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">Research</div>
             {SECONDARY.map((l) => (
               <Link key={l.href} href={l.href} className="block rounded-lg px-3 py-2 text-sm text-ink-2 hover:bg-surface-2 hover:text-ink">
                 {l.label}
@@ -134,17 +135,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto w-full max-w-[1100px] flex-1 px-4 py-8 sm:px-6 sm:py-12">{children}</main>
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-muted sm:px-6">
-          <span>Fairway: snipers get exposed everywhere, and taxed on Fairway. Hackathon prototype, unaudited.</span>
+          <span>Fairway: snipers pay more, humans pay less. Trading runs on Solana devnet. Hackathon prototype, unaudited.</span>
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
             {SECONDARY.map((l) => (
               <Link key={l.href} href={l.href} className="hover:text-ink">
                 {l.label}
               </Link>
             ))}
-            <Link href="/how-it-works" className="hover:text-ink">How it works</Link>
             <span>Data: QuickNode Streams</span>
-            {/* the /check reports carry their own badge, which follows the data they were built from */}
-            {!path.startsWith('/check') && <DataBadge source={MODE === 'live' ? 'live' : 'simulated'} />}
+            {demo && <span className="font-semibold text-warn">Demo mode (simulated)</span>}
           </span>
         </div>
       </footer>

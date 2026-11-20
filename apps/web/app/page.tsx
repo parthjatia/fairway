@@ -31,8 +31,11 @@ export default async function Home() {
             <CheckSearch />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <Link href="/check" className="font-semibold text-accent hover:underline">
-              Try an example report
+            <Link href="/swap" className="font-semibold text-accent hover:underline">
+              Trade on Fairway (devnet)
+            </Link>
+            <Link href="/explore" className="font-semibold text-ink-2 hover:text-ink">
+              Explore graded tokens
             </Link>
             <Link href="/launch" className="font-semibold text-ink-2 hover:text-ink">
               Launch a token with sniper protection

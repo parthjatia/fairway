@@ -24,13 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <AppStateProvider personas={personas()} pairs={pairs()} initialPools={initialPools}>
-          {process.env.NEXT_PUBLIC_MODE === 'live' ? (
-            <LiveProvider>
-              <Shell>{children}</Shell>
-            </LiveProvider>
-          ) : (
+          <LiveProvider>
             <Shell>{children}</Shell>
-          )}
+          </LiveProvider>
         </AppStateProvider>
       </body>
     </html>

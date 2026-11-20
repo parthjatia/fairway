@@ -1,11 +1,10 @@
 'use client';
-import { MODE } from '@/lib/client/state';
 import type { LaunchSpec } from '@/lib/launches';
 import { LaunchView } from './launch-view';
-import { LiveLaunchView } from './live/live-launch';
+import { FwLaunchDetail } from './fw/launch-detail';
 
-/** Mock mode (and demo launches): simulated launch view. Live mode: a base58 mint id reads the real pool. */
+/** A base58 mint reads the real pool on devnet. Named demo launches (frog, cat, …) are the simulated ones behind ?demo=1. */
 export function LaunchRoute({ id, demo }: { id: string; demo: LaunchSpec | null }) {
-  if (MODE === 'live' && !demo && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(id)) return <LiveLaunchView mint={id} />;
+  if (!demo && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(id)) return <FwLaunchDetail mint={id} />;
   return <LaunchView id={id} demo={demo} />;
 }
