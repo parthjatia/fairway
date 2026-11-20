@@ -208,6 +208,9 @@ importers:
       '@fairway/fixtures':
         specifier: workspace:*
         version: link:../../packages/fixtures
+      '@fairway/parser':
+        specifier: workspace:*
+        version: link:../../packages/parser
       '@fairway/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
@@ -281,6 +284,9 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@fairway/scoring':
+        specifier: workspace:*
+        version: link:../scoring
       '@noble/hashes':
         specifier: ^1.8.0
         version: 1.8.0

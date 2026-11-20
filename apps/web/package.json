@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fairway/fixtures": "workspace:*",
+    "@fairway/parser": "workspace:*",
     "@fairway/scoring": "workspace:*",
     "@fairway/sdk": "workspace:*",
     "@fairway/sim": "workspace:*",

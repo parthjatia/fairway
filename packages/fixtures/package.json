@@ -17,7 +17,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "build": "tsc -p tsconfig.json",
     "generate:pumpfun": "tsx scripts/generate-pumpfun.ts",
-    "generate:bundles": "tsx scripts/generate-bundles.ts"
+    "generate:bundles": "tsx scripts/generate-bundles.ts",
+    "generate:checks": "tsx scripts/generate-checks.ts"
   },
   "dependencies": {
     "@fairway/scoring": "workspace:*"

@@ -13,6 +13,7 @@ import type { MemecoinMarket } from './memecoin';
 import { generateMemecoinMarket } from './memecoin';
 import { generatePumpfunFixture, type PumpFixture } from './pumpfun';
 import { generateBundleFixture, type BundleFixture } from './bundles';
+import { generateCheckFixture, type CheckFixture } from './checks';
 
 export { buildBlocks };
 
@@ -99,4 +100,17 @@ export function generateBundles(dir = FIXTURE_DIR): { blocks: number; fundings: 
 export function loadBundles(dir = FIXTURE_DIR): BundleFixture {
   if (!existsSync(join(dir, 'bundles.json'))) generateBundles(dir);
   return read<BundleFixture>(dir, 'bundles.json');
+}
+
+/** Writes data/checks.json (M18 Fairway Check: ten launches with a Low/Medium/High spread). Additive: no other fixture file is touched. */
+export function generateChecks(dir = FIXTURE_DIR): { tokens: number; trades: number } {
+  const f = generateCheckFixture();
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'checks.json'), JSON.stringify(f));
+  return { tokens: f.meta.tokens.length, trades: f.trades.length };
+}
+
+export function loadChecks(dir = FIXTURE_DIR): CheckFixture {
+  if (!existsSync(join(dir, 'checks.json'))) generateChecks(dir);
+  return read<CheckFixture>(dir, 'checks.json');
 }

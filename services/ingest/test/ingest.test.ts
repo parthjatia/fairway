@@ -169,3 +169,60 @@ describe('launches: POST /streams/pumpfun + GET /snipers (M16)', () => {
     expect(r.statusCode).toBe(401);
   });
 });
+
+describe('Fairway Check (M18)', () => {
+  it('fixture mode: token reports have a grade, snipers and a ranked buyer table; wallet reports agree', async () => {
+    const { createContext } = await import('../src');
+    const ctx = createContext({ DATA_MODE: 'fixture', INGEST_DB_PATH: ':memory:' });
+    const app = buildApp({ db: ctx.db, pools: ctx.pools, mids: ctx.mids, mode: 'fixture' });
+    const list = (await app.inject({ method: 'GET', url: '/check/tokens?limit=20' })).json();
+    expect(list.source).toBe('simulated');
+    expect(list.tokens.length).toBeGreaterThanOrEqual(8);
+    const grades = new Set(list.tokens.map((t: any) => t.grade));
+    expect(grades.has('High')).toBe(true);
+    const t = list.tokens.find((x: any) => x.sniperCount > 0)!;
+    const one = (await app.inject({ method: 'GET', url: `/check/token/${t.mint}` })).json();
+    expect(one).toMatchObject({ mint: t.mint, found: true, grade: t.grade, source: 'simulated' });
+    expect(one.topBuyers.length).toBeGreaterThan(0);
+    expect(one.topBuyers.some((b: any) => b.tier === 'TOXIC')).toBe(true);
+    expect(one.verdict).toMatch(/risk/);
+    const all = list.tokens.flatMap((x: any) => x.topBuyers);
+    const sniper = all.find((b: any) => b.tier === 'TOXIC' && !b.bundle).wallet;
+    const w = (await app.inject({ method: 'GET', url: `/check/wallet/${sniper}` })).json();
+    expect(w).toMatchObject({ found: true, tier: 'TOXIC' });
+    expect(w.launches).toBeGreaterThanOrEqual(3);
+    expect(w.firstBlockBuys).toBeGreaterThan(0);
+  });
+  it('the check fixture produces the designed Low / Medium / High spread through the API', async () => {
+    const { createContext } = await import('../src');
+    const { loadChecks } = await import('@fairway/fixtures/node');
+    const ctx = createContext({ DATA_MODE: 'fixture', INGEST_DB_PATH: ':memory:' });
+    const app = buildApp({ db: ctx.db, pools: ctx.pools, mids: ctx.mids, mode: 'fixture' });
+    for (const t of loadChecks().meta.tokens) {
+      const r = (await app.inject({ method: 'GET', url: `/check/token/${t.mint}` })).json();
+      expect(r.grade, t.name).toBe(t.expectGrade);
+    }
+  });
+  it('the SQL-backed report equals the pure report computed from all stored trades', async () => {
+    const { createContext, allLaunchTrades, listBundleFlags, checkTokenFromDb, checkWalletFromDb } = await import('../src');
+    const { checkContextFrom, checkToken, checkWallet } = await import('@fairway/scoring');
+    const ctx = createContext({ DATA_MODE: 'fixture', INGEST_DB_PATH: ':memory:' });
+    const trades = allLaunchTrades(ctx.db);
+    const bundled = listBundleFlags(ctx.db).filter((f) => f.funderKnownBundler).map((f) => f.wallet);
+    const pure = checkContextFrom(trades, bundled);
+    const mints = [...new Set(trades.map((t) => t.mint))];
+    expect(mints.length).toBeGreaterThanOrEqual(20);
+    for (const m of mints) expect(checkTokenFromDb(ctx.db, m)).toEqual(checkToken(trades, m, pure));
+    const wallets = [...new Set(trades.filter((t) => t.kind === 'buy').map((t) => t.trader))].slice(0, 60);
+    for (const w of wallets) expect(checkWalletFromDb(ctx.db, w)).toEqual(checkWallet(trades, w, pure));
+  });
+  it('unknown and malformed ids', async () => {
+    const { createContext } = await import('../src');
+    const ctx = createContext({ DATA_MODE: 'fixture', INGEST_DB_PATH: ':memory:' });
+    const app = buildApp({ db: ctx.db, pools: ctx.pools, mids: ctx.mids, mode: 'fixture' });
+    const none = (await app.inject({ method: 'GET', url: '/check/token/11111111111111111111111111111111' })).json();
+    expect(none.found).toBe(false);
+    expect((await app.inject({ method: 'GET', url: '/check/token/not-an-address!' })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/check/wallet/11111111111111111111111111111111' })).json().found).toBe(false);
+  });
+});

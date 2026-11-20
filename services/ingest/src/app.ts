@@ -5,6 +5,7 @@ import { parseFundingPayload, parsePayload, parsePumpPayload, type FundingRecord
 import { verifyDelivery } from './auth';
 import { allSwaps, countSwaps, getScore, lastDeliveries, listScores, logDelivery, maxTs, swapsOfPool, tierCounts, upsertSwaps, validSwap, type Db } from './db';
 import { getSniper, listBundleFlags, listBundleFunders, listSnipers, recomputeBundles, recomputeSnipers, upsertFundings, upsertLaunchTrades, validFunding, validLaunchTrade } from './launches';
+import { checkTokenFromDb, checkWalletFromDb, listTokenChecks } from './check';
 import { recompute, tierTimeline, tradesWithMarkouts, type MidSource } from './recompute';
 
 export type AppOptions = {
@@ -110,6 +111,24 @@ export function buildApp(o: AppOptions): FastifyInstance {
 
   /** Bundle detection: wallets funded by one source shortly before a launch (and new wallets of known bundlers). */
   app.get('/bundles', async () => ({ flags: listBundleFlags(o.db), funders: listBundleFunders(o.db) }));
+
+  /** Fairway Check (M18): public fairness reports. `source` says whether the data is live (Stream) or synthetic fixtures. */
+  const source = o.mode === 'live' ? 'live' : 'simulated';
+  const validId = (x: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(x);
+  app.get('/check/token/:mint', async (req, reply) => {
+    const { mint } = req.params as { mint: string };
+    if (!validId(mint)) return reply.code(400).send({ error: 'Not a Solana address' });
+    return { source, ...checkTokenFromDb(o.db, mint) };
+  });
+  app.get('/check/wallet/:address', async (req, reply) => {
+    const { address } = req.params as { address: string };
+    if (!validId(address)) return reply.code(400).send({ error: 'Not a Solana address' });
+    return { source, ...checkWalletFromDb(o.db, address) };
+  });
+  app.get('/check/tokens', async (req) => {
+    const q = req.query as { limit?: string };
+    return { source, tokens: listTokenChecks(o.db, Math.min(50, Math.max(1, Number(q.limit) || 12))) };
+  });
 
   /** Cross-launch sniper scores (bootstrap TOXIC from Pump.fun history). */
   app.get('/snipers', async (req) => {

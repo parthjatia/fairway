@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixtureMids } from '@fairway/fixtures';
-import { loadBundles, loadDataset, loadPumpfun } from '@fairway/fixtures/node';
+import { loadBundles, loadChecks, loadDataset, loadPumpfun } from '@fairway/fixtures/node';
 import { recomputeBundles, recomputeSnipers, upsertFundings, upsertLaunchTrades } from './launches';
 import { parseFundingPayload, parsePumpPayload } from '@fairway/parser';
 import { toParserPools, type ParserPool } from '@fairway/parser';
@@ -55,6 +55,7 @@ export function createContext(env: ContextEnv = process.env): IngestContext {
     const bx = loadBundles().blocks;
     upsertLaunchTrades(db, parsePumpPayload(bx));
     upsertFundings(db, parseFundingPayload(bx));
+    upsertLaunchTrades(db, loadChecks().trades);
     recomputeSnipers(db);
     recomputeBundles(db);
   }

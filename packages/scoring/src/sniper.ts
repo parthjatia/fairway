@@ -55,15 +55,17 @@ function midAt(path: { slot: number; price: number }[], slot: number): number | 
   return ans >= 0 ? path[ans]!.price : null;
 }
 
-export function scoreSnipers(trades: readonly LaunchTrade[], cfg: SniperConfig = DEFAULT_SNIPER_CONFIG): SniperScore[] {
+export type EarlyMarkout = { wallet: string; mint: string; slot: number; offsetSlots: number; solAmount: number; markoutBps: number };
+
+/** Markout of every early buy (within `earlyWindowSlots` of the launch), in launch order. The one place this is computed. */
+export function earlyBuyMarkouts(trades: readonly LaunchTrade[], cfg: SniperConfig = DEFAULT_SNIPER_CONFIG): EarlyMarkout[] {
   const byMint = new Map<string, LaunchTrade[]>();
   for (const t of trades) {
     const l = byMint.get(t.mint) ?? [];
     l.push(t);
     byMint.set(t.mint, l);
   }
-  type Acc = { w: number; n: number; launches: Set<string>; buys: number; entry: number };
-  const acc = new Map<string, Acc>();
+  const out: EarlyMarkout[] = [];
   for (const [mint, ts] of byMint) {
     ts.sort((a, b) => a.slot - b.slot);
     const create = ts.find((t) => t.kind === 'create');
@@ -73,15 +75,24 @@ export function scoreSnipers(trades: readonly LaunchTrade[], cfg: SniperConfig =
       if (t.kind !== 'buy' || t.slot - launchSlot > cfg.earlyWindowSlots || !(t.price > 0)) continue;
       const mid = midAt(path, t.slot + cfg.horizonSlots);
       if (mid === null) continue;
-      const mk = Math.max(-cfg.clampBps, Math.min(cfg.clampBps, ((mid - t.price) / t.price) * 10_000));
-      const a = acc.get(t.trader) ?? { w: 0, n: 0, launches: new Set<string>(), buys: 0, entry: 0 };
-      a.w += t.solAmount * mk;
-      a.n += t.solAmount;
-      a.launches.add(mint);
-      a.buys += 1;
-      a.entry += t.slot - launchSlot;
-      acc.set(t.trader, a);
+      const markoutBps = Math.max(-cfg.clampBps, Math.min(cfg.clampBps, ((mid - t.price) / t.price) * 10_000));
+      out.push({ wallet: t.trader, mint, slot: t.slot, offsetSlots: t.slot - launchSlot, solAmount: t.solAmount, markoutBps });
     }
+  }
+  return out;
+}
+
+export function scoreSnipers(trades: readonly LaunchTrade[], cfg: SniperConfig = DEFAULT_SNIPER_CONFIG): SniperScore[] {
+  type Acc = { w: number; n: number; launches: Set<string>; buys: number; entry: number };
+  const acc = new Map<string, Acc>();
+  for (const m of earlyBuyMarkouts(trades, cfg)) {
+    const a = acc.get(m.wallet) ?? { w: 0, n: 0, launches: new Set<string>(), buys: 0, entry: 0 };
+    a.w += m.solAmount * m.markoutBps;
+    a.n += m.solAmount;
+    a.launches.add(m.mint);
+    a.buys += 1;
+    a.entry += m.offsetSlots;
+    acc.set(m.wallet, a);
   }
   const out: SniperScore[] = [];
   for (const [wallet, a] of acc) {
