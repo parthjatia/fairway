@@ -70,6 +70,27 @@ For a local validator, clone the account from devnet so local settles work: `sol
 5. The Pump.fun (`6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`) and PumpSwap (`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA`) program IDs in `packages/parser/src/pumpfun.ts` and `streams/pumpfun-filter.js` were **verified 2026-11-19**. Nothing to do.
 6. In the Stream L editor, **Run test** on a slot with a Pump.fun buy. Expect `{"launchTrades":[...]}` with non-zero `solAmount`. If `solAmount` is 0 or missing, the account layout assumption (SOL as lamports on the bonding curve) needs a look: `parsePumpTransaction` in `packages/parser/src/pumpfun.ts`.
 
+## 5b. Run a live Pump.fun Stream into ingest for 1-2 hours (Fairway Check on real data)
+Fairway Check shows a **Live data** badge only when its reports come from a live ingest DB. No live Stream has run yet, so the demo's first shot needs this. Do it at least 3 hours before you record (the Stream must be running when your demo token launches, and snipers only score TOXIC after 3 early buys on different launches).
+1. Create **Stream L** exactly as in `streams/STREAM_CONFIG.md` (Solana **mainnet**, dataset **Block**, **start at the latest block** so every token's `create` is captured, filter = `streams/pumpfun-filter.js`, destination `https://<tunnel-host>/streams/pumpfun`, security token = `QN_STREAM_TOKEN`). In the dashboard run **Run test** on a slot with a Pump.fun buy first.
+2. Start ingest in live mode and a tunnel (same as step 6). Use a fresh DB so synthetic fixtures are not mixed in:
+   ```bash
+   DATA_MODE=live INGEST_DB_PATH=./services/ingest/data/live-check.db QN_STREAM_TOKEN=<token> pnpm --filter @fairway/ingest start
+   cloudflared tunnel --url http://localhost:8787      # or: ngrok http 8787
+   ```
+3. Let it run 1-2 hours. Pump.fun volume is high, so watch your QuickNode plan's quota (a bounded run with an end slot is safer than leaving it on) and the size of the SQLite file. Each delivery recomputes sniper scores and bundle flags (the response shows `snipers` and `bundles`). Check progress:
+   ```bash
+   curl -s localhost:8787/check/tokens?limit=30 | jq '.source, [.tokens[] | {mint, grade, earlyBuyers, sniperSharePct}]'
+   curl -s 'localhost:8787/snipers?tier=TOXIC&limit=5' | jq length      # > 0 once repeat snipers exist
+   ```
+4. Pick the demo token: a **High** grade with `earlyBuyers >= 10` that launched **after** the Stream started (a token whose `create` was missed has a wrongly anchored window: ECONOMICS §9).
+5. Open the report from the web app, pointed at the live ingest (the app can stay in mock mode for everything else):
+   ```bash
+   INGEST_URL=http://localhost:8787 pnpm --filter @fairway/web dev     # then open /check/<mint>
+   ```
+   The badge on the report must say **Live data**. If it says "Simulated data", `INGEST_URL` is not set. `/check` with an empty DB shows "No launches have been indexed yet".
+6. If no token grades High after 2 hours, record a Medium one and say so; do not pass a synthetic token off as live. If no repeat snipers have been scored yet (`/snipers?tier=TOXIC` is empty), every report reads Low: let it run longer, or backfill several hours by starting the Stream at an older slot.
+
 ## 6. Expose ingest and set the webhook
 ```bash
 cp .env.example .env            # set QN_STREAM_TOKEN to the Stream's security token, DATA_MODE=live

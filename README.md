@@ -4,6 +4,8 @@
 
 *Other launchpads tax everyone who's early. Fairway taxes snipers.*
 
+**Fairway Check: know who you're buying from.** Snipers get exposed everywhere, and taxed on Fairway. [See the report](#fairway-check-know-who-youre-buying-from).
+
 > **Headline (synthetic launch simulation, 200 launches), compared with a time-decay-only launch fee (everyone pays 300 → 30 bps over 5 minutes):**
 > - **Humans pay 53% less** in the launch window (201 → 94 bps), in every one of the 200 launches.
 > - **The sniper share of early supply falls from 49% to 27%.**
@@ -19,6 +21,24 @@ The same engine also runs a liquid SOL/USDC pool (markouts against Pyth, a bot-t
 **Fairway is bot-friendly: good bots pay less, extractive flow pays its fair share.** The fee follows measured behaviour (markout), not whether the signer is a human or a program.
 
 ![Launch fee by participant and regime](docs/charts/launch-fees.png)
+
+## Fairway Check: know who you're buying from
+
+**Snipers get exposed everywhere, and taxed on Fairway.** Paste any Solana token mint at `/check` and get a public fairness report in a second: who bought in the first 60 seconds, how much of the early supply went to known snipers, how many wallets are brand new, and how much the snipers have already dumped. It needs no wallet, no signup and no fee. It is built from the same QuickNode Stream data and the same cross-launch sniper scores that set the launch fee tiers, so a wallet that is exposed on Check is the wallet that pays the sniper fee on a Fairway launch.
+
+| | |
+|---|---|
+| ![A High risk token report](docs/screenshots/check-high-1440-dark.png) | ![A Low risk token report, light mode](docs/screenshots/check-low-1440-light.png) |
+| ![The /check search page](docs/screenshots/check-1440-dark.png) | ![The report on a phone](docs/screenshots/check-high-375-dark.png) |
+
+*Screenshots show simulated data (the badge in each report says so). Every report shows a "Simulated data" or "Live data" badge, depending on where it was built from.*
+
+- **Token report** (`/check/<mint>`): one risk grade (Low / Medium / High) with a plain-English verdict, then **sniper share** of early supply, **new-wallet share**, **dumped already**, early buyers, a sniper-share meter, the **top early buyers** (tier badge, entry time, share, sold) and a collapsible "How this is computed".
+- **Wallet report** (paste a wallet instead): tier, launches participated in, first-block buys, average markout, recent trades.
+- **Grade thresholds** (documented in [`docs/ECONOMICS.md` §9](docs/ECONOMICS.md#9-fairway-check-the-token-report)): **High** if snipers hold ≥ 30% of the early supply (or ≥ 15% with at least half already dumped), **Medium** from 10%, **Low** below. **"Fair launch verified"** (also shown on `/launch/[id]`) needs under 10% and at least 10 early buyers.
+- **API:** `GET /api/check/token/:mint`, `GET /api/check/wallet/:address`, `GET /api/check/tokens` (web), and the same routes at `/check/...` on the ingest service. **SDK:** `checkToken(mint)`, `checkWallet(address)`, `listChecks()` in `@fairway/sdk`, with typed responses.
+- **Data:** the Pump.fun / PumpSwap Stream (Stream L) fills the ingest DB; every buy in the first 60 seconds and the later sells by those buyers are in the stored launch trades. In fixture mode it runs on synthetic launches (ten tokens with a designed Low / Medium / High spread, `packages/fixtures/data/checks.json`, plus the existing Pump.fun fixtures). **No live Stream has run yet:** [`docs/SETUP_REMAINING.md` §5b](docs/SETUP_REMAINING.md) has the steps to run one for 1–2 hours.
+- **Honest limits:** a "known sniper" is a wallet that bought early in at least 3 launches and was ahead afterwards (or is funded by a known bundler). A sniper on a fresh wallet looks like any new wallet, so Check understates their share; the grade is evidence, not a verdict ([`docs/RISKS.md` §10f](docs/RISKS.md)).
 
 ## For judges
 
@@ -379,6 +399,7 @@ The program's tests use LiteSVM: `anchor build && cargo test -p fairway` (49 tes
 | Launch simulation (`/backtest` default, `/launch/[id]` replays) | **Synthetic.** 200 seeded launches from `packages/sim/src/launch.ts`. A launch page replays one seeded scenario in the browser. Buyer addresses are fake, and the "Score" column (onchain verified / bootstrap / none) is assigned for illustration. Launches you create in mock mode are stored in your browser (localStorage). |
 | Live launch creation (`/launch` with `NEXT_PUBLIC_MODE=live`) | **Real transactions** against a local validator: mint + supply, pool + liquidity, `configure_launch`. Verified end to end with a script on `solana-test-validator`. The wallet-adapter clicks were not tested in a browser. No Metaplex metadata, so the name and symbol are not onchain. |
 | Pump.fun Stream L and sniper scores | **Filter and scorer are real code, tested on synthetic `getBlock`-shaped Pump.fun blocks** (`packages/fixtures/data/pumpfun.json`). Not run on real blocks. Program IDs verified 2026-11-19. |
+| Fairway Check (`/check`) | **The engine, API, SDK client and pages are real code**, tested on synthetic launches (`packages/fixtures/data/checks.json` plus the Pump.fun fixtures). With `INGEST_URL` set it serves whatever a live ingest DB holds and says "Live data"; **no live Stream has run yet**, so every report you can open today says "Simulated data". Grade thresholds are not calibrated on real launches. |
 | Bundle detection (Stream L fundings) | **Real code** (`packages/parser/src/funding.ts`, `packages/scoring/src/bundle.ts`, ingest `GET /bundles`, keeper merge), **tested on synthetic blocks** (`packages/fixtures/data/bundles.json`). The sim's 60% "known bundler" rate is an assumption, not measured. |
 | Backtest, sweep, charts, fixtures | **Synthetic.** Generated from a seeded simulator. The UI shows a "Simulated data" badge in mock mode. |
 | Frontend (default) | **Mock mode**: reads fixtures and sim outputs. No wallet or RPC. |

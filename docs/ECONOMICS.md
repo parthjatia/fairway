@@ -288,3 +288,33 @@ Over all 200 launches the sniper + bundle share falls from 27% to 21%, and human
 - Known-sniper detection is assumed at 75% coverage. The real coverage depends on Stream L's backfill and on how many snipers reuse wallets. That is not measured yet.
 - Humans are not fee-elastic in the launch sim. In reality lower fees may bring more buyers, which would raise creator fees.
 - No outside market or arbitrage: the pool is the only venue.
+
+## 9. Fairway Check: the token report
+
+Fairway Check (`/check`, `packages/scoring/src/check.ts`) grades a token launch for buyers. It uses the same launch trades and the same cross-launch sniper scores as the launch fee tiers (§8). It prices nothing; it only reports.
+
+**Definitions** (over the *early window*: the 150 slots, about 60 seconds, after the launch slot):
+
+| Metric | Definition |
+|---|---|
+| Sniper share of early supply | tokens bought by TOXIC wallets in the window ÷ all tokens bought in the window. A wallet is TOXIC if the sniper scorer says so (bought early in ≥ 3 launches, shrunk markout ≥ 500 bps), or if a known bundler funded it. |
+| New-wallet share | early buyers with no trade on any other token before this launch ÷ early buyers. Shown, not graded: almost every buyer of a brand-new token is new. |
+| Dumped already | tokens the early snipers have sold (after their first early buy) ÷ tokens they bought in the window, capped at 100% per wallet. |
+| Early buyers | distinct wallets that bought in the window. Fewer than 5 adds a "weak signal" note. |
+
+**Grade thresholds** (`DEFAULT_CHECK_CONFIG`, one config object):
+
+| Grade | Rule |
+|---|---|
+| **High** | sniper share ≥ 30%, **or** ≥ 15% with at least 50% of the snipers' bags already sold |
+| **Medium** | sniper share ≥ 10% |
+| **Low** | below that |
+| **Fair launch verified** | sniper share < 10% **and** ≥ 10 early buyers (the badge on `/check` and `/launch/[id]`; on a launch page it appears once the 60 s window has closed) |
+
+**Why these numbers.** They are judgment calls, not fitted to data: 30% means the snipers alone could set the price; 15% plus a dump means a meaningful minority that is already exiting; 10% is roughly what a handful of snipers hold on a launch that other tools would not flag. They are one config object so they can be changed in one place, and the unit tests pin the boundaries (`gradeOf`). In the synthetic fixture the grades come out as designed (Low, Medium and High tokens), which tests the code, not the thresholds. **They have not been calibrated against real launches.**
+
+**Limits.**
+- **Known snipers only.** A sniper on a fresh wallet cannot be identified in advance, so Check understates sniper share on launches where snipers rotate wallets. The `/launch/[id]` page shows both numbers side by side for this reason.
+- **Launch anchoring.** The early window starts at the `create` instruction. If the Stream started after the token launched, the first trade seen is used instead, and the window is wrong. Only trust a report for tokens that launched after the Stream started.
+- **Pre-fee, pool-implied prices.** Markouts use the token's own trade prices; no oracle exists for a new token.
+- **Labels can be wrong.** A human who buys early in three launches that then pump can be labelled TOXIC. See [`RISKS.md` §10f](RISKS.md).

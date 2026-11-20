@@ -67,3 +67,12 @@ All milestones M0–M15 complete (M15 = LP-first fee model, 2026-11-19) (M13 = t
 - rustc/cargo 1.100.0 (rustup, user-level)
 - solana-cli 4.4.1 (Agave, user-level)
 - anchor-cli 1.2.2 (avm), platform-tools v1.57; LiteSVM tests
+
+## M18 Fairway Check (steps 1-7)
+- [x] 1-3 Engine: `packages/scoring/src/check.ts` (token + wallet reports, grade thresholds in one config), additive fixture `data/checks.json`, ingest `check.ts` (SQL-backed, pinned equal to the pure path by a test)
+- [x] 4 API + SDK: `GET /api/check/{token,wallet,tokens}` (web), `/check/...` (ingest), `checkToken()` / `checkWallet()` / `listChecks()` in the SDK
+- [x] 5 UI: `/check`, `/check/[mint]` (token, with wallet fallback), skeletons, empty and error states; Check first in the nav and the landing CTA
+- [x] 6 `/launch/[id]` shows the same report and the "Fair launch verified" badge
+- [x] 7 Docs: README section, ECONOMICS §9, RISKS §10f, PITCH opening + Q35-36, DEMO_SCRIPT starts with /check, SETUP_REMAINING §5b
+- [x] UI quality bar: design tokens (Geist, 12/14/16/20/28/40 scale, 400/600 weights, one accent, status colours for meaning only), quiet data badge, `pnpm screenshots` (Playwright, 1440 + 375, dark + light, console-error and overflow checks); screenshots in `docs/screenshots/`
+- TODO (human): run a live Stream for 1-2 hours and record the demo on a real token (SETUP_REMAINING §5b). Grade thresholds are uncalibrated.

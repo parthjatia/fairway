@@ -99,5 +99,13 @@ A human who happens to buy early in three or more launches that then pump could 
 ### 10e. Memecoin perception and launch abuse
 Launches are mostly memecoins, and some are scams (rug pulls, honeypots). Fairway changes **who pays the launch fee**. It does not vet tokens, and a fair distribution does not make a token a good investment. The UI and docs should say so. The 0.05 SOL launch fee adds a small cost to spam launches. A creator can also be the sniper (buying through fresh wallets): that is the 10a/10b case, and the creator's own wallet pays its tier like anyone else.
 
-### 10f. Launch configuration
+### 10f. Fairway Check: public labels and false confidence
+Check publishes a grade for any token and a tier for any wallet address, without being asked. Risks and mitigations:
+- **Mislabelling a person.** A wallet labelled TOXIC may be a human with a lucky streak. The wording says "bought early in N launches and the price rose after it bought", never "bot" or "scammer". The label is a statistical score with its inputs shown, the 3-launch minimum and the shrinkage prior make a single lucky buy impossible to flag, and the page states that it is evidence, not a verdict. Wallets are pseudonymous; Check links no wallet to a person.
+- **False reassurance.** "Low risk" or "Fair launch verified" does not mean safe: it means few *known* snipers bought early. Fresh-wallet snipers, bundles funded through an exchange, insider allocations and rug mechanics are not covered. The report says so under "How this is computed", and `/launch/[id]` shows the all-bots sniper meter next to it.
+- **Wrong window.** If the Stream missed a token's `create`, the early window is anchored to the first trade seen. Grades for tokens that launched before the Stream started are unreliable (ECONOMICS §9).
+- **Gaming the grade.** A creator can make their own launch look clean by buying through many wallets, or by funding sniper wallets that are not known. The grade is cheap to read and cannot be gamed by the creator alone, but it can be gamed by a creator who knows the thresholds. That is an argument for publishing the thresholds, since they are not a secret control.
+- **Simulated vs live.** In fixture mode every number is synthetic. Every report carries a "Simulated data" or "Live data" badge from the data it was built from.
+
+### 10g. Launch configuration
 `configure_launch` can only run before the first swap, and only by the pool creator or the admin. The window is capped (216,000 slots ≈ 1 day), and curves are validated (`valid_launch_curve`: start ≥ end per tier, every fee ≤ 1,000 bps, and RETAIL ≤ STANDARD ≤ TOXIC at both ends). A creator could still choose a hostile curve within those bounds (for example 1,000 bps for every tier). The fee schedule is public in the pool account and shown in the UI before anyone buys, and the launch view shows the current fee per tier.

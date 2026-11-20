@@ -143,7 +143,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
             ))}
             <Link href="/how-it-works" className="hover:text-ink">How it works</Link>
             <span>Data: QuickNode Streams</span>
-            <DataBadge source={MODE === 'live' ? 'live' : 'simulated'} />
+            {/* the /check reports carry their own badge, which follows the data they were built from */}
+            {!path.startsWith('/check') && <DataBadge source={MODE === 'live' ? 'live' : 'simulated'} />}
           </span>
         </div>
       </footer>
