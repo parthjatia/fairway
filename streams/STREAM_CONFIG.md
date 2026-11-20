@@ -168,3 +168,6 @@ For **markouts on real data**, the ingest service uses the `PoolImpliedMidPrice`
 QuickNode signs every delivery: `x-qn-signature` = hex(HMAC-SHA256(security token, `nonce + timestamp + body`)), with the `x-qn-nonce` and `x-qn-timestamp` headers. The ingest service verifies this signature when `QN_STREAM_TOKEN` is set. It also accepts a simple `x-fairway-token: <QN_STREAM_TOKEN>` header for local testing (curl) and for setups that add a custom header. Unsigned requests are rejected with 401 when a token is configured.
 
 Note: QuickNode's guide says to verify against the **decompressed** body when gzip is enabled. The ingest service decompresses first, then verifies. If verification fails with gzip on, switch compression off.
+
+### Ingest endpoint behavior (verified)
+`POST /streams/solana` accepts three shapes and picks by content: `{ swaps }` (filter.js), `{ launchTrades, fundings }` (pumpfun-filter.js, also accepted at `/streams/pumpfun`), or raw blocks (parsed server-side). Raw-block payloads above 2 MB are rejected immediately with `413` and a message to add the filter; bodies above 16 MB (decompressed) are rejected as well. `GET /health` shows `launch: { launchTrades, launches, fundings, snipers }` and the recent deliveries by kind (`filtered`, `launch-filtered`, `raw-blocks`).

@@ -1,10 +1,11 @@
 import { gunzipSync } from 'node:zlib';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { explainTier, makeConfig, type ScoringConfig, type Swap, type Tier } from '@fairway/scoring';
 import { parseFundingPayload, parsePayload, parsePumpPayload, type FundingRecord, type LaunchTradeRecord, type ParserPool } from '@fairway/parser';
 import { verifyDelivery } from './auth';
 import { allSwaps, countSwaps, getScore, lastDeliveries, listScores, logDelivery, maxTs, swapsOfPool, tierCounts, upsertSwaps, validSwap, type Db } from './db';
 import { getSniper, listBundleFlags, listBundleFunders, listSnipers, recomputeBundles, recomputeSnipers, upsertFundings, upsertLaunchTrades, validFunding, validLaunchTrade } from './launches';
+import { launchCounts } from './launches';
 import { checkTokenFromDb, checkWalletFromDb, listTokenChecks } from './check';
 import { recompute, tierTimeline, tradesWithMarkouts, type MidSource } from './recompute';
 
@@ -28,8 +29,15 @@ declare module 'fastify' {
   }
 }
 
+/** Hard cap on a request body, compressed or decompressed. */
+export const MAX_BODY_BYTES = 16 * 1024 * 1024;
+/** Raw (unfiltered) block payloads are rejected above this size: a Stream without a filter sends whole blocks (tens of MB). */
+export const MAX_RAW_BLOCK_BYTES = 2 * 1024 * 1024;
+
+const isLaunchShape = (b: any): boolean => !!b && !Array.isArray(b.swaps) && (Array.isArray(b.launchTrades) || Array.isArray(b.fundings));
+
 export function buildApp(o: AppOptions): FastifyInstance {
-  const app = Fastify({ logger: o.logger ?? false, bodyLimit: 64 * 1024 * 1024 });
+  const app = Fastify({ logger: o.logger ?? false, bodyLimit: MAX_BODY_BYTES });
   const cfg = o.scoring ?? makeConfig();
 
   // keep the raw (decompressed) body for HMAC verification
@@ -38,12 +46,13 @@ export function buildApp(o: AppOptions): FastifyInstance {
     try {
       const enc = String(req.headers['content-encoding'] ?? '');
       const isGzip = enc.includes('gzip') || (body.length > 2 && body[0] === 0x1f && body[1] === 0x8b);
-      const text = (isGzip ? gunzipSync(body) : body).toString('utf8');
+      const text = (isGzip ? gunzipSync(body, { maxOutputLength: MAX_BODY_BYTES }) : body).toString('utf8');
       req.rawBody = text;
       done(null, text.length ? JSON.parse(text) : {});
     } catch (e) {
-      const err = e as Error & { statusCode?: number };
-      err.statusCode = 400;
+      const err = e as Error & { statusCode?: number; code?: string };
+      err.statusCode = err.code === 'ERR_BUFFER_TOO_LARGE' ? 413 : 400;
+      if (err.statusCode === 413) err.message = `payload too large (> ${MAX_BODY_BYTES} bytes decompressed). Add the Pump.fun / swap filter to the Stream so it sends compact records`;
       done(err, undefined);
     }
   });
@@ -64,6 +73,7 @@ export function buildApp(o: AppOptions): FastifyInstance {
     pools: o.pools.length,
     latestTs: maxTs(o.db),
     mids: o.mids.name,
+    launch: launchCounts(o.db),
     recentDeliveries: lastDeliveries(o.db, 5),
   }));
 
@@ -72,6 +82,7 @@ export function buildApp(o: AppOptions): FastifyInstance {
     const auth = verifyDelivery(o.token, req.headers, req.rawBody ?? '');
     if (!auth.ok) return reply.code(401).send({ error: auth.reason });
     const body = req.body as any;
+    if (isLaunchShape(body)) return ingestLaunch(body, reply);
     let kind: 'filtered' | 'raw-blocks';
     let incoming: Array<Swap & { source?: string }>;
     if (body && Array.isArray(body.swaps)) {
@@ -79,6 +90,8 @@ export function buildApp(o: AppOptions): FastifyInstance {
       incoming = body.swaps;
     } else {
       kind = 'raw-blocks';
+      const tooBig = rawTooLarge(req.rawBody);
+      if (tooBig) return reply.code(413).send({ error: tooBig });
       incoming = parsePayload(body, o.pools);
     }
     const valid = incoming.filter(validSwap);
@@ -90,14 +103,21 @@ export function buildApp(o: AppOptions): FastifyInstance {
     return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, recomputed };
   });
 
-  /** QuickNode Streams webhook for launches: streams/pumpfun-filter.js output `{launchTrades:[...], fundings:[...]}` or raw blocks. */
-  app.post('/streams/pumpfun', async (req, reply) => {
-    const auth = verifyDelivery(o.token, req.headers, req.rawBody ?? '');
-    if (!auth.ok) return reply.code(401).send({ error: auth.reason });
-    const body = req.body as any;
-    const kind = body && Array.isArray(body.launchTrades) ? 'filtered' : 'raw-blocks';
-    const incoming: LaunchTradeRecord[] = kind === 'filtered' ? body.launchTrades : parsePumpPayload(body);
-    const fundingsIn: FundingRecord[] = kind === 'filtered' ? (Array.isArray(body.fundings) ? body.fundings : []) : parseFundingPayload(body);
+  const rawTooLarge = (raw?: string): string | null =>
+    raw && raw.length > MAX_RAW_BLOCK_BYTES
+      ? `raw-blocks payload is ${raw.length} bytes (max ${MAX_RAW_BLOCK_BYTES}). The Stream has no filter: paste streams/pumpfun-filter.js (or filter.js) into the Stream's filter so it sends { launchTrades, fundings } / { swaps }`
+      : null;
+
+  /** Shared by /streams/pumpfun and /streams/solana (when a Stream sends the Pump.fun filter's output). */
+  function ingestLaunch(body: any, reply: FastifyReply, raw?: string) {
+    const kind = body && Array.isArray(body.launchTrades) ? 'filtered' : Array.isArray(body?.fundings) ? 'filtered' : 'raw-blocks';
+    if (kind === 'raw-blocks') {
+      const tooBig = rawTooLarge(raw);
+      if (tooBig) return reply.code(413).send({ error: tooBig });
+    }
+    const filtered = kind === 'filtered';
+    const incoming: LaunchTradeRecord[] = filtered ? (Array.isArray(body.launchTrades) ? body.launchTrades : []) : parsePumpPayload(body);
+    const fundingsIn: FundingRecord[] = filtered ? (Array.isArray(body.fundings) ? body.fundings : []) : parseFundingPayload(body);
     const valid = incoming.filter(validLaunchTrade);
     const validFundings = fundingsIn.filter(validFunding);
     const stored = upsertLaunchTrades(o.db, valid);
@@ -106,7 +126,14 @@ export function buildApp(o: AppOptions): FastifyInstance {
     const snipers = stored ? recomputeSnipers(o.db) : null;
     const b = stored || storedFundings ? recomputeBundles(o.db) : null;
     const bundles = b ? { bundles: b.bundles, flagged: b.flagged, knownBundlers: b.knownBundlers } : null;
-    return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, fundings: { received: fundingsIn.length, stored: storedFundings }, snipers, bundles };
+    return { ok: true, kind, received: incoming.length, invalid: incoming.length - valid.length, stored, fundings: { received: fundingsIn.length, invalid: fundingsIn.length - validFundings.length, stored: storedFundings }, snipers, bundles, launches: launchCounts(o.db) };
+  }
+
+  /** QuickNode Streams webhook for launches: streams/pumpfun-filter.js output `{launchTrades:[...], fundings:[...]}` or raw blocks. */
+  app.post('/streams/pumpfun', async (req, reply) => {
+    const auth = verifyDelivery(o.token, req.headers, req.rawBody ?? '');
+    if (!auth.ok) return reply.code(401).send({ error: auth.reason });
+    return ingestLaunch(req.body as any, reply, req.rawBody);
   });
 
   /** Bundle detection: wallets funded by one source shortly before a launch (and new wallets of known bundlers). */

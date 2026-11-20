@@ -216,3 +216,14 @@ export function desiredScores(db: Db): Desired[] {
   }
   return [...out.values()];
 }
+
+/** Row counts for /health: launch trades, distinct launches (mints), fundings, scored snipers. */
+export function launchCounts(db: Db): { launchTrades: number; launches: number; fundings: number; snipers: number } {
+  const n = (sql: string) => Number((db.prepare(sql).get() as { n: number }).n);
+  return {
+    launchTrades: n('SELECT COUNT(*) AS n FROM launch_trades'),
+    launches: n("SELECT COUNT(DISTINCT mint) AS n FROM launch_trades WHERE kind = 'create'"),
+    fundings: n('SELECT COUNT(*) AS n FROM fundings'),
+    snipers: n('SELECT COUNT(*) AS n FROM sniper_scores'),
+  };
+}

@@ -226,3 +226,29 @@ describe('Fairway Check (M18)', () => {
     expect((await app.inject({ method: 'GET', url: '/check/wallet/11111111111111111111111111111111' })).json().found).toBe(false);
   });
 });
+
+describe('POST /streams/solana with the Pump.fun filter shape + size guard', () => {
+  it('detects { launchTrades, fundings }, stores them, and /health counts them', async () => {
+    const { loadPumpfun, loadBundles } = await import('@fairway/fixtures/node');
+    const { parsePumpPayload, parseFundingPayload } = await import('@fairway/parser');
+    const bx = loadBundles().blocks;
+    const body = { launchTrades: [...parsePumpPayload(loadPumpfun().blocks), ...parsePumpPayload(bx)], fundings: parseFundingPayload(bx) };
+    const { app } = fresh();
+    const r = await post(app, body);
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ kind: 'filtered', stored: body.launchTrades.length, fundings: { stored: body.fundings.length } });
+    const h = (await app.inject({ method: 'GET', url: '/health' })).json();
+    expect(h.launch).toMatchObject({ launchTrades: body.launchTrades.length, fundings: body.fundings.length });
+    expect(h.launch.launches).toBeGreaterThan(0);
+    expect((await post(app, body)).json().stored).toBe(0);
+  });
+  it('rejects oversized raw-block payloads with 413 and a clear error', async () => {
+    const { app } = fresh();
+    const blocks = JSON.parse(JSON.stringify(fx.blocks)) as unknown[];
+    let big: unknown[] = [];
+    while (JSON.stringify(big).length < 2.5 * 1024 * 1024) big = big.concat(blocks);
+    const r = await post(app, big);
+    expect(r.statusCode).toBe(413);
+    expect(r.json().error).toMatch(/no filter/);
+  });
+});
